@@ -1,0 +1,126 @@
+# Job Payload Contracts (`download` / `convert`)
+
+Версия схемы: `v1`  
+Назначение: зафиксировать единый payload и правила обработки очередей для `movie` pipeline.
+
+## 1) Базовый envelope
+
+Все сообщения в очередях используют общий envelope:
+
+```json
+{
+  "schema_version": "v1",
+  "job_id": "job_01HZYJ9A",
+  "job_type": "download",
+  "content_type": "movie",
+  "correlation_id": "c8d78757-476c-4972-b3e7-94eb7df677c6",
+  "attempt": 1,
+  "max_attempts": 5,
+  "created_at": "2026-03-01T10:00:00Z",
+  "payload": {}
+}
+```
+
+Обязательные поля envelope:
+
+- `schema_version` (string)
+- `job_id` (string)
+- `job_type` (enum: `download` | `convert`)
+- `content_type` (enum: `movie`; `series` reserved)
+- `correlation_id` (uuid/string)
+- `attempt` (int >= 1)
+- `max_attempts` (int >= 1)
+- `created_at` (datetime UTC)
+- `payload` (object)
+
+## 2) Download payload
+
+`job_type = "download"`
+
+```json
+{
+  "source_type": "torrent",
+  "source_ref": "magnet:?xt=urn:btih:...",
+  "target_dir": "/media/downloads/job_01HZYJ9A",
+  "priority": "normal",
+  "request_id": "7c7f7f1a-09cc-4f6e-ae9f-a8e0e23cc1b3"
+}
+```
+
+Поля:
+
+- `source_type` (enum: `torrent`)
+- `source_ref` (string, required)
+- `target_dir` (string, required)
+- `priority` (enum: `low` | `normal` | `high`, default `normal`)
+- `request_id` (string, required for идемпотентность create-flow)
+
+## 3) Convert payload
+
+`job_type = "convert"`
+
+```json
+{
+  "input_path": "/media/downloads/job_01HZYJ9A/source.mkv",
+  "output_path": "/media/temp/job_01HZYJ9A/output.mp4",
+  "output_profile": "mp4_h264_aac_1080p",
+  "final_dir": "/media/converted/job_01HZYJ9A"
+}
+```
+
+Поля:
+
+- `input_path` (string, required)
+- `output_path` (string, required)
+- `output_profile` (string, required)
+- `final_dir` (string, required)
+
+## 4) State model
+
+Состояния задач:
+
+- `created`
+- `queued`
+- `in_progress`
+- `completed`
+- `failed`
+
+Дополнительно:
+
+- `stage` (`download` | `convert`)
+- `progress_percent` (`0..100`)
+- `error_code` / `error_message` (для `failed`)
+- `retryable` (bool)
+
+## 5) Retry policy
+
+- Стратегия: exponential backoff.
+- Базовая задержка: `5s`.
+- Множитель: `x2`.
+- Максимальная задержка: `5m`.
+- Предел попыток: `max_attempts` (по умолчанию `5`).
+- После исчерпания попыток: перевод в `failed` + публикация в DLQ.
+
+Retryable классы ошибок:
+
+- сетевые таймауты;
+- временная недоступность `Prowlarr`/`qBittorrent`;
+- временные ошибки I/O.
+
+Non-retryable:
+
+- невалидный `source_ref`;
+- поврежденный payload;
+- ошибка валидации обязательных полей.
+
+## 6) Идемпотентность
+
+- Для входа в pipeline используется `request_id` (на уровне create-job).
+- Worker обязан проверять, что `job_id` уже не завершен перед повторной обработкой.
+- Publish `convert` job допускается только один раз для пары (`job_id`, `stage=convert`).
+
+## 7) Совместимость и расширение под сериалы
+
+- `content_type` обязателен и уже включен в envelope.
+- Добавление сериалов выполняется расширением `payload` и `job_type`-стратегий без изменения существующих обязательных полей.
+- Новые необязательные поля (`season`, `episode`, `batch_mode`) добавляются backward-compatible.

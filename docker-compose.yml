@@ -1,0 +1,245 @@
+# ─────────────────────────────────────────────────────────────────
+# Media Processing Admin System — Docker Compose
+# Phase 2: api/ has a Dockerfile — build with `docker compose build api`
+# Phase 3: worker/ has a Dockerfile — build with `docker compose build worker`
+# Phase 4: frontend/ has a Dockerfile — build with `docker compose build frontend`
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Persistence ───────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Indexer backend ───────────────────────────────────────────
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ:   ${TZ}
+    volumes:
+      - prowlarr_data:/config
+    networks:
+      - app_net
+    # No host ports — accessible only inside app_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9696/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Download backend ──────────────────────────────────────────
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    environment:
+      PUID:       ${PUID}
+      PGID:       ${PGID}
+      TZ:         ${TZ}
+      WEBUI_PORT: ${QBITTORRENT_WEBUI_PORT:-8080}
+    volumes:
+      - torrent_data:/config
+      - media_storage:/media
+    networks:
+      - app_net
+    # No host ports — Web UI accessible only inside app_net via DNS name
+    # NOTE: BitTorrent listen ports (6881) are also not published per P1-07;
+    #       qBittorrent will work via outgoing connections / DHT only.
+    #       Expose 6881 if incoming peer connections are required in production.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:${QBITTORRENT_WEBUI_PORT:-8080}/api/v2/app/version || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Core API ──────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api          # Phase 2: Dockerfile lives in api/
+    image: ${API_IMAGE:-app/api}:${APP_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      PORT:              ${API_PORT:-8000}
+      DATABASE_URL:      "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      REDIS_URL:         "redis://redis:6379"
+      PROWLARR_BASE_URL: "http://prowlarr:9696"
+      PROWLARR_API_KEY:  ${PROWLARR_API_KEY}
+      JWT_SECRET:        ${JWT_SECRET}
+      PLAYER_API_KEY:    ${PLAYER_API_KEY}
+      ADMIN_EMAIL:       ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD:    ${ADMIN_PASSWORD}
+    networks:
+      - app_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      prowlarr:
+        condition: service_started   # API is resilient to prowlarr being temporarily unready
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:${API_PORT:-8000}/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── Worker ────────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./worker         # Phase 3: Dockerfile lives in worker/
+    image: ${WORKER_IMAGE:-app/worker}:${APP_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      REDIS_URL:              "redis://redis:6379"
+      DATABASE_URL:           "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      QBITTORRENT_BASE_URL:   "http://qbittorrent:${QBITTORRENT_WEBUI_PORT:-8080}"
+      QBITTORRENT_USER:       ${QBITTORRENT_USER}
+      QBITTORRENT_PASSWORD:   ${QBITTORRENT_PASSWORD}
+      WORKER_HEALTH_PORT:     ${WORKER_HEALTH_PORT:-8001}
+      MEDIA_ROOT:             /media
+    volumes:
+      - media_storage:/media
+    networks:
+      - app_net
+    depends_on:
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      qbittorrent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:${WORKER_HEALTH_PORT:-8001}/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── Admin Frontend ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend    # Phase 4: Dockerfile lives in frontend/
+    image: ${FRONTEND_IMAGE:-app/frontend}:${APP_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      # API_URL is server-side only — used by Next.js rewrites to proxy /api/*.
+      # Never exposed to the browser; client code uses relative /api/... paths.
+      API_URL: http://api:8000
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"   # Only service exposed to host
+    networks:
+      - app_net
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── nginx (optional, for media streaming / reverse-proxy) ─────
+  # Uncomment and configure nginx.conf when needed (Phase 5+)
+  #
+  # nginx:
+  #   image: nginx:1.27-alpine
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${NGINX_HTTP_PORT:-80}:80"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - media_storage:/media:ro
+  #   networks:
+  #     - app_net
+  #   depends_on:
+  #     api:
+  #       condition: service_started
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+
+# ─────────────────────────────────────────────────────────────────
+networks:
+  app_net:
+    driver: bridge
+
+# ─────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:    # PostgreSQL data — survives container restart
+  redis_data:       # Redis AOF — survives container restart
+  prowlarr_data:    # Prowlarr config/state
+  torrent_data:     # qBittorrent config/state
+  media_storage:    # Shared media zone (/media/downloads /media/converted /media/temp)
