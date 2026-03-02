@@ -38,6 +38,8 @@ type Job struct {
 	ContentType     string      `json:"content_type"`
 	SourceType      string      `json:"source_type"`
 	SourceRef       string      `json:"source_ref"`
+	Title           *string     `json:"title,omitempty"`          // from search_results JOIN
+	ThumbnailPath   *string     `json:"thumbnail_path,omitempty"` // from media_assets JOIN
 	Priority        JobPriority `json:"priority"`
 	Status          JobStatus   `json:"status"`
 	Stage           *JobStage   `json:"stage,omitempty"`
@@ -55,15 +57,16 @@ type Job struct {
 
 // Asset represents a converted media file ready for playback.
 type Asset struct {
-	AssetID     string    `json:"asset_id"`
-	JobID       string    `json:"job_id"`
-	StoragePath string    `json:"storage_path"`
-	DurationSec *int      `json:"duration_sec,omitempty"`
-	VideoCodec  *string   `json:"video_codec,omitempty"`
-	AudioCodec  *string   `json:"audio_codec,omitempty"`
-	IsReady     bool      `json:"is_ready"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	AssetID       string    `json:"asset_id"`
+	JobID         string    `json:"job_id"`
+	StoragePath   string    `json:"storage_path"`   // path to master.m3u8
+	ThumbnailPath *string   `json:"thumbnail_path,omitempty"` // path to thumbnail.jpg
+	DurationSec   *int      `json:"duration_sec,omitempty"`
+	VideoCodec    *string   `json:"video_codec,omitempty"`
+	AudioCodec    *string   `json:"audio_codec,omitempty"`
+	IsReady       bool      `json:"is_ready"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // ─── SearchResult ─────────────────────────────────────────────────────────────

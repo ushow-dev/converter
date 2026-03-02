@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { getToken, clearToken, fetcher, searchUrl, createJob, formatBytes } from '@/lib/api'
+import { getToken, fetcher, searchUrl, createJob, formatBytes } from '@/lib/api'
+import { Nav } from '@/components/Nav'
 import type { SearchResponse, SearchResultItem } from '@/types'
 
 export default function SearchPage() {
@@ -50,34 +51,9 @@ export default function SearchPage() {
     }
   }
 
-  function handleLogout() {
-    clearToken()
-    router.push('/login')
-  }
-
   return (
     <div className="min-h-screen">
-      {/* Nav */}
-      <nav className="border-b border-gray-800 bg-gray-900 px-6 py-3">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="font-semibold text-white">Media Admin</span>
-            <Link href="/search" className="text-sm text-indigo-400 hover:text-indigo-300">
-              Search
-            </Link>
-            <Link href="/jobs" className="text-sm text-gray-400 hover:text-gray-200">
-              Jobs
-            </Link>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="text-sm text-gray-400 hover:text-gray-200"
-          >
-            Logout
-          </button>
-        </div>
-      </nav>
-
+      <Nav />
       <main className="mx-auto max-w-6xl px-6 py-8">
         <h2 className="mb-6 text-xl font-semibold text-white">Search</h2>
 

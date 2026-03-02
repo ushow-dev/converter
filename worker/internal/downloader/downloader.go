@@ -106,10 +106,11 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	if targetDir == "" {
 		targetDir = filepath.Join(w.mediaRoot, "downloads", msg.JobID)
 	}
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+	if err := os.MkdirAll(targetDir, 0o777); err != nil {
 		w.failJob(ctx, msg, "IO_ERROR", "create target dir: "+err.Error(), true)
 		return
 	}
+	_ = os.Chmod(targetDir, 0o777) // bypass umask so qBittorrent (uid=1000) can write
 
 	hash, err := w.qbt.AddTorrent(ctx, msg.Payload.SourceRef, targetDir)
 	if err != nil {
@@ -145,7 +146,9 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 
 	// Enqueue convert job.
-	outputPath := filepath.Join(w.mediaRoot, "temp", msg.JobID, "output.mp4")
+	// OutputPath is the temp dir where ffmpeg writes HLS files.
+	// FinalDir is where the completed HLS tree is moved after conversion.
+	outputPath := filepath.Join(w.mediaRoot, "temp", msg.JobID)
 	finalDir := filepath.Join(w.mediaRoot, "converted", msg.JobID)
 	convertMsg := model.ConvertMessage{
 		SchemaVersion: "v1",
@@ -159,7 +162,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		Payload: model.ConvertJob{
 			InputPath:     inputPath,
 			OutputPath:    outputPath,
-			OutputProfile: "mp4_h264_aac_1080p",
+			OutputProfile: "hls_720_480_360",
 			FinalDir:      finalDir,
 		},
 	}

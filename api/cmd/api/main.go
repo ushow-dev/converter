@@ -65,14 +65,14 @@ func main() {
 
 	// ── Services ───────────────────────────────────────────────────────────────
 	searchSvc := service.NewSearchService(prowlarr, searchRepo)
-	jobSvc := service.NewJobService(jobRepo, redisClient)
+	jobSvc := service.NewJobService(jobRepo, redisClient, cfg.MediaRoot)
 
 	// ── Handlers ───────────────────────────────────────────────────────────────
 	// pool and redisClient both satisfy handler.Pinger via their Ping methods.
 	healthH := handler.NewHealthHandler(pool, redisClient)
 	authH := handler.NewAuthHandler(cfg)
 	searchH := handler.NewSearchHandler(searchSvc)
-	jobsH := handler.NewJobsHandler(jobSvc)
+	jobsH := handler.NewJobsHandler(jobSvc, assetRepo)
 	playerH := handler.NewPlayerHandler(jobSvc, assetRepo)
 
 	// ── HTTP server ────────────────────────────────────────────────────────────

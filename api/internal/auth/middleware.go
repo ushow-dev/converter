@@ -35,6 +35,33 @@ func JWTMiddleware(secret string) func(http.Handler) http.Handler {
 	}
 }
 
+// JWTQueryOrHeaderMiddleware accepts a JWT from the Authorization: Bearer header
+// OR from the ?token= query parameter. Used for endpoints (e.g. thumbnail images)
+// where the browser cannot set request headers.
+func JWTQueryOrHeaderMiddleware(secret string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var tokenStr string
+			if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+				tokenStr = strings.TrimPrefix(h, "Bearer ")
+			} else {
+				tokenStr = r.URL.Query().Get("token")
+			}
+			if tokenStr == "" {
+				writeUnauthorized(w, GetCorrelationID(r.Context()))
+				return
+			}
+			claims, err := ParseToken(tokenStr, secret)
+			if err != nil {
+				writeUnauthorized(w, GetCorrelationID(r.Context()))
+				return
+			}
+			ctx := context.WithValue(r.Context(), claimsKey, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // PlayerKeyMiddleware validates X-Player-Key header.
 func PlayerKeyMiddleware(key string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

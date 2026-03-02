@@ -16,12 +16,13 @@ import (
 
 // JobsHandler handles /api/admin/jobs endpoints.
 type JobsHandler struct {
-	svc *service.JobService
+	svc       *service.JobService
+	assetRepo *repository.AssetRepository
 }
 
 // NewJobsHandler creates a JobsHandler.
-func NewJobsHandler(svc *service.JobService) *JobsHandler {
-	return &JobsHandler{svc: svc}
+func NewJobsHandler(svc *service.JobService, assetRepo *repository.AssetRepository) *JobsHandler {
+	return &JobsHandler{svc: svc, assetRepo: assetRepo}
 }
 
 type createJobRequest struct {
@@ -131,4 +132,50 @@ func (h *JobsHandler) List(w http.ResponseWriter, r *http.Request) {
 		"next_cursor":    nextCursor,
 		"correlation_id": cid,
 	})
+}
+
+// Delete handles DELETE /api/admin/jobs/{jobID}.
+func (h *JobsHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+	jobID := chi.URLParam(r, "jobID")
+
+	if err := h.svc.DeleteJob(r.Context(), jobID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "NOT_FOUND", "job not found", false, cid)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete job", false, cid)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Thumbnail handles GET /api/admin/jobs/{jobID}/thumbnail.
+// Serves the JPEG thumbnail for a completed job. Accepts JWT via Authorization
+// header or ?token= query parameter (needed for use in <img src>).
+func (h *JobsHandler) Thumbnail(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+	jobID := chi.URLParam(r, "jobID")
+
+	asset, err := h.assetRepo.GetByJobID(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "NOT_FOUND",
+				"no asset for this job", false, cid)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
+			"failed to fetch asset", false, cid)
+		return
+	}
+	if asset.ThumbnailPath == nil {
+		respondError(w, http.StatusNotFound, "NOT_FOUND",
+			"no thumbnail for this job", false, cid)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, *asset.ThumbnailPath)
 }

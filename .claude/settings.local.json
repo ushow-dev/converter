@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(docker compose config --quiet)",
-      "Bash(go version)"
+      "Bash(go version)",
+      "Bash(docker compose build worker)",
+      "Bash(docker compose up -d worker)",
+      "Bash(chmod -R 777 /Users/robospot/prj/cleaner/converter/media)",
+      "Bash(docker compose up -d media-init qbittorrent worker)",
+      "Bash(docker compose build worker api)",
+      "Bash(docker compose up -d worker api)",
+      "Bash(docker compose build api frontend)",
+      "Bash(docker compose build frontend)",
+      "Bash(docker compose up -d api frontend)"
     ]
   }
 }

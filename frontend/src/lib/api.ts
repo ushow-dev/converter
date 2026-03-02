@@ -136,6 +136,18 @@ export async function createJob(params: {
   })
 }
 
+export async function deleteJob(jobId: string): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`/api/admin/jobs/${jobId}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
+}
+
 // ── Formatters ───────────────────────────────────────────────────────────────
 
 export function formatBytes(bytes: number): string {

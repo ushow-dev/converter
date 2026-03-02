@@ -66,13 +66,14 @@ type ConvertJob struct {
 
 // Asset is the record created after successful conversion.
 type Asset struct {
-	AssetID     string
-	JobID       string
-	StoragePath string
-	DurationSec *int
-	VideoCodec  *string
-	AudioCodec  *string
-	IsReady     bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	AssetID       string
+	JobID         string
+	StoragePath   string  // path to master.m3u8
+	ThumbnailPath *string // path to thumbnail.jpg, nil if unavailable
+	DurationSec   *int
+	VideoCodec    *string
+	AudioCodec    *string
+	IsReady       bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }

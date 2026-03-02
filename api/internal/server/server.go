@@ -53,6 +53,13 @@ func New(deps Dependencies) http.Handler {
 			r.Post("/jobs", deps.JobsHandler.Create)
 			r.Get("/jobs", deps.JobsHandler.List)
 			r.Get("/jobs/{jobID}", deps.JobsHandler.Get)
+			r.Delete("/jobs/{jobID}", deps.JobsHandler.Delete)
+		})
+
+		// Thumbnail: JWT via header or ?token= query param (for <img src>)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.JWTQueryOrHeaderMiddleware(deps.Cfg.JWTSecret))
+			r.Get("/jobs/{jobID}/thumbnail", deps.JobsHandler.Thumbnail)
 		})
 	})
 

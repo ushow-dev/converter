@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 
@@ -31,6 +33,23 @@ func main() {
 		slog.Error("load config", "error", err)
 		os.Exit(1)
 	}
+
+	// ── Media directories ───────────────────────────────────────────────────────
+	// Worker runs as root; ensure subdirs exist and are world-writable so
+	// qBittorrent (uid=1000) can write downloads without permission errors.
+	// chmod is applied recursively so existing job subdirs are also fixed.
+	for _, dir := range []string{
+		cfg.MediaRoot + "/downloads",
+		cfg.MediaRoot + "/converted",
+		cfg.MediaRoot + "/temp",
+	} {
+		if err := os.MkdirAll(dir, 0o777); err != nil {
+			slog.Warn("could not create media dir", "dir", dir, "error", err)
+			continue
+		}
+		_ = chmodR(dir, 0o777)
+	}
+	slog.Info("media dirs ready", "root", cfg.MediaRoot)
 
 	if !ffmpeg.Installed() {
 		slog.Warn("ffmpeg not found in PATH; convert jobs will fail")
@@ -108,4 +127,15 @@ func main() {
 
 	wg.Wait()
 	slog.Info("worker shutdown complete")
+}
+
+// chmodR recursively sets permissions on dir and all its contents.
+func chmodR(dir string, mode fs.FileMode) error {
+	return filepath.WalkDir(dir, func(path string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
+		}
+		_ = os.Chmod(path, mode)
+		return nil
+	})
 }

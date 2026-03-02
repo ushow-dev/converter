@@ -25,13 +25,17 @@ export interface SearchResponse {
 export interface Job {
   job_id: string
   content_type: ContentType
+  source_type: SourceType
+  source_ref: string
+  title?: string          // from search_results JOIN (may be absent)
+  thumbnail_path?: string // set when asset has a thumbnail
   status: JobStatus
   stage: JobStage | null
   progress_percent: number
   error_code: string | null
   error_message: string | null
   updated_at: string
-  created_at?: string
+  created_at: string
 }
 
 export interface JobsResponse {

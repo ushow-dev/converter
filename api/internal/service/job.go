@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"app/api/internal/model"
@@ -24,13 +25,14 @@ type CreateJobRequest struct {
 
 // JobService handles media job lifecycle.
 type JobService struct {
-	jobs   *repository.JobRepository
-	queue  *queue.Client
+	jobs      *repository.JobRepository
+	queue     *queue.Client
+	mediaRoot string
 }
 
 // NewJobService creates a JobService.
-func NewJobService(jobs *repository.JobRepository, q *queue.Client) *JobService {
-	return &JobService{jobs: jobs, queue: q}
+func NewJobService(jobs *repository.JobRepository, q *queue.Client, mediaRoot string) *JobService {
+	return &JobService{jobs: jobs, queue: q, mediaRoot: mediaRoot}
 }
 
 // CreateJob creates a media job (idempotent via request_id) and publishes it to the download queue.
@@ -101,6 +103,15 @@ func (s *JobService) CreateJob(ctx context.Context, req CreateJobRequest) (*mode
 	}
 
 	return created, nil
+}
+
+// DeleteJob removes a job, its DB records, and its files from disk.
+func (s *JobService) DeleteJob(ctx context.Context, jobID string) error {
+	// Best-effort filesystem cleanup — ignore missing dirs.
+	for _, sub := range []string{"downloads", "converted", "temp"} {
+		_ = os.RemoveAll(fmt.Sprintf("%s/%s/%s", s.mediaRoot, sub, jobID))
+	}
+	return s.jobs.Delete(ctx, jobID)
 }
 
 // GetJob fetches a job by ID.

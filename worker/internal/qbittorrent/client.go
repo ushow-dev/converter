@@ -45,16 +45,29 @@ type Client struct {
 	pass     string
 	http     *http.Client
 	loggedIn bool
+	// uiHost is sent as the HTTP Host header on every API request.
+	// qBittorrent 4.6+ validates the Host header and only accepts
+	// "localhost" and "127.0.0.1" by default; using the Docker service
+	// name (e.g. "qbittorrent:8080") causes 403 on all endpoints except
+	// /api/v2/auth/login. Overriding Host to "localhost:<port>" while
+	// keeping the TCP connection to the real hostname is the standard fix.
+	uiHost string
 }
 
 // New creates a qBittorrent Client.
 func New(baseURL, user, pass string) *Client {
 	jar, _ := cookiejar.New(nil)
+	u, _ := url.Parse(strings.TrimRight(baseURL, "/"))
+	uiHost := "localhost"
+	if p := u.Port(); p != "" {
+		uiHost = "localhost:" + p
+	}
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		user:    user,
 		pass:    pass,
 		http:    &http.Client{Timeout: 15 * time.Second, Jar: jar},
+		uiHost:  uiHost,
 	}
 }
 
@@ -82,34 +95,113 @@ func (c *Client) EnsureLoggedIn(ctx context.Context) error {
 	return nil
 }
 
-// AddTorrent adds a magnet/URL torrent and returns the infohash extracted from
-// the magnet URI (lowercase hex). savePath is where qBittorrent should save
-// the downloaded files.
-func (c *Client) AddTorrent(ctx context.Context, magnetURL, savePath string) (string, error) {
+// AddTorrent adds a magnet URI or .torrent URL and returns the infohash
+// (lowercase hex). savePath is where qBittorrent should save the files.
+//
+// For magnet URIs the hash is extracted from the URI directly.
+// For .torrent URLs the hash is discovered by diffing the torrent list
+// before and after the add call (qBittorrent fetches the file itself).
+func (c *Client) AddTorrent(ctx context.Context, sourceRef, savePath string) (string, error) {
 	if err := c.EnsureLoggedIn(ctx); err != nil {
 		return "", err
 	}
+	if strings.HasPrefix(sourceRef, "magnet:") {
+		return c.addMagnet(ctx, sourceRef, savePath)
+	}
+	return c.addTorrentURL(ctx, sourceRef, savePath)
+}
+
+func (c *Client) addMagnet(ctx context.Context, magnetURL, savePath string) (string, error) {
 	hash, err := extractInfohash(magnetURL)
 	if err != nil {
 		return "", fmt.Errorf("extract infohash: %w", err)
 	}
+	if err := c.postURLs(ctx, magnetURL, savePath); err != nil {
+		return "", err
+	}
+	return hash, nil
+}
 
+// addTorrentURL adds a .torrent file URL to qBittorrent and discovers the
+// resulting infohash by comparing the torrent list before and after.
+func (c *Client) addTorrentURL(ctx context.Context, torrentURL, savePath string) (string, error) {
+	before, err := c.listHashes(ctx)
+	if err != nil {
+		// Session may have expired; force re-login and retry once.
+		c.loggedIn = false
+		if loginErr := c.EnsureLoggedIn(ctx); loginErr != nil {
+			return "", fmt.Errorf("list hashes before add (re-login failed: %v): %w", loginErr, err)
+		}
+		before, err = c.listHashes(ctx)
+		if err != nil {
+			return "", fmt.Errorf("list hashes before add: %w", err)
+		}
+	}
+	if err := c.postURLs(ctx, torrentURL, savePath); err != nil {
+		return "", err
+	}
+	// qBittorrent fetches the .torrent asynchronously; poll until new hash appears.
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(2 * time.Second)
+		after, err := c.listHashes(ctx)
+		if err != nil {
+			continue
+		}
+		for h := range after {
+			if !before[h] {
+				return h, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("timeout waiting for torrent hash after adding %q", torrentURL)
+}
+
+func (c *Client) postURLs(ctx context.Context, ref, savePath string) error {
 	body := url.Values{
-		"urls":     {magnetURL},
+		"urls":     {ref},
 		"savepath": {savePath},
 		"category": {"media"},
 	}
 	resp, err := c.post(ctx, "/api/v2/torrents/add", body)
 	if err != nil {
-		return "", fmt.Errorf("add torrent: %w", err)
+		return fmt.Errorf("add torrent: %w", err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	result := strings.TrimSpace(string(raw))
 	if result != "Ok." && result != "Duplicate torrent!" {
-		return "", fmt.Errorf("unexpected response: %q", result)
+		return fmt.Errorf("unexpected qbittorrent response: %q", result)
 	}
-	return hash, nil
+	return nil
+}
+
+// listHashes returns all current torrent hashes known to qBittorrent.
+func (c *Client) listHashes(ctx context.Context) (map[string]bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.baseURL+"/api/v2/torrents/info", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Host = c.uiHost
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("list torrents: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusForbidden {
+		c.loggedIn = false
+		return nil, fmt.Errorf("host not allowed or session expired (403)")
+	}
+	var infos []TorrentInfo
+	if err := json.NewDecoder(resp.Body).Decode(&infos); err != nil {
+		return nil, fmt.Errorf("decode torrent list: %w", err)
+	}
+	hashes := make(map[string]bool, len(infos))
+	for _, t := range infos {
+		hashes[t.Hash] = true
+	}
+	return hashes, nil
 }
 
 // GetTorrentInfo fetches the current state of a torrent by hash.
@@ -124,6 +216,7 @@ func (c *Client) GetTorrentInfo(ctx context.Context, hash string) (*TorrentInfo,
 	if err != nil {
 		return nil, err
 	}
+	req.Host = c.uiHost
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get torrent info: %w", err)
@@ -201,6 +294,7 @@ func (c *Client) post(ctx context.Context, path string, vals url.Values) (*http.
 	if err != nil {
 		return nil, err
 	}
+	req.Host = c.uiHost
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := c.http.Do(req)
 	if err != nil {

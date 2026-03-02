@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -18,7 +17,7 @@ import (
 	"app/worker/internal/repository"
 )
 
-// Worker consumes convert_queue and orchestrates ffmpeg conversions.
+// Worker consumes convert_queue and orchestrates HLS conversions.
 type Worker struct {
 	q         *queue.Client
 	jobRepo   *repository.JobRepository
@@ -99,74 +98,97 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		return
 	}
 
-	log.Info("starting convert",
-		"input", msg.Payload.InputPath, "profile", msg.Payload.OutputProfile)
+	inputPath := msg.Payload.InputPath
+	outputDir := msg.Payload.OutputPath // temp HLS working directory
+	finalDir := msg.Payload.FinalDir
 
-	// Prepare output directory.
-	outputDir := filepath.Dir(msg.Payload.OutputPath)
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	log.Info("starting HLS convert", "input", inputPath, "output_dir", outputDir)
+
+	// Clean up any leftover from a previous attempt.
+	_ = os.RemoveAll(outputDir)
+
+	// Prepare temp output dir.
+	if err := os.MkdirAll(outputDir, 0o777); err != nil {
 		w.failJob(ctx, msg, "IO_ERROR", "create output dir: "+err.Error(), false)
 		return
 	}
+	_ = os.Chmod(outputDir, 0o777)
 
-	// Run ffmpeg.
+	// ── HLS encode ───────────────────────────────────────────────────────────
 	start := time.Now()
-	result, err := ffmpeg.Run(ctx, msg.Payload.InputPath, msg.Payload.OutputPath,
-		msg.Payload.OutputProfile, func(pct int) {
-			_ = w.jobRepo.UpdateProgress(ctx, msg.JobID, pct)
-			log.Info("convert progress", "pct", pct)
-		})
+	result, err := ffmpeg.RunHLS(ctx, inputPath, outputDir, 4, func(pct int) {
+		_ = w.jobRepo.UpdateProgress(ctx, msg.JobID, pct)
+		log.Info("convert progress", "pct", pct)
+	})
 	if err != nil {
 		w.failOrRequeue(ctx, msg, "FFMPEG_ERROR", err.Error(), false)
 		return
 	}
-	log.Info("ffmpeg finished", "duration_s", time.Since(start).Seconds())
+	log.Info("HLS encode done", "duration_s", time.Since(start).Seconds())
 
-	// Move output → final_dir.
-	if err := os.MkdirAll(msg.Payload.FinalDir, 0o755); err != nil {
-		w.failJob(ctx, msg, "IO_ERROR", "create final dir: "+err.Error(), false)
+	// ── Thumbnail ─────────────────────────────────────────────────────────────
+	thumbSrc := outputDir + "/thumbnail.jpg"
+	if err := ffmpeg.Thumbnail(ctx, inputPath, thumbSrc, 600); err != nil {
+		// Non-fatal: log and continue without thumbnail.
+		log.Warn("thumbnail extraction failed", "error", err)
+		thumbSrc = ""
+	}
+
+	// ── Move temp → final ─────────────────────────────────────────────────────
+	// Remove stale final dir from a previous attempt if present.
+	_ = os.RemoveAll(finalDir)
+	if err := os.MkdirAll(filepath.Dir(finalDir), 0o777); err != nil {
+		w.failJob(ctx, msg, "IO_ERROR", "create parent of final dir: "+err.Error(), false)
 		return
 	}
-	finalPath := filepath.Join(msg.Payload.FinalDir, "output.mp4")
-	if err := moveFile(msg.Payload.OutputPath, finalPath); err != nil {
+	if err := os.Rename(outputDir, finalDir); err != nil {
 		w.failJob(ctx, msg, "IO_ERROR", "move to final dir: "+err.Error(), false)
 		return
 	}
-	log.Info("converted file moved to final dir", "path", finalPath)
+	log.Info("HLS files moved to final dir", "path", finalDir)
 
-	// Create asset record.
-	now := time.Now().UTC()
-	assetID := generateAssetID()
-	videoCodec := result.VideoCodec
-	audioCodec := result.AudioCodec
+	masterPath := filepath.Join(finalDir, "master.m3u8")
+	var thumbFinalPath *string
+	if thumbSrc != "" {
+		// Thumbnail was written inside outputDir which was renamed to finalDir.
+		p := filepath.Join(finalDir, "thumbnail.jpg")
+		thumbFinalPath = &p
+	}
+
+	// ── Probe accurate duration from master.m3u8's first variant ─────────────
 	durationSec := result.DurationSec
-
-	// Prefer ffprobe for accurate duration.
-	if probed := ffmpeg.ProbeInfo(ctx, finalPath); probed > 0 {
+	if probed := ffmpeg.ProbeInfo(ctx, filepath.Join(finalDir, "720", "index.m3u8")); probed > 0 {
 		durationSec = probed
 	}
 
+	// ── Create asset record ───────────────────────────────────────────────────
+	now := time.Now().UTC()
+	assetID := generateAssetID()
+	videoCodec := "h264"
+	audioCodec := "aac"
+
 	asset := &model.Asset{
-		AssetID:     assetID,
-		JobID:       msg.JobID,
-		StoragePath: finalPath,
-		DurationSec: &durationSec,
-		VideoCodec:  &videoCodec,
-		AudioCodec:  &audioCodec,
-		IsReady:     true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		AssetID:       assetID,
+		JobID:         msg.JobID,
+		StoragePath:   masterPath,
+		ThumbnailPath: thumbFinalPath,
+		DurationSec:   &durationSec,
+		VideoCodec:    &videoCodec,
+		AudioCodec:    &audioCodec,
+		IsReady:       true,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 	if err := w.assetRepo.Create(ctx, asset); err != nil {
 		log.Error("create asset record", "error", err)
-		// Non-fatal: job can still be marked completed; asset can be repaired.
+		// Non-fatal.
 	}
 
 	// Mark job as completed.
 	if err := w.jobRepo.UpdateStatus(ctx, msg.JobID, model.StatusCompleted, &stage, 100); err != nil {
 		log.Error("update status to completed", "error", err)
 	}
-	log.Info("job completed", "asset_id", assetID, "path", finalPath)
+	log.Info("job completed", "asset_id", assetID, "master", masterPath)
 }
 
 // failJob marks the job as permanently failed.
@@ -194,30 +216,6 @@ func (w *Worker) failOrRequeue(ctx context.Context, msg model.ConvertMessage, co
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-
-// moveFile moves src to dst, falling back to copy+delete for cross-device moves.
-func moveFile(src, dst string) error {
-	if err := os.Rename(src, dst); err == nil {
-		return nil
-	}
-	// Cross-device move: copy then delete source.
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return os.Remove(src)
-}
 
 func backoffDelay(attempt int) time.Duration {
 	d := 5 * time.Second

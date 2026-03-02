@@ -1,0 +1,152 @@
+Как запустить и проверить проект
+1. Подготовка .env
+
+cd /Users/robospot/prj/cleaner/converter
+
+cp .env.example .env
+Отредактируй .env — минимум что нужно поменять:
+
+
+POSTGRES_PASSWORD=yourpassword          # любой надёжный пароль
+JWT_SECRET=<вывод openssl rand -hex 32>
+PLAYER_API_KEY=any-random-string
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=yourpassword
+QBITTORRENT_PASSWORD=yourpassword       # потом заменить в qBit UI
+Сгенерировать JWT_SECRET:
+
+
+openssl rand -hex 32
+PROWLARR_API_KEY пока оставь как есть — получишь из UI после первого запуска.
+
+2. Сборка образов
+
+# Собрать все три сервиса (первый раз долго — скачивает зависимости)
+docker compose build api worker frontend
+
+# Или по одному:
+docker compose build api
+docker compose build worker
+docker compose build frontend
+3. Запуск
+
+# Поднять всё в фоне
+docker compose up -d
+
+# Смотреть статус
+docker compose ps
+Ожидаемый результат через ~60 секунд:
+
+
+NAME           STATUS          PORTS
+postgres       healthy
+redis          healthy
+prowlarr       healthy
+qbittorrent    healthy
+api            healthy
+worker         healthy
+frontend       healthy         0.0.0.0:3000->3000/tcp
+4. Настройка Prowlarr (один раз)
+Prowlarr не имеет внешнего порта — нужен временный проброс:
+
+
+# Временно открыть UI Prowlarr
+docker compose run --rm --service-ports -p 9696:9696 prowlarr
+# Или использовать ssh-туннель / exec внутрь
+Либо проще — добавить временный порт в docker-compose.yml:
+
+
+prowlarr:
+  ports:
+    - "9696:9696"   # убрать после настройки
+Затем:
+
+Открыть http://localhost:9696
+Пройти wizard, добавить индексеры
+Скопировать API Key из Settings → General → API Key
+Вставить в .env → PROWLARR_API_KEY=<ключ>
+Перезапустить api: docker compose restart api
+5. Настройка qBittorrent (один раз)
+qBittorrent тоже внутри сети. Временный проброс:
+
+
+docker compose run --rm --service-ports -p 8080:8080 qbittorrent
+Открыть http://localhost:8080
+Залогиниться (default: admin / adminadmin или смотри логи: docker compose logs qbittorrent)
+Поменять пароль на тот что в .env → QBITTORRENT_PASSWORD
+6. Проверка работоспособности
+Admin UI (браузер)
+
+http://localhost:3000
+→ Автоматически редиректит на /login
+→ Логинься через ADMIN_EMAIL / ADMIN_PASSWORD
+→ Страница поиска /search → страница задач /jobs
+
+Health endpoints (curl)
+
+# API (postgres + redis проверяет)
+curl http://localhost:3000/api/health/ready
+# {"status":"ok","checks":{"db":"healthy","redis":"healthy"}}
+
+# Worker
+docker compose exec worker curl -s http://localhost:8001/health
+# {"status":"ok","checks":{"redis":"healthy"}}
+
+# Liveness
+curl http://localhost:3000/api/health/live
+# {"status":"ok"}
+Логин через API напрямую
+
+curl -s -X POST http://localhost:3000/api/admin/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"yourpassword"}' | jq .
+# {"access_token":"eyJ...","token_type":"Bearer","expires_in":3600}
+Поиск (нужен настроенный Prowlarr)
+
+TOKEN="eyJ..."   # из шага выше
+
+curl -s "http://localhost:3000/api/admin/search?query=inception&content_type=movie&limit=5" \
+  -H "Authorization: Bearer $TOKEN" | jq .items[0]
+Создать job вручную
+
+curl -s -X POST http://localhost:3000/api/admin/jobs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "request_id": "'$(uuidgen)'",
+    "content_type": "movie",
+    "source_type": "torrent",
+    "source_ref": "magnet:?xt=urn:btih:...",
+    "priority": "normal"
+  }' | jq .
+# {"job_id":"job_...","status":"queued","created_at":"..."}
+Следить за статусом job
+
+curl -s "http://localhost:3000/api/admin/jobs/job_..." \
+  -H "Authorization: Bearer $TOKEN" | jq '{status,stage,progress_percent}'
+7. Логи
+
+# Все сервисы
+docker compose logs -f
+
+# Отдельно
+docker compose logs -f api
+docker compose logs -f worker
+docker compose logs -f frontend
+8. Остановка
+
+# Остановить (данные сохраняются в volumes)
+docker compose down
+
+# Остановить и удалить все данные (volumes)
+docker compose down -v
+Краткая шпаргалка
+Что	Команда
+Собрать всё	docker compose build api worker frontend
+Запустить	docker compose up -d
+Статус	docker compose ps
+Логи	docker compose logs -f
+Перезапустить сервис	docker compose restart api
+UI	http://localhost:3000
+Health	curl localhost:3000/api/health/ready
+Остановить	docker compose down

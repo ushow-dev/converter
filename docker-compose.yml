@@ -7,6 +7,24 @@
 
 services:
 
+  # ── Media directory init ───────────────────────────────────────
+  # Ensures /media subdirs exist with world-writable permissions on every
+  # stack start so qBittorrent (uid=1000) and worker (root) can both write.
+  media-init:
+    image: alpine:3.20
+    volumes:
+      - ${MEDIA_PATH:-./media}:/media
+    command: >
+      sh -c "mkdir -p /media/downloads /media/converted /media/temp &&
+             chmod -R 777 /media &&
+             echo 'media dirs ready'"
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"
+
   # ── Persistence ───────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
@@ -51,6 +69,28 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ── FlareSolverr (Cloudflare bypass for Prowlarr) ─────────────
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+      TZ: ${TZ}
+    networks:
+      - app_net
+    # No host ports — accessed by Prowlarr via internal DNS name
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8191/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ── Indexer backend ───────────────────────────────────────────
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
@@ -63,7 +103,8 @@ services:
       - prowlarr_data:/config
     networks:
       - app_net
-    # No host ports — accessible only inside app_net
+    ports:
+      - "9696:9696"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9696/ping || exit 1"]
       interval: 30s
@@ -87,10 +128,11 @@ services:
       WEBUI_PORT: ${QBITTORRENT_WEBUI_PORT:-8080}
     volumes:
       - torrent_data:/config
-      - media_storage:/media
+      - ${MEDIA_PATH:-./media}:/media
     networks:
       - app_net
-    # No host ports — Web UI accessible only inside app_net via DNS name
+    ports:
+      - "${QBITTORRENT_WEBUI_PORT:-8080}:${QBITTORRENT_WEBUI_PORT:-8080}"
     # NOTE: BitTorrent listen ports (6881) are also not published per P1-07;
     #       qBittorrent will work via outgoing connections / DHT only.
     #       Expose 6881 if incoming peer connections are required in production.
@@ -99,7 +141,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 120s
     logging:
       driver: json-file
       options:
@@ -122,6 +164,9 @@ services:
       PLAYER_API_KEY:    ${PLAYER_API_KEY}
       ADMIN_EMAIL:       ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD:    ${ADMIN_PASSWORD}
+      MEDIA_ROOT:        /media
+    volumes:
+      - ${MEDIA_PATH:-./media}:/media
     networks:
       - app_net
     depends_on:
@@ -158,16 +203,18 @@ services:
       WORKER_HEALTH_PORT:     ${WORKER_HEALTH_PORT:-8001}
       MEDIA_ROOT:             /media
     volumes:
-      - media_storage:/media
+      - ${MEDIA_PATH:-./media}:/media
     networks:
       - app_net
     depends_on:
+      media-init:
+        condition: service_completed_successfully
       api:
         condition: service_started
       redis:
         condition: service_healthy
       qbittorrent:
-        condition: service_healthy
+        condition: service_started   # worker handles qBit unavailability gracefully per-job
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:${WORKER_HEALTH_PORT:-8001}/health || exit 1"]
       interval: 15s
@@ -242,4 +289,4 @@ volumes:
   redis_data:       # Redis AOF — survives container restart
   prowlarr_data:    # Prowlarr config/state
   torrent_data:     # qBittorrent config/state
-  media_storage:    # Shared media zone (/media/downloads /media/converted /media/temp)
+  # media_storage removed — replaced by host bind mount (MEDIA_PATH in .env)

@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Production HLS VOD builder for slow networks (720p + 480p + 360p)
+# Usage:
+#   ./ffmpeg movie.mp4
+#   ./ffmpeg movie.mp4 output 4
+INPUT="${1:-}"
+OUT_DIR="${2:-output}"
+SEG_DUR="${3:-4}"
+
+if [[ -z "${INPUT}" ]]; then
+  echo "Usage: $0 <input_file> [output_dir] [segment_duration_sec]"
+  exit 1
+fi
+
+if [[ ! -f "${INPUT}" ]]; then
+  echo "Input not found: ${INPUT}"
+  exit 1
+fi
+
+mkdir -p "${OUT_DIR}/720" "${OUT_DIR}/480" "${OUT_DIR}/360"
+
+# Read source framerate (rational form, e.g. 30000/1001)
+FPS_RAT="$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=nw=1:nk=1 "${INPUT}")"
+if [[ -z "${FPS_RAT}" || "${FPS_RAT}" == "0/0" ]]; then
+  echo "Could not detect source FPS via ffprobe."
+  exit 1
+fi
+
+# Snap source FPS to common CFR targets for stable segment/keyframe alignment.
+TARGET_FPS="$(python3 - <<PY
+from fractions import Fraction
+fps = float(Fraction("${FPS_RAT}"))
+candidates = [23.976, 24.0, 25.0, 29.97, 30.0, 50.0, 59.94, 60.0]
+print(min(candidates, key=lambda x: abs(x - fps)))
+PY
+)"
+
+GOP="$(python3 - <<PY
+seg = float("${SEG_DUR}")
+fps = float("${TARGET_FPS}")
+print(max(1, int(round(seg * fps))))
+PY
+)"
+
+HAS_AUDIO=0
+if [[ -n "$(ffprobe -v error -select_streams a:0 -show_entries stream=index -of csv=p=0 "${INPUT}" | sed '/^[[:space:]]*$/d')" ]]; then
+  HAS_AUDIO=1
+fi
+
+echo "Input:      ${INPUT}"
+echo "Output dir: ${OUT_DIR}"
+echo "Segment:    ${SEG_DUR}s"
+echo "Source FPS: ${FPS_RAT}"
+echo "Target FPS: ${TARGET_FPS}"
+echo "GOP:        ${GOP}"
+echo "Has audio:  ${HAS_AUDIO}"
+
+COMMON_VIDEO=(
+  -preset medium
+  -pix_fmt yuv420p
+  -sc_threshold 0
+)
+
+if [[ "${HAS_AUDIO}" -eq 1 ]]; then
+  ffmpeg -y -i "${INPUT}" \
+    -map_metadata -1 -map_chapters -1 \
+    -filter_complex "[0:v]split=3[v720][v480][v360];[v720]fps=${TARGET_FPS},scale=-2:720:flags=lanczos[v720o];[v480]fps=${TARGET_FPS},scale=-2:480:flags=lanczos[v480o];[v360]fps=${TARGET_FPS},scale=-2:360:flags=lanczos[v360o]" \
+    -map "[v720o]" -map 0:a:0 \
+    -c:v:0 libx264 "${COMMON_VIDEO[@]}" \
+    -b:v:0 1050k -maxrate:v:0 1155k -bufsize:v:0 1600k \
+    -g:v:0 "${GOP}" -keyint_min:v:0 "${GOP}" \
+    -force_key_frames:v:0 "expr:gte(t,n_forced*${SEG_DUR})" \
+    -c:a:0 aac -b:a:0 80k -ar:a:0 48000 -ac:a:0 2 \
+    -map "[v480o]" -map 0:a:0 \
+    -c:v:1 libx264 "${COMMON_VIDEO[@]}" \
+    -b:v:1 700k -maxrate:v:1 770k -bufsize:v:1 1100k \
+    -g:v:1 "${GOP}" -keyint_min:v:1 "${GOP}" \
+    -force_key_frames:v:1 "expr:gte(t,n_forced*${SEG_DUR})" \
+    -c:a:1 aac -b:a:1 64k -ar:a:1 48000 -ac:a:1 2 \
+    -map "[v360o]" -map 0:a:0 \
+    -c:v:2 libx264 "${COMMON_VIDEO[@]}" \
+    -b:v:2 320k -maxrate:v:2 352k -bufsize:v:2 500k \
+    -g:v:2 "${GOP}" -keyint_min:v:2 "${GOP}" \
+    -force_key_frames:v:2 "expr:gte(t,n_forced*${SEG_DUR})" \
+    -c:a:2 aac -b:a:2 48k -ar:a:2 48000 -ac:a:2 2 \
+    -f hls -hls_time "${SEG_DUR}" -hls_playlist_type vod -hls_list_size 0 \
+    -hls_flags independent_segments \
+    -master_pl_name master.m3u8 \
+    -var_stream_map "v:0,a:0,name:720 v:1,a:1,name:480 v:2,a:2,name:360" \
+    -hls_segment_filename "${OUT_DIR}/%v/seg%03d.ts" "${OUT_DIR}/%v/index.m3u8"
+else
+  # If source has no audio, generate silent AAC so both renditions stay compatible.
+  ffmpeg -y -i "${INPUT}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 \
+    -map_metadata -1 -map_chapters -1 \
+    -filter_complex "[0:v]split=3[v720][v480][v360];[v720]fps=${TARGET_FPS},scale=-2:720:flags=lanczos[v720o];[v480]fps=${TARGET_FPS},scale=-2:480:flags=lanczos[v480o];[v360]fps=${TARGET_FPS},scale=-2:360:flags=lanczos[v360o]" \
+    -map "[v720o]" -map 1:a:0 \
+    -c:v:0 libx264 "${COMMON_VIDEO[@]}" \
+    -b:v:0 1050k -maxrate:v:0 1155k -bufsize:v:0 1600k \
+    -g:v:0 "${GOP}" -keyint_min:v:0 "${GOP}" \
+    -force_key_frames:v:0 "expr:gte(t,n_forced*${SEG_DUR})" \
+    -c:a:0 aac -b:a:0 80k -ar:a:0 48000 -ac:a:0 2 \
+    -map "[v480o]" -map 1:a:0 \
+    -c:v:1 libx264 "${COMMON_VIDEO[@]}" \
+    -b:v:1 700k -maxrate:v:1 770k -bufsize:v:1 1100k \
+    -g:v:1 "${GOP}" -keyint_min:v:1 "${GOP}" \
+    -force_key_frames:v:1 "expr:gte(t,n_forced*${SEG_DUR})" \
+    -c:a:1 aac -b:a:1 64k -ar:a:1 48000 -ac:a:1 2 \
+    -map "[v360o]" -map 1:a:0 \
+    -c:v:2 libx264 "${COMMON_VIDEO[@]}" \
+    -b:v:2 320k -maxrate:v:2 352k -bufsize:v:2 500k \
+    -g:v:2 "${GOP}" -keyint_min:v:2 "${GOP}" \
+    -force_key_frames:v:2 "expr:gte(t,n_forced*${SEG_DUR})" \
+    -c:a:2 aac -b:a:2 48k -ar:a:2 48000 -ac:a:2 2 \
+    -shortest \
+    -f hls -hls_time "${SEG_DUR}" -hls_playlist_type vod -hls_list_size 0 \
+    -hls_flags independent_segments \
+    -master_pl_name master.m3u8 \
+    -var_stream_map "v:0,a:0,name:720 v:1,a:1,name:480 v:2,a:2,name:360" \
+    -hls_segment_filename "${OUT_DIR}/%v/seg%03d.ts" "${OUT_DIR}/%v/index.m3u8"
+fi
+
+echo "Done: ${OUT_DIR}/master.m3u8"

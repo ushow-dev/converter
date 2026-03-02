@@ -9,7 +9,7 @@ export default function Home() {
 
   useEffect(() => {
     if (getToken()) {
-      router.replace('/search')
+      router.replace('/movies')
     } else {
       router.replace('/login')
     }
