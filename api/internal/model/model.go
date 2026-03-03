@@ -104,6 +104,8 @@ type DownloadPayload struct {
 type DownloadJob struct {
 	SourceType string `json:"source_type"`
 	SourceRef  string `json:"source_ref"`
+	IMDbID     string `json:"imdb_id"`
+	TMDBID     string `json:"tmdb_id"`
 	TargetDir  string `json:"target_dir"`
 	Priority   string `json:"priority"`
 	RequestID  string `json:"request_id"`

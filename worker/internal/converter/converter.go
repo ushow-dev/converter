@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"app/worker/internal/ffmpeg"
@@ -22,6 +23,8 @@ type Worker struct {
 	q         *queue.Client
 	jobRepo   *repository.JobRepository
 	assetRepo *repository.AssetRepository
+	movieRepo *repository.MovieRepository
+	mediaRoot string
 }
 
 // New creates a convert Worker.
@@ -29,8 +32,12 @@ func New(
 	q *queue.Client,
 	jobRepo *repository.JobRepository,
 	assetRepo *repository.AssetRepository,
+	movieRepo *repository.MovieRepository,
+	mediaRoot string,
 ) *Worker {
-	return &Worker{q: q, jobRepo: jobRepo, assetRepo: assetRepo}
+	return &Worker{
+		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo, mediaRoot: mediaRoot,
+	}
 }
 
 // Run starts the BLPOP consumer loop. Blocks until ctx is cancelled.
@@ -100,7 +107,10 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	inputPath := msg.Payload.InputPath
 	outputDir := msg.Payload.OutputPath // temp HLS working directory
-	finalDir := msg.Payload.FinalDir
+	if msg.Payload.IMDbID == "" || msg.Payload.TMDBID == "" {
+		w.failJob(ctx, msg, "VALIDATION_ERROR", "imdb_id and tmdb_id are required", false)
+		return
+	}
 
 	log.Info("starting HLS convert", "input", inputPath, "output_dir", outputDir)
 
@@ -133,6 +143,14 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		log.Warn("thumbnail extraction failed", "error", err)
 		thumbSrc = ""
 	}
+
+	// ── Create movie row and derive final directory ───────────────────────────
+	movieID, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, nil)
+	if err != nil {
+		w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
+		return
+	}
+	finalDir := filepath.Join(w.mediaRoot, "converted", strconv.FormatInt(movieID, 10))
 
 	// ── Move temp → final ─────────────────────────────────────────────────────
 	// Remove stale final dir from a previous attempt if present.
@@ -188,6 +206,13 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	if err := w.jobRepo.UpdateStatus(ctx, msg.JobID, model.StatusCompleted, &stage, 100); err != nil {
 		log.Error("update status to completed", "error", err)
 	}
+
+	// Best-effort cleanup of original downloaded torrent data on successful convert.
+	downloadsDir := filepath.Join(w.mediaRoot, "downloads", msg.JobID)
+	if err := os.RemoveAll(downloadsDir); err != nil {
+		log.Warn("cleanup downloads dir failed", "path", downloadsDir, "error", err)
+	}
+
 	log.Info("job completed", "asset_id", assetID, "master", masterPath)
 }
 

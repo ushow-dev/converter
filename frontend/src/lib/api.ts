@@ -120,6 +120,8 @@ export async function getJob(jobId: string): Promise<Job> {
 
 export async function createJob(params: {
   source_ref: string
+  imdb_id: string
+  tmdb_id: string
   source_type?: SourceType
   content_type?: ContentType
   priority?: Priority
@@ -131,6 +133,8 @@ export async function createJob(params: {
       content_type: params.content_type ?? 'movie',
       source_type: params.source_type ?? 'torrent',
       source_ref: params.source_ref,
+      imdb_id: params.imdb_id,
+      tmdb_id: params.tmdb_id,
       priority: params.priority ?? 'normal',
     }),
   })

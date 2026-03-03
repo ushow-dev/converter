@@ -30,6 +30,8 @@ type createJobRequest struct {
 	ContentType string `json:"content_type"`
 	SourceType  string `json:"source_type"`
 	SourceRef   string `json:"source_ref"`
+	IMDbID      string `json:"imdb_id"`
+	TMDBID      string `json:"tmdb_id"`
 	Priority    string `json:"priority"`
 }
 
@@ -44,9 +46,10 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ContentType == "" || req.SourceType == "" || req.SourceRef == "" {
+	if req.ContentType == "" || req.SourceType == "" || req.SourceRef == "" ||
+		req.IMDbID == "" || req.TMDBID == "" {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
-			"content_type, source_type, source_ref are required", false, cid)
+			"content_type, source_type, source_ref, imdb_id, tmdb_id are required", false, cid)
 		return
 	}
 	if req.ContentType != "movie" {
@@ -70,6 +73,8 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ContentType:   req.ContentType,
 		SourceType:    req.SourceType,
 		SourceRef:     req.SourceRef,
+		IMDbID:        req.IMDbID,
+		TMDBID:        req.TMDBID,
 		Priority:      priority,
 		CorrelationID: cid,
 	})

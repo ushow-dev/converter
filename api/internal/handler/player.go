@@ -2,8 +2,9 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -40,8 +41,9 @@ func (h *PlayerHandler) GetAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build playback info (URL mode: serve via nginx or direct file path).
-	playbackURL := fmt.Sprintf("/media/converted/%s", asset.AssetID)
+	// Build playback info from actual storage_path to avoid divergence between
+	// physical storage layout and API URL shape.
+	playbackURL := storagePathToPlaybackURL(asset.StoragePath)
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"asset_id":     asset.AssetID,
@@ -59,6 +61,17 @@ func (h *PlayerHandler) GetAsset(w http.ResponseWriter, r *http.Request) {
 		},
 		"updated_at": asset.UpdatedAt,
 	})
+}
+
+func storagePathToPlaybackURL(storagePath string) string {
+	p := filepath.ToSlash(filepath.Clean(storagePath))
+	if p == "." || p == "/" {
+		return "/media"
+	}
+	if strings.HasPrefix(p, "/") {
+		return p
+	}
+	return "/" + p
 }
 
 // GetJobStatus handles GET /api/player/jobs/{jobID}/status.

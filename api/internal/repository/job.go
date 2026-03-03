@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -33,6 +36,12 @@ const jobBaseSelect = `
 // JobRepository handles persistence of media_jobs.
 type JobRepository struct {
 	pool *pgxpool.Pool
+}
+
+// DeleteMeta contains auxiliary info useful for post-delete cleanup.
+type DeleteMeta struct {
+	StoragePath *string
+	MovieID     *int64
 }
 
 // NewJobRepository creates a JobRepository backed by pool.
@@ -151,27 +160,55 @@ func (r *JobRepository) UpdateStatus(
 }
 
 // Delete removes a job and all its related records (events, assets) in a single transaction.
-func (r *JobRepository) Delete(ctx context.Context, jobID string) error {
+func (r *JobRepository) Delete(ctx context.Context, jobID string) (*DeleteMeta, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return nil, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	meta := &DeleteMeta{}
+	var storagePath string
+	if err = tx.QueryRow(ctx,
+		`SELECT storage_path FROM media_assets WHERE job_id = $1 LIMIT 1`,
+		jobID,
+	).Scan(&storagePath); err == nil && storagePath != "" {
+		meta.StoragePath = &storagePath
+		if movieID, ok := movieIDFromStoragePath(storagePath); ok {
+			meta.MovieID = &movieID
+		}
+	}
+
 	if _, err = tx.Exec(ctx, `DELETE FROM job_events WHERE job_id = $1`, jobID); err != nil {
-		return fmt.Errorf("delete events: %w", err)
+		return nil, fmt.Errorf("delete events: %w", err)
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM media_assets WHERE job_id = $1`, jobID); err != nil {
-		return fmt.Errorf("delete assets: %w", err)
+		return nil, fmt.Errorf("delete assets: %w", err)
 	}
 	res, err := tx.Exec(ctx, `DELETE FROM media_jobs WHERE job_id = $1`, jobID)
 	if err != nil {
-		return fmt.Errorf("delete job: %w", err)
+		return nil, fmt.Errorf("delete job: %w", err)
 	}
 	if res.RowsAffected() == 0 {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
-	return tx.Commit(ctx)
+
+	// If this job produced a movie folder and no other assets point to it,
+	// remove the movie row to avoid stale catalog entries.
+	if meta.MovieID != nil {
+		prefix := fmt.Sprintf("/media/converted/%d/", *meta.MovieID)
+		var refs int
+		if err := tx.QueryRow(ctx,
+			`SELECT COUNT(*) FROM media_assets WHERE storage_path LIKE $1`,
+			prefix+"%",
+		).Scan(&refs); err == nil && refs == 0 {
+			_, _ = tx.Exec(ctx, `DELETE FROM movies WHERE id = $1`, *meta.MovieID)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return meta, nil
 }
 
 // SetFailed marks a job as failed with an error code and message.
@@ -233,4 +270,20 @@ func scanRows(rows pgx.Rows) ([]*model.Job, error) {
 		jobs = append(jobs, j)
 	}
 	return jobs, rows.Err()
+}
+
+func movieIDFromStoragePath(storagePath string) (int64, bool) {
+	p := filepath.ToSlash(filepath.Clean(storagePath))
+	parts := strings.Split(strings.Trim(p, "/"), "/")
+	for i := 0; i+1 < len(parts); i++ {
+		if parts[i] != "converted" {
+			continue
+		}
+		id, err := strconv.ParseInt(parts[i+1], 10, 64)
+		if err == nil {
+			return id, true
+		}
+		return 0, false
+	}
+	return 0, false
 }

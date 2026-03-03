@@ -35,6 +35,8 @@ type DownloadMessage struct {
 type DownloadJob struct {
 	SourceType string `json:"source_type"`
 	SourceRef  string `json:"source_ref"`
+	IMDbID     string `json:"imdb_id"`
+	TMDBID     string `json:"tmdb_id"`
 	TargetDir  string `json:"target_dir"`
 	Priority   string `json:"priority"`
 	RequestID  string `json:"request_id"`
@@ -60,6 +62,8 @@ type ConvertJob struct {
 	OutputPath    string `json:"output_path"`
 	OutputProfile string `json:"output_profile"`
 	FinalDir      string `json:"final_dir"`
+	IMDbID        string `json:"imdb_id"`
+	TMDBID        string `json:"tmdb_id"`
 }
 
 // ─── Asset ───────────────────────────────────────────────────────────────────
@@ -76,4 +80,14 @@ type Asset struct {
 	IsReady       bool
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+// Movie is the catalog record created after successful conversion.
+type Movie struct {
+	ID        int64
+	IMDbID    string
+	TMDBID    string
+	PosterURL *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

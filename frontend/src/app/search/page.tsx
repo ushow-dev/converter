@@ -11,6 +11,8 @@ import type { SearchResponse, SearchResultItem } from '@/types'
 export default function SearchPage() {
   const router = useRouter()
   const [query, setQuery] = useState('')
+  const [imdbID, setImdbID] = useState('')
+  const [tmdbID, setTmdbID] = useState('')
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [enqueuing, setEnqueuing] = useState<string | null>(null)
   const [enqueueResult, setEnqueueResult] = useState<{ id: string; title: string } | null>(null)
@@ -33,12 +35,21 @@ export default function SearchPage() {
   }
 
   async function handleEnqueue(item: SearchResultItem) {
+    const imdb = imdbID.trim()
+    const tmdb = tmdbID.trim()
+    if (!imdb || !tmdb) {
+      setEnqueueError('Заполните imdb и tmdb перед добавлением фильма')
+      return
+    }
+
     setEnqueuing(item.external_id)
     setEnqueueError('')
     setEnqueueResult(null)
     try {
       const job = await createJob({
         source_ref: item.source_ref,
+        imdb_id: imdb,
+        tmdb_id: tmdb,
         source_type: 'torrent',
         content_type: 'movie',
       })
@@ -58,21 +69,39 @@ export default function SearchPage() {
         <h2 className="mb-6 text-xl font-semibold text-white">Search</h2>
 
         {/* Search form */}
-        <form onSubmit={handleSearch} className="mb-6 flex gap-3">
-          <input
-            type="text"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Movie title…"
-            className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={!query.trim() || isLoading}
-            className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
-          >
-            {isLoading ? 'Searching…' : 'Search'}
-          </button>
+        <form onSubmit={handleSearch} className="mb-6 space-y-3">
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Movie title…"
+              className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!query.trim() || isLoading}
+              className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {isLoading ? 'Searching…' : 'Search'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <input
+              type="text"
+              value={imdbID}
+              onChange={e => setImdbID(e.target.value)}
+              placeholder="IMDb ID (например, tt1375666)"
+              className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            />
+            <input
+              type="text"
+              value={tmdbID}
+              onChange={e => setTmdbID(e.target.value)}
+              placeholder="TMDB ID (например, 27205)"
+              className="rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
         </form>
 
         {/* Enqueue feedback */}
@@ -134,7 +163,7 @@ export default function SearchPage() {
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => handleEnqueue(item)}
-                        disabled={enqueuing === item.external_id}
+                        disabled={enqueuing === item.external_id || !imdbID.trim() || !tmdbID.trim()}
                         className="rounded bg-indigo-700 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-600 disabled:opacity-50"
                       >
                         {enqueuing === item.external_id ? '…' : 'Download'}

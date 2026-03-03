@@ -17,6 +17,8 @@ import (
 	"app/worker/internal/repository"
 )
 
+var errJobCanceled = errors.New("job canceled")
+
 // Worker consumes download_queue and orchestrates torrent downloads.
 type Worker struct {
 	q         *queue.Client
@@ -119,12 +121,16 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 	log.Info("torrent added to qbittorrent", "hash", hash)
 
-	// Poll until download completes.
-	info, err := w.qbt.WaitForDownload(ctx, hash, func(pct int) {
+	// Poll until download completes or the job is deleted from DB.
+	info, err := w.waitForDownloadOrCancel(ctx, msg.JobID, hash, func(pct int) {
 		_ = w.jobRepo.UpdateProgress(ctx, msg.JobID, pct)
 		log.Info("download progress", "pct", pct)
 	})
 	if err != nil {
+		if errors.Is(err, errJobCanceled) {
+			log.Info("job was deleted during download; canceled torrent")
+			return
+		}
 		w.failOrRequeue(ctx, msg, "DOWNLOAD_ERROR", err.Error(), true)
 		return
 	}
@@ -164,6 +170,8 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			OutputPath:    outputPath,
 			OutputProfile: "hls_720_480_360",
 			FinalDir:      finalDir,
+			IMDbID:        msg.Payload.IMDbID,
+			TMDBID:        msg.Payload.TMDBID,
 		},
 	}
 	if err := w.q.Push(ctx, queue.ConvertQueue, convertMsg); err != nil {
@@ -255,4 +263,51 @@ func backoffDelay(attempt int) time.Duration {
 		}
 	}
 	return d
+}
+
+func (w *Worker) waitForDownloadOrCancel(
+	ctx context.Context,
+	jobID string,
+	hash string,
+	progressFn func(int),
+) (*qbittorrent.TorrentInfo, error) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	lastProgress := -1
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			exists, err := w.jobRepo.Exists(ctx, jobID)
+			if err != nil {
+				slog.Warn("check job existence failed", "job_id", jobID, "error", err)
+			} else if !exists {
+				_ = w.qbt.DeleteTorrent(ctx, hash)
+				return nil, errJobCanceled
+			}
+
+			info, err := w.qbt.GetTorrentInfo(ctx, hash)
+			if err != nil {
+				slog.Warn("qbittorrent poll error", "hash", hash, "error", err)
+				continue
+			}
+			if info == nil {
+				slog.Warn("torrent not yet visible in qbittorrent", "hash", hash)
+				continue
+			}
+			if info.IsError() {
+				return nil, fmt.Errorf("torrent error state: %s", info.State)
+			}
+			pct := int(info.Progress * 100)
+			if pct != lastProgress {
+				lastProgress = pct
+				progressFn(pct)
+			}
+			if info.IsComplete() {
+				return info, nil
+			}
+		}
+	}
 }

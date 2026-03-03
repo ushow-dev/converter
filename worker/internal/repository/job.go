@@ -70,3 +70,14 @@ func (r *JobRepository) IsTerminal(ctx context.Context, jobID string) (bool, err
 	}
 	return status == "completed" || status == "failed", nil
 }
+
+// Exists reports whether media_jobs contains the given job_id.
+func (r *JobRepository) Exists(ctx context.Context, jobID string) (bool, error) {
+	var exists bool
+	if err := r.pool.QueryRow(ctx,
+		"SELECT EXISTS(SELECT 1 FROM media_jobs WHERE job_id = $1)", jobID,
+	).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check exists %s: %w", jobID, err)
+	}
+	return exists, nil
+}

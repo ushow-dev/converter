@@ -91,10 +91,11 @@ func main() {
 	// ── Repositories ───────────────────────────────────────────────────────────
 	jobRepo := repository.NewJobRepository(pool)
 	assetRepo := repository.NewAssetRepository(pool)
+	movieRepo := repository.NewMovieRepository(pool)
 
 	// ── Pipeline workers ───────────────────────────────────────────────────────
 	dlWorker := downloader.New(redisClient, jobRepo, qbt, cfg.MediaRoot)
-	cvWorker := converter.New(redisClient, jobRepo, assetRepo)
+	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo, cfg.MediaRoot)
 
 	// ── Health server ──────────────────────────────────────────────────────────
 	go health.Start(cfg.HealthPort, redisClient)

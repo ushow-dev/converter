@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"app/api/internal/model"
@@ -19,6 +20,8 @@ type CreateJobRequest struct {
 	ContentType string
 	SourceType  string
 	SourceRef   string
+	IMDbID      string
+	TMDBID      string
 	Priority    model.JobPriority
 	CorrelationID string
 }
@@ -89,6 +92,8 @@ func (s *JobService) CreateJob(ctx context.Context, req CreateJobRequest) (*mode
 		Payload: model.DownloadJob{
 			SourceType: created.SourceType,
 			SourceRef:  created.SourceRef,
+			IMDbID:     req.IMDbID,
+			TMDBID:     req.TMDBID,
 			TargetDir:  fmt.Sprintf("/media/downloads/%s", created.JobID),
 			Priority:   string(created.Priority),
 			RequestID:  reqID,
@@ -107,11 +112,22 @@ func (s *JobService) CreateJob(ctx context.Context, req CreateJobRequest) (*mode
 
 // DeleteJob removes a job, its DB records, and its files from disk.
 func (s *JobService) DeleteJob(ctx context.Context, jobID string) error {
+	meta, err := s.jobs.Delete(ctx, jobID)
+	if err != nil {
+		return err
+	}
+
 	// Best-effort filesystem cleanup — ignore missing dirs.
 	for _, sub := range []string{"downloads", "converted", "temp"} {
-		_ = os.RemoveAll(fmt.Sprintf("%s/%s/%s", s.mediaRoot, sub, jobID))
+		_ = os.RemoveAll(filepath.Join(s.mediaRoot, sub, jobID))
 	}
-	return s.jobs.Delete(ctx, jobID)
+	if meta != nil && meta.StoragePath != nil {
+		_ = os.RemoveAll(filepath.Dir(*meta.StoragePath))
+	}
+	if meta != nil && meta.MovieID != nil {
+		_ = os.RemoveAll(filepath.Join(s.mediaRoot, "converted", fmt.Sprintf("%d", *meta.MovieID)))
+	}
+	return nil
 }
 
 // GetJob fetches a job by ID.
