@@ -154,6 +154,8 @@ services:
       context: ./api          # Phase 2: Dockerfile lives in api/
     image: ${API_IMAGE:-app/api}:${APP_IMAGE_TAG:-latest}
     restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
     environment:
       PORT:              ${API_PORT:-8000}
       DATABASE_URL:      "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
