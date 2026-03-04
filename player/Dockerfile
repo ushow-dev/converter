@@ -9,6 +9,7 @@ RUN npm install
 
 # Copy source and build
 COPY . .
+RUN mkdir -p public
 RUN npm run build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
@@ -21,7 +22,8 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Standalone output bundles the server; static assets are separate
+# Standalone output bundles the server; static assets are separate.
+# Ensure public exists even when project has no /public directory.
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

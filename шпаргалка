@@ -150,3 +150,42 @@ docker compose down -v
 UI	http://localhost:3000
 Health	curl localhost:3000/api/health/ready
 Остановить	docker compose down
+
+
+
+Сборка плеера
+Отлично — под ваш текущий player (с уже готовым player/Dockerfile) вот готовый рабочий сценарий.
+1) DNS
+Добавьте запись:
+A player.ptrack.ink -> 89.167.98.18
+Проверка:
+dig +short player.ptrack.ink
+2) Подготовка env для плеера
+В папке player на сервере:
+cp .env.example .env
+cd /opt/converter/playercp .env.example .env
+Заполните .env так:
+https://api.ptrack.ink
+API_URL=https://api.ptrack.inkPLAYER_KEY=<тот же ключ, что PLAYER_API_KEY в backend>NEXT_PUBLIC_VAST_TAG=
+Важно:
+PLAYER_KEY должен совпадать с PLAYER_API_KEY у API.
+API_URL лучше через домен https://api.ptrack.ink.
+3) Сборка и запуск контейнера плеера
+cd /opt/converter/playerdocker build -t ptrack-player:latest .docker rm -f ptrack-player 2>/dev/null || truedocker run -d \  --name ptrack-player \  --restart unless-stopped \  -p 127.0.0.1:3100:3000 \  --env-file .env \  ptrack-player:latest
+Проверка:
+curl -I http://127.0.0.1:3100docker logs --tail=50 ptrack-player
+4) Nginx: добавить server block для player.ptrack.ink
+В ваш ptrack.ink.conf добавьте:
+server {    listen 80;    server_name player.ptrack.ink;    return 301 https://$host$request_uri;}server {    listen 443 ssl http2;    server_name player.ptrack.ink;    ssl_certificate /etc/letsencrypt/live/player.ptrack.ink/fullchain.pem;    ssl_certificate_key /etc/letsencrypt/live/player.ptrack.ink/privkey.pem;    location / {        proxy_pass http://127.0.0.1:3100;        proxy_http_version 1.1;        proxy_set_header Host $host;        proxy_set_header X-Real-IP $remote_addr;        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;        proxy_set_header X-Forwarded-Proto https;        proxy_set_header Upgrade $http_upgrade;        proxy_set_header Connection "upgrade";    }}
+Проверка и reload:
+sudo nginx -tsudo systemctl reload nginx
+5) Сертификат для player
+sudo certbot --nginx -d player.ptrack.ink
+(или добавьте -d player.ptrack.ink к уже существующему мульти-доменному сертификату)
+6) Финальная проверка
+Откройте:
+https://player.ptrack.ink
+Проверьте API через player-route (если у вас так реализовано):
+https://player.ptrack.ink/api/movie?imdb_id=333
+Если вернулся JSON с data.playback.hls и data.assets.poster, значит все связалось корректно.
+Если хотите, могу дать вам сразу готовый полный ptrack.ink.conf с учетом admin/api/media/player в одном файле, чтобы просто вставить и перезагрузить nginx.
