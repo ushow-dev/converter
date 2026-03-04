@@ -66,6 +66,7 @@ func New(deps Dependencies) http.Handler {
 	// ── Player API ────────────────────────────────────────────────────────────
 	r.Route("/api/player", func(r chi.Router) {
 		r.Use(auth.PlayerKeyMiddleware(deps.Cfg.PlayerAPIKey))
+		r.Get("/movie", deps.PlayerHandler.GetMovie)
 		r.Get("/assets/{assetID}", deps.PlayerHandler.GetAsset)
 		r.Get("/jobs/{jobID}/status", deps.PlayerHandler.GetJobStatus)
 	})

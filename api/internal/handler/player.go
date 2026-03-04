@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -15,13 +16,25 @@ import (
 
 // PlayerHandler handles /api/player/* endpoints.
 type PlayerHandler struct {
-	jobSvc   *service.JobService
-	assetRepo *repository.AssetRepository
+	jobSvc       *service.JobService
+	assetRepo    *repository.AssetRepository
+	movieRepo    *repository.MovieRepository
+	mediaBaseURL string
 }
 
 // NewPlayerHandler creates a PlayerHandler.
-func NewPlayerHandler(jobSvc *service.JobService, assetRepo *repository.AssetRepository) *PlayerHandler {
-	return &PlayerHandler{jobSvc: jobSvc, assetRepo: assetRepo}
+func NewPlayerHandler(
+	jobSvc *service.JobService,
+	assetRepo *repository.AssetRepository,
+	movieRepo *repository.MovieRepository,
+	mediaBaseURL string,
+) *PlayerHandler {
+	return &PlayerHandler{
+		jobSvc:       jobSvc,
+		assetRepo:    assetRepo,
+		movieRepo:    movieRepo,
+		mediaBaseURL: mediaBaseURL,
+	}
 }
 
 // GetAsset handles GET /api/player/assets/{assetID}.
@@ -72,6 +85,90 @@ func storagePathToPlaybackURL(storagePath string) string {
 		return p
 	}
 	return "/" + p
+}
+
+const mediaPathTemplate = "/media/converted/%d/%s"
+
+// GetMovie handles GET /api/player/movie?imdb_id=...|tmdb_id=...
+func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+
+	imdbID := strings.TrimSpace(r.URL.Query().Get("imdb_id"))
+	tmdbID := strings.TrimSpace(r.URL.Query().Get("tmdb_id"))
+	if (imdbID == "" && tmdbID == "") || (imdbID != "" && tmdbID != "") {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"exactly one of imdb_id or tmdb_id must be provided", false, cid)
+		return
+	}
+
+	var (
+		movie *repositoryMovieView
+		err   error
+	)
+	if imdbID != "" {
+		movie, err = h.getMovieByIMDbID(r, imdbID)
+	} else {
+		movie, err = h.getMovieByTMDBID(r, tmdbID)
+	}
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "NOT_FOUND", "movie not found", false, cid)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
+			"failed to fetch movie", false, cid)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"data": map[string]any{
+			"movie": map[string]any{
+				"id":      movie.id,
+				"imdb_id": movie.imdbID,
+				"tmdb_id": movie.tmdbID,
+			},
+			"playback": map[string]any{
+				"hls": buildMovieMediaURL(h.mediaBaseURL, movie.id, "master.m3u8"),
+			},
+			"assets": map[string]any{
+				"poster": buildMovieMediaURL(h.mediaBaseURL, movie.id, "thumbnail.jpg"),
+			},
+		},
+		"meta": map[string]any{
+			"version": "v1",
+		},
+	})
+}
+
+type repositoryMovieView struct {
+	id     int64
+	imdbID string
+	tmdbID string
+}
+
+func (h *PlayerHandler) getMovieByIMDbID(r *http.Request, imdbID string) (*repositoryMovieView, error) {
+	m, err := h.movieRepo.GetByIMDbID(r.Context(), imdbID)
+	if err != nil {
+		return nil, err
+	}
+	return &repositoryMovieView{id: m.ID, imdbID: m.IMDbID, tmdbID: m.TMDBID}, nil
+}
+
+func (h *PlayerHandler) getMovieByTMDBID(r *http.Request, tmdbID string) (*repositoryMovieView, error) {
+	m, err := h.movieRepo.GetByTMDBID(r.Context(), tmdbID)
+	if err != nil {
+		return nil, err
+	}
+	return &repositoryMovieView{id: m.ID, imdbID: m.IMDbID, tmdbID: m.TMDBID}, nil
+}
+
+func buildMovieMediaURL(baseURL string, movieID int64, fileName string) string {
+	relative := fmt.Sprintf(mediaPathTemplate, movieID, fileName)
+	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if trimmed == "" {
+		return relative
+	}
+	return trimmed + relative
 }
 
 // GetJobStatus handles GET /api/player/jobs/{jobID}/status.

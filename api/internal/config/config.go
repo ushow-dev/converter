@@ -36,7 +36,8 @@ type Config struct {
 	WorkerHealthPort string
 
 	// Media
-	MediaRoot string
+	MediaRoot    string
+	MediaBaseURL string
 
 	// App
 	Environment string
@@ -57,6 +58,7 @@ func Load() (*Config, error) {
 		ProwlarrAPIKey:   getEnv("PROWLARR_API_KEY", ""),
 		WorkerHealthPort: getEnv("WORKER_HEALTH_PORT", "8001"),
 		MediaRoot:        getEnv("MEDIA_ROOT", "/media"),
+		MediaBaseURL:     getEnv("MEDIA_BASE_URL", ""),
 		Environment:      getEnv("APP_ENV", "development"),
 	}
 

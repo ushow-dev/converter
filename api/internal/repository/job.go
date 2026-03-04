@@ -28,10 +28,16 @@ const jobBaseSelect = `
 	       j.priority, j.status, j.stage, j.progress_percent,
 	       j.error_code, j.error_message, j.retryable,
 	       j.request_id, j.correlation_id, j.created_at, j.updated_at,
-	       sr.title, a.thumbnail_path
+	       sr.title, a.thumbnail_path, m.id, m.imdb_id, m.tmdb_id
 	FROM media_jobs j
 	LEFT JOIN search_results sr ON sr.source_ref = j.source_ref
-	LEFT JOIN media_assets a ON a.job_id = j.job_id`
+	LEFT JOIN media_assets a ON a.job_id = j.job_id
+	LEFT JOIN movies m ON m.id = (
+		CASE
+			WHEN a.storage_path ~ '/converted/[0-9]+/' THEN substring(a.storage_path FROM '/converted/([0-9]+)/')::bigint
+			ELSE NULL
+		END
+	)`
 
 // JobRepository handles persistence of media_jobs.
 type JobRepository struct {
@@ -256,7 +262,7 @@ func scanRows(rows pgx.Rows) ([]*model.Job, error) {
 			&j.ErrorCode, &j.ErrorMessage, &j.Retryable,
 			&j.RequestID, &j.CorrelationID,
 			&j.CreatedAt, &j.UpdatedAt,
-			&j.Title, &j.ThumbnailPath,
+			&j.Title, &j.ThumbnailPath, &j.MovieID, &j.IMDbID, &j.TMDBID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan job: %w", err)

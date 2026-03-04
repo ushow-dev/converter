@@ -40,6 +40,9 @@ type Job struct {
 	SourceRef       string      `json:"source_ref"`
 	Title           *string     `json:"title,omitempty"`          // from search_results JOIN
 	ThumbnailPath   *string     `json:"thumbnail_path,omitempty"` // from media_assets JOIN
+	MovieID         *int64      `json:"movie_id,omitempty"`       // resolved via media_assets/storage_path -> movies
+	IMDbID          *string     `json:"imdb_id,omitempty"`
+	TMDBID          *string     `json:"tmdb_id,omitempty"`
 	Priority        JobPriority `json:"priority"`
 	Status          JobStatus   `json:"status"`
 	Stage           *JobStage   `json:"stage,omitempty"`
@@ -67,6 +70,18 @@ type Asset struct {
 	IsReady       bool      `json:"is_ready"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// ─── Movie ───────────────────────────────────────────────────────────────────
+
+// Movie represents catalog metadata used to resolve player links.
+type Movie struct {
+	ID        int64      `json:"id"`
+	IMDbID    string     `json:"imdb_id"`
+	TMDBID    string     `json:"tmdb_id"`
+	PosterURL *string    `json:"poster_url,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 // ─── SearchResult ─────────────────────────────────────────────────────────────

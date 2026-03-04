@@ -29,6 +29,9 @@ export interface Job {
   source_ref: string
   title?: string          // from search_results JOIN (may be absent)
   thumbnail_path?: string // set when asset has a thumbnail
+  movie_id?: number
+  imdb_id?: string
+  tmdb_id?: string
   status: JobStatus
   stage: JobStage | null
   progress_percent: number

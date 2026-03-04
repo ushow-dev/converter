@@ -58,6 +58,7 @@ func main() {
 	// ── Repositories ───────────────────────────────────────────────────────────
 	jobRepo := repository.NewJobRepository(pool)
 	assetRepo := repository.NewAssetRepository(pool)
+	movieRepo := repository.NewMovieRepository(pool)
 	searchRepo := repository.NewSearchRepository(pool)
 
 	// ── Indexer backend ────────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ func main() {
 	authH := handler.NewAuthHandler(cfg)
 	searchH := handler.NewSearchHandler(searchSvc)
 	jobsH := handler.NewJobsHandler(jobSvc, assetRepo)
-	playerH := handler.NewPlayerHandler(jobSvc, assetRepo)
+	playerH := handler.NewPlayerHandler(jobSvc, assetRepo, movieRepo, cfg.MediaBaseURL)
 
 	// ── HTTP server ────────────────────────────────────────────────────────────
 	h := server.New(server.Dependencies{
