@@ -74,7 +74,14 @@ func main() {
 	authH := handler.NewAuthHandler(cfg)
 	searchH := handler.NewSearchHandler(searchSvc)
 	jobsH := handler.NewJobsHandler(jobSvc, assetRepo)
-	playerH := handler.NewPlayerHandler(jobSvc, assetRepo, movieRepo, cfg.MediaBaseURL)
+	playerH := handler.NewPlayerHandler(
+		jobSvc,
+		assetRepo,
+		movieRepo,
+		cfg.MediaBaseURL,
+		cfg.MediaSigningKey,
+		cfg.MediaSigningTTL,
+	)
 
 	// ── HTTP server ────────────────────────────────────────────────────────────
 	h := server.New(server.Dependencies{

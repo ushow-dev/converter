@@ -7,6 +7,7 @@
 Endpoint для плеера (Next.js), который принимает `imdb_id` или `tmdb_id`, находит фильм в таблице `movies` и возвращает ссылки на HLS-поток и постер.
 
 Сами media-файлы отдаются напрямую nginx (или CDN), API возвращает только URL.
+Для HLS API возвращает подписанный URL (query-параметры `st` и `e`) с коротким TTL.
 
 ## Авторизация
 
@@ -49,10 +50,10 @@ curl -X GET "http://localhost:8000/api/player/movie?tmdb_id=603" \
       "tmdb_id": "603"
     },
     "playback": {
-      "hls": "https://media.example.com/media/converted/1/master.m3u8"
+      "hls": "https://media.example.com/media/converted/1/master.m3u8?e=1739200000&st=..."
     },
     "assets": {
-      "poster": "https://media.example.com/media/converted/1/thumbnail.jpg"
+      "poster": "https://media.example.com/media/converted/1/thumbnail.jpg?e=1739200000&st=..."
     }
   },
   "meta": {
@@ -95,5 +96,7 @@ curl -X GET "http://localhost:8000/api/player/movie?tmdb_id=603" \
 - Переменная окружения API: `MEDIA_BASE_URL`
 - Если задана, ссылки в ответе формируются как `<MEDIA_BASE_URL>/media/converted/<movie_id>/...`
 - Если пустая, API возвращает относительные пути `/media/converted/<movie_id>/...`
+- Если задан `MEDIA_SIGNING_KEY`, API добавляет подпись (`st`) и время истечения (`e`) в query string.
+- TTL подписи задается через `MEDIA_SIGNING_TTL` (по умолчанию `2m`).
 
 Это позволяет менять домен раздачи media без изменения бизнес-логики endpoint.

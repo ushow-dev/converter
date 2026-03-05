@@ -1,11 +1,17 @@
 package handler
 
 import (
+	"crypto/md5"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -20,6 +26,7 @@ type PlayerHandler struct {
 	assetRepo    *repository.AssetRepository
 	movieRepo    *repository.MovieRepository
 	mediaBaseURL string
+	mediaSigner  *mediaURLSigner
 }
 
 // NewPlayerHandler creates a PlayerHandler.
@@ -28,12 +35,15 @@ func NewPlayerHandler(
 	assetRepo *repository.AssetRepository,
 	movieRepo *repository.MovieRepository,
 	mediaBaseURL string,
+	mediaSigningKey string,
+	mediaSigningTTL time.Duration,
 ) *PlayerHandler {
 	return &PlayerHandler{
 		jobSvc:       jobSvc,
 		assetRepo:    assetRepo,
 		movieRepo:    movieRepo,
 		mediaBaseURL: mediaBaseURL,
+		mediaSigner:  newMediaURLSigner(mediaSigningKey, mediaSigningTTL),
 	}
 }
 
@@ -56,7 +66,7 @@ func (h *PlayerHandler) GetAsset(w http.ResponseWriter, r *http.Request) {
 
 	// Build playback info from actual storage_path to avoid divergence between
 	// physical storage layout and API URL shape.
-	playbackURL := storagePathToPlaybackURL(asset.StoragePath)
+	playbackURL := h.maybeSignMediaURL(storagePathToPlaybackURL(asset.StoragePath))
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"asset_id":     asset.AssetID,
@@ -128,10 +138,10 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 				"tmdb_id": movie.tmdbID,
 			},
 			"playback": map[string]any{
-				"hls": buildMovieMediaURL(h.mediaBaseURL, movie.id, "master.m3u8"),
+				"hls": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.id, "master.m3u8")),
 			},
 			"assets": map[string]any{
-				"poster": buildMovieMediaURL(h.mediaBaseURL, movie.id, "thumbnail.jpg"),
+				"poster": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.id, "thumbnail.jpg")),
 			},
 		},
 		"meta": map[string]any{
@@ -169,6 +179,53 @@ func buildMovieMediaURL(baseURL string, movieID int64, fileName string) string {
 		return relative
 	}
 	return trimmed + relative
+}
+
+func (h *PlayerHandler) maybeSignMediaURL(rawURL string) string {
+	if h.mediaSigner == nil {
+		return rawURL
+	}
+	signedURL, err := h.mediaSigner.Sign(rawURL, time.Now().UTC())
+	if err != nil {
+		slog.Warn("failed to sign media url", "url", rawURL, "error", err)
+		return rawURL
+	}
+	return signedURL
+}
+
+type mediaURLSigner struct {
+	secret string
+	ttl    time.Duration
+}
+
+func newMediaURLSigner(secret string, ttl time.Duration) *mediaURLSigner {
+	secret = strings.TrimSpace(secret)
+	if secret == "" || ttl <= 0 {
+		return nil
+	}
+	return &mediaURLSigner{secret: secret, ttl: ttl}
+}
+
+func (s *mediaURLSigner) Sign(rawURL string, now time.Time) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("parse media url: %w", err)
+	}
+
+	if u.Path == "" {
+		return "", fmt.Errorf("media url has empty path")
+	}
+
+	expires := now.Add(s.ttl).Unix()
+	tokenBytes := md5.Sum([]byte(strconv.FormatInt(expires, 10) + u.Path + s.secret))
+	token := base64.RawURLEncoding.EncodeToString(tokenBytes[:])
+
+	query := u.Query()
+	query.Set("st", token)
+	query.Set("e", strconv.FormatInt(expires, 10))
+	u.RawQuery = query.Encode()
+
+	return u.String(), nil
 }
 
 // GetJobStatus handles GET /api/player/jobs/{jobID}/status.

@@ -36,8 +36,10 @@ type Config struct {
 	WorkerHealthPort string
 
 	// Media
-	MediaRoot    string
-	MediaBaseURL string
+	MediaRoot       string
+	MediaBaseURL    string
+	MediaSigningKey string
+	MediaSigningTTL time.Duration
 
 	// App
 	Environment string
@@ -59,6 +61,8 @@ func Load() (*Config, error) {
 		WorkerHealthPort: getEnv("WORKER_HEALTH_PORT", "8001"),
 		MediaRoot:        getEnv("MEDIA_ROOT", "/media"),
 		MediaBaseURL:     getEnv("MEDIA_BASE_URL", ""),
+		MediaSigningKey:  getEnv("MEDIA_SIGNING_KEY", ""),
+		MediaSigningTTL:  getEnvDuration("MEDIA_SIGNING_TTL", 2*time.Minute),
 		Environment:      getEnv("APP_ENV", "development"),
 	}
 
@@ -94,4 +98,16 @@ func mustEnv(key string) string {
 		panic(fmt.Sprintf("required environment variable %q is not set", key))
 	}
 	return v
+}
+
+func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultVal
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		panic(fmt.Sprintf("invalid duration for %q: %v", key, err))
+	}
+	return d
 }
