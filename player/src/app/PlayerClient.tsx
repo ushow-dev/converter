@@ -47,22 +47,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const seekWasPlayingRef = useRef(false)
   const streamUrlRef = useRef<string>(movieData.data.playback.hls)
 
-  const withSignedQuery = useCallback((requestUrl: string, originUrl: string): string => {
-    try {
-      const source = new URL(originUrl, typeof window !== 'undefined' ? window.location.origin : undefined)
-      const st = source.searchParams.get('st')
-      const e = source.searchParams.get('e')
-      if (!st || !e) return requestUrl
-
-      const target = new URL(requestUrl, source.toString())
-      if (!target.searchParams.get('st')) target.searchParams.set('st', st)
-      if (!target.searchParams.get('e')) target.searchParams.set('e', e)
-      return target.toString()
-    } catch {
-      return requestUrl
-    }
-  }, [])
-
   const setupHlsJsMode = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (video: HTMLVideoElement, streamUrl: string): Promise<any | null> => {
@@ -75,14 +59,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         return null
       }
       setStreamMode('hlsjs')
-
-      const SignedLoader = class extends Hls.DefaultConfig.loader {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        load(context: any, config: any, callbacks: any) {
-          context.url = withSignedQuery(context.url, streamUrl)
-          super.load(context, config, callbacks)
-        }
-      }
 
       const hls = new Hls({
         startLevel: 0,
@@ -99,7 +75,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         maxBufferSize: 12000000,
         maxBufferHole: 0.5,
         backBufferLength: 20,
-        loader: SignedLoader,
       })
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -155,14 +130,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
     setStreamMode('hlsjs')
 
-    const SignedLoader = class extends Hls.DefaultConfig.loader {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      load(context: any, config: any, callbacks: any) {
-        context.url = withSignedQuery(context.url, streamUrlRef.current)
-        super.load(context, config, callbacks)
-      }
-    }
-
     const hls = new Hls({
       startLevel: 0,
       capLevelToPlayerSize: true,
@@ -178,7 +145,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       maxBufferSize: 12000000,
       maxBufferHole: 0.5,
       backBufferLength: 20,
-      loader: SignedLoader,
     })
 
     hlsRef.current = hls
@@ -205,7 +171,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
       hls.loadSource(streamUrlRef.current)
     })
-  }, [withSignedQuery])
+  }, [])
 
   const mountSettingsInPlayer = useCallback((attempt: number) => {
     const quickbar = quickbarRef.current

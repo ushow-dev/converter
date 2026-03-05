@@ -98,5 +98,7 @@ curl -X GET "http://localhost:8000/api/player/movie?tmdb_id=603" \
 - Если пустая, API возвращает относительные пути `/media/converted/<movie_id>/...`
 - Если задан `MEDIA_SIGNING_KEY`, API добавляет подпись (`st`) и время истечения (`e`) в query string.
 - TTL подписи задается через `MEDIA_SIGNING_TTL` (по умолчанию `2m`).
+- Подпись привязана к каталогу фильма (`/media/converted/<movie_id>/`), а не к одному файлу.
+- В nginx для `.m3u8` должен быть включен `sub_filter`, чтобы во вложенные `index.m3u8`/`.ts` автоматически добавлялись те же `st/e`.
 
 Это позволяет менять домен раздачи media без изменения бизнес-логики endpoint.
