@@ -165,6 +165,8 @@ services:
       JWT_SECRET:        ${JWT_SECRET}
       PLAYER_API_KEY:    ${PLAYER_API_KEY}
       MEDIA_BASE_URL:    ${MEDIA_BASE_URL:-}
+      MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-}
+      MEDIA_SIGNING_TTL: ${MEDIA_SIGNING_TTL:-2m}
       ADMIN_EMAIL:       ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD:    ${ADMIN_PASSWORD}
       MEDIA_ROOT:        /media
