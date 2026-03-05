@@ -27,6 +27,8 @@ declare global {
 export default function PlayerClient({ initialData }: { initialData: MovieResponse }) {
   const movieData = initialData
   const [fluidReady, setFluidReady] = useState(false)
+  const [streamMode, setStreamMode] = useState<'pending' | 'hlsjs' | 'native'>('pending')
+  const [isMobileRuntime, setIsMobileRuntime] = useState(false)
   const [qualities, setQualities] = useState<QualityLevel[]>([])
   const [selectedQuality, setSelectedQuality] = useState<string>('auto')
   const [showQualityMenu, setShowQualityMenu] = useState(false)
@@ -35,16 +37,15 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const quickbarRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hlsRef = useRef<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fluidInstanceRef = useRef<any>(null)
   const qualityModeRef = useRef<string>('auto')
   const adActiveRef = useRef(false)
   const hlsRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const seekIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const seekLoadStoppedRef = useRef(false)
+  const seekWasPlayingRef = useRef(false)
   const streamUrlRef = useRef<string>(movieData.data.playback.hls)
-
-  const isAppleMobile = useCallback(() => {
-    if (typeof navigator === 'undefined') return false
-    const ua = navigator.userAgent || ''
-    return /iP(hone|od|ad)/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1)
-  }, [])
 
   const setupHlsJsMode = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,8 +55,10 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
 
       if (!Hls.isSupported()) {
         video.src = streamUrl
+        setStreamMode('native')
         return null
       }
+      setStreamMode('hlsjs')
 
       const hls = new Hls({
         startLevel: 0,
@@ -103,7 +106,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   )
 
   const reattachHlsAfterAd = useCallback(async () => {
-    if (isAppleMobile()) return
     const video = videoRef.current
     if (!video) return
 
@@ -117,22 +119,16 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       hlsRef.current = null
     }
 
-    // import('hls.js') resolves from the webpack module cache as a microtask.
-    // Microtasks run AFTER FluidPlayer's synchronous cleanup (which restores
-    // video.currentTime) but BEFORE FluidPlayer's setTimeout macrotask that
-    // calls play(). This ensures hls.attachMedia() sets video.src = blob:
-    // before FP tries to play, preventing "NotSupportedError: no supported
-    // sources" on Android Chrome (which cannot play .m3u8 natively).
     const { default: Hls } = await import('hls.js')
-
-    // By this point FP's sync cleanup has already restored video.currentTime.
     const resumeTime = video.currentTime || 0
     const shouldResume = !video.paused
 
     if (!Hls.isSupported()) {
       video.src = streamUrlRef.current
+      setStreamMode('native')
       return
     }
+    setStreamMode('hlsjs')
 
     const hls = new Hls({
       startLevel: 0,
@@ -171,14 +167,11 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       }
     })
 
-    // attachMedia() synchronously sets video.src = blob:mediaSource.
-    // When FP's setTimeout fires play(), the video already has a valid
-    // MediaSource instead of the raw .m3u8 URL.
     hls.attachMedia(video)
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
       hls.loadSource(streamUrlRef.current)
     })
-  }, [isAppleMobile])
+  }, [])
 
   const mountSettingsInPlayer = useCallback((attempt: number) => {
     const quickbar = quickbarRef.current
@@ -200,15 +193,38 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    const pointerQuery = window.matchMedia('(any-pointer: coarse)')
+    const widthQuery = window.matchMedia('(max-width: 900px)')
+    const apply = () => {
+      const coarse = pointerQuery.matches
+      const smallViewport = widthQuery.matches
+      const touchPoints = typeof navigator !== 'undefined' ? navigator.maxTouchPoints > 0 : false
+      setIsMobileRuntime(smallViewport || coarse || touchPoints)
+    }
+    apply()
+    if (typeof pointerQuery.addEventListener === 'function') {
+      pointerQuery.addEventListener('change', apply)
+      widthQuery.addEventListener('change', apply)
+      return () => {
+        pointerQuery.removeEventListener('change', apply)
+        widthQuery.removeEventListener('change', apply)
+      }
+    }
+    pointerQuery.addListener(apply)
+    widthQuery.addListener(apply)
+    return () => {
+      pointerQuery.removeListener(apply)
+      widthQuery.removeListener(apply)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!movieData || !videoRef.current) return
     const video = videoRef.current
     const streamUrl = movieData.data.playback.hls
     streamUrlRef.current = streamUrl
-
-    if (isAppleMobile()) {
-      video.src = streamUrl
-      return
-    }
+    setStreamMode('pending')
 
     setupHlsJsMode(video, streamUrl).then((hls) => {
       hlsRef.current = hls
@@ -219,15 +235,74 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         try { hlsRef.current.destroy() } catch { /* ignore */ }
         hlsRef.current = null
       }
+      setStreamMode('pending')
     }
-  }, [movieData, isAppleMobile, setupHlsJsMode])
+  }, [movieData, setupHlsJsMode])
 
   useEffect(() => {
-    if (!fluidReady || !movieData || !videoRef.current) return
+    const video = videoRef.current
+    if (!video) return
+    if (!isMobileRuntime || streamMode !== 'hlsjs') return
+
+    const onSeeking = () => {
+      if (!hlsRef.current) return
+      if (!seekLoadStoppedRef.current) {
+        seekLoadStoppedRef.current = true
+        seekWasPlayingRef.current = !video.paused
+        if (seekWasPlayingRef.current) {
+          try { video.pause() } catch { /* ignore */ }
+        }
+        try {
+          hlsRef.current.stopLoad()
+        } catch {
+          // ignore
+        }
+      }
+      if (seekIdleTimerRef.current) {
+        clearTimeout(seekIdleTimerRef.current)
+        seekIdleTimerRef.current = null
+      }
+      seekIdleTimerRef.current = setTimeout(() => {
+        seekIdleTimerRef.current = null
+        if (!hlsRef.current) return
+        const targetTime = Number.isFinite(video.currentTime) ? video.currentTime : 0
+        try {
+          hlsRef.current.startLoad(targetTime)
+        } catch {
+          // ignore
+        }
+        const shouldResume = seekWasPlayingRef.current
+        seekLoadStoppedRef.current = false
+        seekWasPlayingRef.current = false
+        if (shouldResume) {
+          const p = video.play()
+          if (p) p.catch(() => { /* autoplay blocked */ })
+        }
+      }, 220)
+    }
+
+    video.addEventListener('seeking', onSeeking)
+    return () => {
+      video.removeEventListener('seeking', onSeeking)
+      if (seekIdleTimerRef.current) {
+        clearTimeout(seekIdleTimerRef.current)
+        seekIdleTimerRef.current = null
+      }
+      seekLoadStoppedRef.current = false
+      seekWasPlayingRef.current = false
+    }
+  }, [isMobileRuntime, streamMode])
+
+  useEffect(() => {
+    if (!fluidReady || !movieData || !videoRef.current || streamMode === 'pending') return
     if (typeof window.fluidPlayer !== 'function') return
-    // Keep a non-empty base source so FluidPlayer does not probe /null
-    // while restoring content after ad playback.
-    videoRef.current.src = movieData.data.playback.hls
+    if (fluidInstanceRef.current && typeof fluidInstanceRef.current.destroy === 'function') {
+      try { fluidInstanceRef.current.destroy() } catch { /* ignore */ }
+      fluidInstanceRef.current = null
+    }
+    if (streamMode === 'native') {
+      videoRef.current.src = movieData.data.playback.hls
+    }
 
     const vastTag = process.env.NEXT_PUBLIC_VAST_TAG || ''
 
@@ -268,6 +343,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
 
     const fp = window.fluidPlayer(videoRef.current, fpConfig)
+    fluidInstanceRef.current = fp
 
     if (fp && typeof fp.on === 'function') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -289,7 +365,14 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
 
     mountSettingsInPlayer(0)
-  }, [fluidReady, movieData, reattachHlsAfterAd, mountSettingsInPlayer])
+
+    return () => {
+      if (fluidInstanceRef.current && typeof fluidInstanceRef.current.destroy === 'function') {
+        try { fluidInstanceRef.current.destroy() } catch { /* ignore */ }
+        fluidInstanceRef.current = null
+      }
+    }
+  }, [fluidReady, movieData, reattachHlsAfterAd, mountSettingsInPlayer, streamMode])
 
   const applyQuality = useCallback(
     (value: string) => {
@@ -338,9 +421,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
             playsInline
             crossOrigin="anonymous"
             preload="metadata"
-          >
-            <source src={movieData.data.playback.hls} type="application/vnd.apple.mpegurl" />
-          </video>
+          />
         </div>
 
         <div className="quality-quickbar" ref={quickbarRef}>

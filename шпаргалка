@@ -189,3 +189,31 @@ https://player.ptrack.ink
 https://player.ptrack.ink/api/movie?imdb_id=333
 Если вернулся JSON с data.playback.hls и data.assets.poster, значит все связалось корректно.
 Если хотите, могу дать вам сразу готовый полный ptrack.ink.conf с учетом admin/api/media/player в одном файле, чтобы просто вставить и перезагрузить nginx.
+
+
+Запуск
+Старт плеера 
+
+cd /opt/converter/player
+docker compose up -d --build
+
+Обновление после изменений:
+docker compose down && docker compose up -d --build
+
+Остановка:
+docker compose down
+
+
+плеер доступен по адресу:
+http://127.0.0.1:3100/?imdb_id=333
+
+API плеера доступен по адресу:
+http://localhost:3000/api/player/movie?imdb_id=333
+
+запрос:
+curl --location 'http://localhost:3000/api/player/movie?imdb_id=333' \
+--header 'X-Player-Key: 4VfFKjtqqkLN'
+
+БД
+посмотреть содержимое БД:
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT * FROM movies ORDER BY id;"
