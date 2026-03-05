@@ -102,48 +102,83 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     [],
   )
 
-  const reattachHlsAfterAd = useCallback(() => {
+  const reattachHlsAfterAd = useCallback(async () => {
     if (isAppleMobile()) return
     const video = videoRef.current
     if (!video) return
 
-    if (hlsRestoreTimerRef.current) clearTimeout(hlsRestoreTimerRef.current)
+    if (hlsRestoreTimerRef.current) {
+      clearTimeout(hlsRestoreTimerRef.current)
+      hlsRestoreTimerRef.current = null
+    }
 
-    hlsRestoreTimerRef.current = setTimeout(async () => {
-      const resumeTime = video.currentTime || 0
-      const shouldResume = !video.paused
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy() } catch { /* ignore */ }
+      hlsRef.current = null
+    }
 
-      if (hlsRef.current) {
-        try { hlsRef.current.destroy() } catch { /* ignore */ }
-        hlsRef.current = null
+    // import('hls.js') resolves from the webpack module cache as a microtask.
+    // Microtasks run AFTER FluidPlayer's synchronous cleanup (which restores
+    // video.currentTime) but BEFORE FluidPlayer's setTimeout macrotask that
+    // calls play(). This ensures hls.attachMedia() sets video.src = blob:
+    // before FP tries to play, preventing "NotSupportedError: no supported
+    // sources" on Android Chrome (which cannot play .m3u8 natively).
+    const { default: Hls } = await import('hls.js')
+
+    // By this point FP's sync cleanup has already restored video.currentTime.
+    const resumeTime = video.currentTime || 0
+    const shouldResume = !video.paused
+
+    if (!Hls.isSupported()) {
+      video.src = streamUrlRef.current
+      return
+    }
+
+    const hls = new Hls({
+      startLevel: 0,
+      capLevelToPlayerSize: true,
+      testBandwidth: true,
+      lowLatencyMode: false,
+      abrEwmaDefaultEstimate: 300000,
+      abrBandWidthFactor: 0.8,
+      abrBandWidthUpFactor: 0.6,
+      abrEwmaFastVoD: 3.0,
+      abrEwmaSlowVoD: 9.0,
+      maxBufferLength: 6,
+      maxMaxBufferLength: 10,
+      maxBufferSize: 12000000,
+      maxBufferHole: 0.5,
+      backBufferLength: 20,
+    })
+
+    hlsRef.current = hls
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (resumeTime > 0) {
+        try { video.currentTime = resumeTime } catch { /* ignore */ }
       }
+      const q = qualityModeRef.current
+      if (q === 'auto') hls.currentLevel = -1
+      else {
+        const idx = parseInt(q, 10)
+        if (!isNaN(idx)) hls.currentLevel = idx
+      }
+      if (shouldResume) {
+        setTimeout(() => {
+          const p = video.play()
+          if (p) p.catch(() => { /* autoplay blocked */ })
+        }, 180)
+      }
+    })
 
-      const hls = await setupHlsJsMode(video, streamUrlRef.current)
-      if (!hls) return
-      hlsRef.current = hls
-
-      const HlsMod = await import('hls.js')
-      const Hls = HlsMod.default
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (resumeTime > 0) {
-          try { video.currentTime = resumeTime } catch { /* ignore */ }
-        }
-        const q = qualityModeRef.current
-        if (q === 'auto') hls.currentLevel = -1
-        else {
-          const idx = parseInt(q, 10)
-          if (!isNaN(idx)) hls.currentLevel = idx
-        }
-        if (shouldResume) {
-          setTimeout(() => {
-            const p = video.play()
-            if (p) p.catch(() => { /* autoplay blocked */ })
-          }, 180)
-        }
-      })
-    }, 120)
-  }, [isAppleMobile, setupHlsJsMode])
+    // attachMedia() synchronously sets video.src = blob:mediaSource.
+    // When FP's setTimeout fires play(), the video already has a valid
+    // MediaSource instead of the raw .m3u8 URL.
+    hls.attachMedia(video)
+    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+      hls.loadSource(streamUrlRef.current)
+    })
+  }, [isAppleMobile])
 
   const mountSettingsInPlayer = useCallback((attempt: number) => {
     const quickbar = quickbarRef.current
@@ -190,6 +225,9 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   useEffect(() => {
     if (!fluidReady || !movieData || !videoRef.current) return
     if (typeof window.fluidPlayer !== 'function') return
+    // Keep a non-empty base source so FluidPlayer does not probe /null
+    // while restoring content after ad playback.
+    videoRef.current.src = movieData.data.playback.hls
 
     const vastTag = process.env.NEXT_PUBLIC_VAST_TAG || ''
 
@@ -301,7 +339,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
             crossOrigin="anonymous"
             preload="metadata"
           >
-            <source type="application/vnd.apple.mpegurl" />
+            <source src={movieData.data.playback.hls} type="application/vnd.apple.mpegurl" />
           </video>
         </div>
 

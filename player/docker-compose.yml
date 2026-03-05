@@ -1,0 +1,12 @@
+services:
+  player:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ptrack-player:latest
+    container_name: ptrack-player
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3100:3000"
