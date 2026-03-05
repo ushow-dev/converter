@@ -217,7 +217,8 @@ func (s *mediaURLSigner) Sign(rawURL string, now time.Time) (string, error) {
 	}
 
 	expires := now.Add(s.ttl).Unix()
-	tokenBytes := md5.Sum([]byte(strconv.FormatInt(expires, 10) + u.Path + s.secret))
+	tokenPath := mediaSigningPath(u.Path)
+	tokenBytes := md5.Sum([]byte(strconv.FormatInt(expires, 10) + tokenPath + s.secret))
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes[:])
 
 	query := u.Query()
@@ -226,6 +227,28 @@ func (s *mediaURLSigner) Sign(rawURL string, now time.Time) (string, error) {
 	u.RawQuery = query.Encode()
 
 	return u.String(), nil
+}
+
+func mediaSigningPath(path string) string {
+	normalized := filepath.ToSlash(filepath.Clean(path))
+	if !strings.HasPrefix(normalized, "/") {
+		normalized = "/" + normalized
+	}
+
+	parts := strings.Split(strings.TrimPrefix(normalized, "/"), "/")
+	// For HLS requests under /media/converted/<movie_id>/..., bind token to
+	// the movie directory so nested playlists/segments share one signature.
+	if len(parts) >= 3 &&
+		parts[0] == "media" &&
+		parts[1] == "converted" &&
+		parts[2] != "" &&
+		(parts[len(parts)-1] == "master.m3u8" ||
+			strings.HasSuffix(parts[len(parts)-1], ".m3u8") ||
+			strings.HasSuffix(parts[len(parts)-1], ".ts")) {
+		return "/media/converted/" + parts[2] + "/"
+	}
+
+	return normalized
 }
 
 // GetJobStatus handles GET /api/player/jobs/{jobID}/status.
