@@ -314,6 +314,10 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         autoPlay: false,
         playbackRateControl: false,
         qualityControl: false,
+        contextMenu: {
+          controls: true,
+          links: [],
+        },
       },
     }
 
