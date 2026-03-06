@@ -50,10 +50,10 @@ curl -X GET "http://localhost:8000/api/player/movie?tmdb_id=603" \
       "tmdb_id": "603"
     },
     "playback": {
-      "hls": "https://media.example.com/media/converted/1/master.m3u8?e=1739200000&st=..."
+      "hls": "https://media.example.com/media/converted/mov_a1b2c3d4e5f6/master.m3u8?e=1739200000&st=..."
     },
     "assets": {
-      "poster": "https://media.example.com/media/converted/1/thumbnail.jpg?e=1739200000&st=..."
+      "poster": "https://media.example.com/media/converted/mov_a1b2c3d4e5f6/thumbnail.jpg?e=1739200000&st=..."
     }
   },
   "meta": {
@@ -61,6 +61,8 @@ curl -X GET "http://localhost:8000/api/player/movie?tmdb_id=603" \
   }
 }
 ```
+
+Примечание: поля `movie.imdb_id` и `movie.tmdb_id` могут быть `null`, если фильм сохранен без соответствующих внешних идентификаторов.
 
 ## Ошибки
 
@@ -94,11 +96,11 @@ curl -X GET "http://localhost:8000/api/player/movie?tmdb_id=603" \
 ## Конфигурация ссылок
 
 - Переменная окружения API: `MEDIA_BASE_URL`
-- Если задана, ссылки в ответе формируются как `<MEDIA_BASE_URL>/media/converted/<movie_id>/...`
-- Если пустая, API возвращает относительные пути `/media/converted/<movie_id>/...`
+- Если задана, ссылки в ответе формируются как `<MEDIA_BASE_URL>/media/converted/<storage_key>/...`
+- Если пустая, API возвращает относительные пути `/media/converted/<storage_key>/...`
 - Если задан `MEDIA_SIGNING_KEY`, API добавляет подпись (`st`) и время истечения (`e`) в query string.
 - TTL подписи задается через `MEDIA_SIGNING_TTL` (по умолчанию `2m`).
-- Подпись привязана к каталогу фильма (`/media/converted/<movie_id>/`), а не к одному файлу.
+- Подпись привязана к каталогу фильма (`/media/converted/<storage_key>/`), а не к одному файлу.
 - В nginx для `.m3u8` должен быть включен `sub_filter`, чтобы во вложенные `index.m3u8`/`.ts` автоматически добавлялись те же `st/e`.
 
 Это позволяет менять домен раздачи media без изменения бизнес-логики endpoint.

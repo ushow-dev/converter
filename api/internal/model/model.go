@@ -40,7 +40,7 @@ type Job struct {
 	SourceRef       string      `json:"source_ref"`
 	Title           *string     `json:"title,omitempty"`          // from search_results JOIN
 	ThumbnailPath   *string     `json:"thumbnail_path,omitempty"` // from media_assets JOIN
-	MovieID         *int64      `json:"movie_id,omitempty"`       // resolved via media_assets/storage_path -> movies
+	MovieID         *int64      `json:"movie_id,omitempty"`       // resolved via media_assets.movie_id -> movies
 	IMDbID          *string     `json:"imdb_id,omitempty"`
 	TMDBID          *string     `json:"tmdb_id,omitempty"`
 	Priority        JobPriority `json:"priority"`
@@ -77,8 +77,9 @@ type Asset struct {
 // Movie represents catalog metadata used to resolve player links.
 type Movie struct {
 	ID        int64      `json:"id"`
-	IMDbID    string     `json:"imdb_id"`
-	TMDBID    string     `json:"tmdb_id"`
+	StorageKey string    `json:"storage_key"`
+	IMDbID    *string    `json:"imdb_id,omitempty"`
+	TMDBID    *string    `json:"tmdb_id,omitempty"`
 	PosterURL *string    `json:"poster_url,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`

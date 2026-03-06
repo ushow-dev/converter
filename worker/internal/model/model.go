@@ -72,6 +72,7 @@ type ConvertJob struct {
 type Asset struct {
 	AssetID       string
 	JobID         string
+	MovieID       *int64
 	StoragePath   string  // path to master.m3u8
 	ThumbnailPath *string // path to thumbnail.jpg, nil if unavailable
 	DurationSec   *int
@@ -84,9 +85,10 @@ type Asset struct {
 
 // Movie is the catalog record created after successful conversion.
 type Movie struct {
-	ID        int64
-	IMDbID    string
-	TMDBID    string
+	ID         int64
+	StorageKey string
+	IMDbID     *string
+	TMDBID     *string
 	PosterURL *string
 	CreatedAt time.Time
 	UpdatedAt time.Time

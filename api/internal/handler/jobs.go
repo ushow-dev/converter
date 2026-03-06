@@ -46,10 +46,9 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ContentType == "" || req.SourceType == "" || req.SourceRef == "" ||
-		req.IMDbID == "" || req.TMDBID == "" {
+	if req.ContentType == "" || req.SourceType == "" || req.SourceRef == "" {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
-			"content_type, source_type, source_ref, imdb_id, tmdb_id are required", false, cid)
+			"content_type, source_type, source_ref are required", false, cid)
 		return
 	}
 	if req.ContentType != "movie" {
@@ -130,6 +129,9 @@ func (h *JobsHandler) List(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
 			"failed to list jobs", false, cid)
 		return
+	}
+	if jobs == nil {
+		jobs = []*model.Job{}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

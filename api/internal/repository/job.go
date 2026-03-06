@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
-	"strconv"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"app/api/internal/model"
@@ -32,12 +30,7 @@ const jobBaseSelect = `
 	FROM media_jobs j
 	LEFT JOIN search_results sr ON sr.source_ref = j.source_ref
 	LEFT JOIN media_assets a ON a.job_id = j.job_id
-	LEFT JOIN movies m ON m.id = (
-		CASE
-			WHEN a.storage_path ~ '/converted/[0-9]+/' THEN substring(a.storage_path FROM '/converted/([0-9]+)/')::bigint
-			ELSE NULL
-		END
-	)`
+	LEFT JOIN movies m ON m.id = a.movie_id`
 
 // JobRepository handles persistence of media_jobs.
 type JobRepository struct {
@@ -175,13 +168,17 @@ func (r *JobRepository) Delete(ctx context.Context, jobID string) (*DeleteMeta, 
 
 	meta := &DeleteMeta{}
 	var storagePath string
+	var movieID pgtype.Int8
 	if err = tx.QueryRow(ctx,
-		`SELECT storage_path FROM media_assets WHERE job_id = $1 LIMIT 1`,
+		`SELECT storage_path, movie_id FROM media_assets WHERE job_id = $1 LIMIT 1`,
 		jobID,
-	).Scan(&storagePath); err == nil && storagePath != "" {
-		meta.StoragePath = &storagePath
-		if movieID, ok := movieIDFromStoragePath(storagePath); ok {
-			meta.MovieID = &movieID
+	).Scan(&storagePath, &movieID); err == nil {
+		if storagePath != "" {
+			meta.StoragePath = &storagePath
+		}
+		if movieID.Valid {
+			mid := movieID.Int64
+			meta.MovieID = &mid
 		}
 	}
 
@@ -202,11 +199,10 @@ func (r *JobRepository) Delete(ctx context.Context, jobID string) (*DeleteMeta, 
 	// If this job produced a movie folder and no other assets point to it,
 	// remove the movie row to avoid stale catalog entries.
 	if meta.MovieID != nil {
-		prefix := fmt.Sprintf("/media/converted/%d/", *meta.MovieID)
 		var refs int
 		if err := tx.QueryRow(ctx,
-			`SELECT COUNT(*) FROM media_assets WHERE storage_path LIKE $1`,
-			prefix+"%",
+			`SELECT COUNT(*) FROM media_assets WHERE movie_id = $1`,
+			*meta.MovieID,
 		).Scan(&refs); err == nil && refs == 0 {
 			_, _ = tx.Exec(ctx, `DELETE FROM movies WHERE id = $1`, *meta.MovieID)
 		}
@@ -278,18 +274,3 @@ func scanRows(rows pgx.Rows) ([]*model.Job, error) {
 	return jobs, rows.Err()
 }
 
-func movieIDFromStoragePath(storagePath string) (int64, bool) {
-	p := filepath.ToSlash(filepath.Clean(storagePath))
-	parts := strings.Split(strings.Trim(p, "/"), "/")
-	for i := 0; i+1 < len(parts); i++ {
-		if parts[i] != "converted" {
-			continue
-		}
-		id, err := strconv.ParseInt(parts[i+1], 10, 64)
-		if err == nil {
-			return id, true
-		}
-		return 0, false
-	}
-	return 0, false
-}

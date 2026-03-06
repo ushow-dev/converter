@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"app/worker/internal/ffmpeg"
@@ -107,10 +106,6 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	inputPath := msg.Payload.InputPath
 	outputDir := msg.Payload.OutputPath // temp HLS working directory
-	if msg.Payload.IMDbID == "" || msg.Payload.TMDBID == "" {
-		w.failJob(ctx, msg, "VALIDATION_ERROR", "imdb_id and tmdb_id are required", false)
-		return
-	}
 
 	log.Info("starting HLS convert", "input", inputPath, "output_dir", outputDir)
 
@@ -145,12 +140,12 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 
 	// ── Create movie row and derive final directory ───────────────────────────
-	movieID, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, nil)
+	movie, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, nil)
 	if err != nil {
 		w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
 		return
 	}
-	finalDir := filepath.Join(w.mediaRoot, "converted", strconv.FormatInt(movieID, 10))
+	finalDir := filepath.Join(w.mediaRoot, "converted", movie.StorageKey)
 
 	// ── Move temp → final ─────────────────────────────────────────────────────
 	// Remove stale final dir from a previous attempt if present.
@@ -188,6 +183,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	asset := &model.Asset{
 		AssetID:       assetID,
 		JobID:         msg.JobID,
+		MovieID:       &movie.ID,
 		StoragePath:   masterPath,
 		ThumbnailPath: thumbFinalPath,
 		DurationSec:   &durationSec,

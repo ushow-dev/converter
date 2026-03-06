@@ -7,7 +7,7 @@ import useSWR from 'swr'
 import { getToken, fetcher, jobsUrl, formatDate, deleteJob } from '@/lib/api'
 import { Nav } from '@/components/Nav'
 import { useSWRConfig } from 'swr'
-import type { Job, JobsResponse, JobStatus } from '@/types'
+import type { Job, JobsResponse } from '@/types'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,24 +25,6 @@ function parseTitle(job: Job): string {
 function thumbnailSrc(jobId: string): string {
   const token = getToken()
   return `/api/admin/jobs/${jobId}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`
-}
-
-// ── Status badge ──────────────────────────────────────────────────────────────
-
-const STATUS_CFG: Record<JobStatus, { label: string; cls: string }> = {
-  queued:      { label: 'В очереди', cls: 'border-yellow-500/40 bg-yellow-500/15 text-yellow-300' },
-  in_progress: { label: 'Обработка', cls: 'border-blue-500/40 bg-blue-500/15 text-blue-300'   },
-  completed:   { label: 'Готово',    cls: 'border-green-500/40 bg-green-500/15 text-green-300' },
-  failed:      { label: 'Ошибка',    cls: 'border-red-500/40  bg-red-500/15  text-red-400'    },
-}
-
-function StatusBadge({ status }: { status: JobStatus }) {
-  const cfg = STATUS_CFG[status] ?? { label: status, cls: 'border-gray-600 bg-gray-800 text-gray-300' }
-  return (
-    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cfg.cls}`}>
-      {cfg.label}
-    </span>
-  )
 }
 
 // ── Thumbnail cell ────────────────────────────────────────────────────────────
@@ -91,7 +73,6 @@ function FilmIcon() {
 
 function MovieRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void }) {
   const title = parseTitle(job)
-  const stageName = job.stage === 'download' ? 'Скачивание' : job.stage === 'convert' ? 'Конвертация' : null
 
   return (
     <tr className="group border-b border-gray-800 hover:bg-gray-900/60">
@@ -128,29 +109,6 @@ function MovieRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void 
         </Link>
       </td>
 
-      {/* Status */}
-      <td className="whitespace-nowrap px-3 py-2">
-        <StatusBadge status={job.status} />
-      </td>
-
-      {/* Stage / progress */}
-      <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">
-        {job.status === 'in_progress' ? (
-          <div className="flex items-center gap-2">
-            <span className="text-gray-400">{stageName ?? '—'}</span>
-            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-gray-800">
-              <div
-                className="h-full rounded-full bg-indigo-500 transition-all duration-500"
-                style={{ width: `${job.progress_percent}%` }}
-              />
-            </div>
-            <span className="tabular-nums text-gray-500">{job.progress_percent}%</span>
-          </div>
-        ) : (
-          <span>—</span>
-        )}
-      </td>
-
       {/* Date */}
       <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">
         {formatDate(job.created_at)}
@@ -178,7 +136,7 @@ function MovieRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void 
 export default function MoviesPage() {
   const router = useRouter()
   const { mutate } = useSWRConfig()
-  const swrKey = jobsUrl(undefined, 100)
+  const swrKey = jobsUrl('completed', 100)
 
   useEffect(() => {
     if (!getToken()) router.replace('/login')
@@ -254,8 +212,6 @@ export default function MoviesPage() {
                   <th className="px-3 py-2">IMDb</th>
                   <th className="px-3 py-2">TMDB</th>
                   <th className="px-3 py-2">Название</th>
-                  <th className="px-3 py-2">Статус</th>
-                  <th className="px-3 py-2">Прогресс</th>
                   <th className="px-3 py-2">Добавлен</th>
                   <th className="px-3 py-2 w-10" />
                 </tr>

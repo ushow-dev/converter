@@ -5,8 +5,9 @@ import { usePathname, useRouter } from 'next/navigation'
 import { clearToken } from '@/lib/api'
 
 const links = [
-  { href: '/',       label: 'Фильмы' },
-  { href: '/search', label: 'Поиск'  },
+  { href: '/',       label: 'Фильмы'   },
+  { href: '/queue',  label: 'В работе' },
+  { href: '/search', label: 'Поиск'   },
 ]
 
 export function Nav() {

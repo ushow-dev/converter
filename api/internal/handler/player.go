@@ -97,8 +97,6 @@ func storagePathToPlaybackURL(storagePath string) string {
 	return "/" + p
 }
 
-const mediaPathTemplate = "/media/converted/%d/%s"
-
 // GetMovie handles GET /api/player/movie?imdb_id=...|tmdb_id=...
 func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 	cid := auth.GetCorrelationID(r.Context())
@@ -138,10 +136,10 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 				"tmdb_id": movie.tmdbID,
 			},
 			"playback": map[string]any{
-				"hls": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.id, "master.m3u8")),
+				"hls": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.storageKey, "master.m3u8")),
 			},
 			"assets": map[string]any{
-				"poster": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.id, "thumbnail.jpg")),
+				"poster": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.storageKey, "thumbnail.jpg")),
 			},
 		},
 		"meta": map[string]any{
@@ -151,9 +149,10 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 }
 
 type repositoryMovieView struct {
-	id     int64
-	imdbID string
-	tmdbID string
+	id         int64
+	storageKey string
+	imdbID     *string
+	tmdbID     *string
 }
 
 func (h *PlayerHandler) getMovieByIMDbID(r *http.Request, imdbID string) (*repositoryMovieView, error) {
@@ -161,7 +160,7 @@ func (h *PlayerHandler) getMovieByIMDbID(r *http.Request, imdbID string) (*repos
 	if err != nil {
 		return nil, err
 	}
-	return &repositoryMovieView{id: m.ID, imdbID: m.IMDbID, tmdbID: m.TMDBID}, nil
+	return &repositoryMovieView{id: m.ID, storageKey: m.StorageKey, imdbID: m.IMDbID, tmdbID: m.TMDBID}, nil
 }
 
 func (h *PlayerHandler) getMovieByTMDBID(r *http.Request, tmdbID string) (*repositoryMovieView, error) {
@@ -169,11 +168,11 @@ func (h *PlayerHandler) getMovieByTMDBID(r *http.Request, tmdbID string) (*repos
 	if err != nil {
 		return nil, err
 	}
-	return &repositoryMovieView{id: m.ID, imdbID: m.IMDbID, tmdbID: m.TMDBID}, nil
+	return &repositoryMovieView{id: m.ID, storageKey: m.StorageKey, imdbID: m.IMDbID, tmdbID: m.TMDBID}, nil
 }
 
-func buildMovieMediaURL(baseURL string, movieID int64, fileName string) string {
-	relative := fmt.Sprintf(mediaPathTemplate, movieID, fileName)
+func buildMovieMediaURL(baseURL, storageKey, fileName string) string {
+	relative := fmt.Sprintf("/media/converted/%s/%s", storageKey, fileName)
 	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if trimmed == "" {
 		return relative

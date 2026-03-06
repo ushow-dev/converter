@@ -124,9 +124,6 @@ func (s *JobService) DeleteJob(ctx context.Context, jobID string) error {
 	if meta != nil && meta.StoragePath != nil {
 		_ = os.RemoveAll(filepath.Dir(*meta.StoragePath))
 	}
-	if meta != nil && meta.MovieID != nil {
-		_ = os.RemoveAll(filepath.Join(s.mediaRoot, "converted", fmt.Sprintf("%d", *meta.MovieID)))
-	}
 	return nil
 }
 
