@@ -170,6 +170,7 @@ services:
       ADMIN_EMAIL:       ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD:    ${ADMIN_PASSWORD}
       MEDIA_ROOT:        /media
+      TMDB_API_KEY:      ${TMDB_API_KEY:-}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
     networks:
@@ -205,8 +206,11 @@ services:
       QBITTORRENT_BASE_URL:   "http://qbittorrent:${QBITTORRENT_WEBUI_PORT:-8080}"
       QBITTORRENT_USER:       ${QBITTORRENT_USER}
       QBITTORRENT_PASSWORD:   ${QBITTORRENT_PASSWORD}
-      WORKER_HEALTH_PORT:     ${WORKER_HEALTH_PORT:-8001}
-      MEDIA_ROOT:             /media
+      WORKER_HEALTH_PORT:       ${WORKER_HEALTH_PORT:-8001}
+      MEDIA_ROOT:               /media
+      TMDB_API_KEY:             ${TMDB_API_KEY:-}
+      DOWNLOAD_CONCURRENCY:     ${DOWNLOAD_CONCURRENCY:-2}
+      CONVERT_CONCURRENCY:      ${CONVERT_CONCURRENCY:-1}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
     networks:

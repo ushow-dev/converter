@@ -46,7 +46,7 @@ export default function JobDetailPage({ params }: { params: { jobId: string } })
       <Nav />
       <main className="mx-auto max-w-4xl px-6 py-8">
         <div className="mb-6">
-          <Link href="/jobs" className="text-sm text-indigo-400 hover:text-indigo-300">
+          <Link href="/queue" className="text-sm text-indigo-400 hover:text-indigo-300">
             ← Back to Jobs
           </Link>
         </div>

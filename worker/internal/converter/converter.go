@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -19,11 +21,12 @@ import (
 
 // Worker consumes convert_queue and orchestrates HLS conversions.
 type Worker struct {
-	q         *queue.Client
-	jobRepo   *repository.JobRepository
-	assetRepo *repository.AssetRepository
-	movieRepo *repository.MovieRepository
-	mediaRoot string
+	q           *queue.Client
+	jobRepo     *repository.JobRepository
+	assetRepo   *repository.AssetRepository
+	movieRepo   *repository.MovieRepository
+	mediaRoot   string
+	tmdbAPIKey  string
 }
 
 // New creates a convert Worker.
@@ -33,9 +36,11 @@ func New(
 	assetRepo *repository.AssetRepository,
 	movieRepo *repository.MovieRepository,
 	mediaRoot string,
+	tmdbAPIKey string,
 ) *Worker {
 	return &Worker{
-		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo, mediaRoot: mediaRoot,
+		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
+		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey,
 	}
 }
 
@@ -139,8 +144,19 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		thumbSrc = ""
 	}
 
+	// ── TMDB backdrop (preferred over ffmpeg frame) ───────────────────────────
+	if w.tmdbAPIKey != "" && msg.Payload.TMDBID != "" {
+		backdropDest := outputDir + "/thumbnail.jpg"
+		if err := downloadTMDBBackdrop(ctx, w.tmdbAPIKey, msg.Payload.TMDBID, backdropDest); err != nil {
+			log.Warn("TMDB backdrop download failed, keeping ffmpeg thumbnail", "error", err)
+		} else {
+			log.Info("TMDB backdrop saved", "tmdb_id", msg.Payload.TMDBID)
+			thumbSrc = backdropDest
+		}
+	}
+
 	// ── Create movie row and derive final directory ───────────────────────────
-	movie, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, nil)
+	movie, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, nil)
 	if err != nil {
 		w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
 		return
@@ -253,4 +269,60 @@ func generateAssetID() string {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
 	return fmt.Sprintf("asset_%x", b)
+}
+
+// downloadTMDBBackdrop fetches backdrop_path from TMDB and saves it as a JPEG to destPath.
+// Uses w1280 image size. Returns an error if the movie has no backdrop or the download fails.
+func downloadTMDBBackdrop(ctx context.Context, apiKey, tmdbID, destPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	// 1. Fetch movie details to get backdrop_path.
+	detailURL := fmt.Sprintf("https://api.themoviedb.org/3/movie/%s?api_key=%s", tmdbID, apiKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, detailURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("TMDB details returned HTTP %d", resp.StatusCode)
+	}
+
+	var details struct {
+		BackdropPath string `json:"backdrop_path"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
+		return err
+	}
+	if details.BackdropPath == "" {
+		return fmt.Errorf("no backdrop_path for TMDB ID %s", tmdbID)
+	}
+
+	// 2. Download the backdrop image.
+	imgURL := "https://image.tmdb.org/t/p/w1280" + details.BackdropPath
+	imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
+	if err != nil {
+		return err
+	}
+	imgResp, err := http.DefaultClient.Do(imgReq)
+	if err != nil {
+		return err
+	}
+	defer imgResp.Body.Close()
+	if imgResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("TMDB image download returned HTTP %d", imgResp.StatusCode)
+	}
+
+	f, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, imgResp.Body)
+	return err
 }

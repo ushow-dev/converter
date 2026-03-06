@@ -22,6 +22,7 @@ type Dependencies struct {
 	AuthHandler   *handler.AuthHandler
 	SearchHandler *handler.SearchHandler
 	JobsHandler   *handler.JobsHandler
+	MoviesHandler *handler.MoviesHandler
 	PlayerHandler *handler.PlayerHandler
 }
 
@@ -31,7 +32,8 @@ func New(deps Dependencies) http.Handler {
 
 	// ── Global middleware ──────────────────────────────────────────────────────
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.RequestSize(4 * 1024 * 1024)) // 4 MB max body
+	// Note: no global RequestSize limit — the upload handler sets its own via
+	// http.MaxBytesReader; all other handlers are naturally small JSON payloads.
 	r.Use(auth.CorrelationIDMiddleware)
 	r.Use(requestLogger)
 	r.Use(chimiddleware.Recoverer)
@@ -51,15 +53,20 @@ func New(deps Dependencies) http.Handler {
 			r.Use(auth.JWTMiddleware(deps.Cfg.JWTSecret))
 			r.Get("/search", deps.SearchHandler.Search)
 			r.Post("/jobs", deps.JobsHandler.Create)
+			r.Post("/jobs/upload", deps.JobsHandler.Upload)
 			r.Get("/jobs", deps.JobsHandler.List)
 			r.Get("/jobs/{jobID}", deps.JobsHandler.Get)
 			r.Delete("/jobs/{jobID}", deps.JobsHandler.Delete)
+			r.Get("/movies", deps.MoviesHandler.List)
+			r.Patch("/movies/{movieId}", deps.MoviesHandler.UpdateIDs)
+			r.Get("/movies/tmdb/{tmdbId}", deps.MoviesHandler.TMDBLookup)
 		})
 
 		// Thumbnail: JWT via header or ?token= query param (for <img src>)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.JWTQueryOrHeaderMiddleware(deps.Cfg.JWTSecret))
 			r.Get("/jobs/{jobID}/thumbnail", deps.JobsHandler.Thumbnail)
+			r.Get("/movies/{movieId}/thumbnail", deps.MoviesHandler.Thumbnail)
 		})
 	})
 
@@ -77,11 +84,11 @@ func New(deps Dependencies) http.Handler {
 // Start runs the HTTP server and blocks until ctx is cancelled.
 func Start(ctx context.Context, cfg *config.Config, handler http.Handler) error {
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              ":" + cfg.Port,
+		Handler:           handler,
+		ReadHeaderTimeout: 15 * time.Second, // header only; body has no deadline (needed for large uploads)
+		WriteTimeout:      0,                // no write deadline — upload response only sent after full receive
+		IdleTimeout:       60 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
@@ -123,7 +130,7 @@ func requestLogger(next http.Handler) http.Handler {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Correlation-Id, X-Player-Key")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

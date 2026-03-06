@@ -32,6 +32,7 @@ type createJobRequest struct {
 	SourceRef   string `json:"source_ref"`
 	IMDbID      string `json:"imdb_id"`
 	TMDBID      string `json:"tmdb_id"`
+	Title       string `json:"title"`
 	Priority    string `json:"priority"`
 }
 
@@ -74,12 +75,63 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		SourceRef:     req.SourceRef,
 		IMDbID:        req.IMDbID,
 		TMDBID:        req.TMDBID,
+		Title:         req.Title,
 		Priority:      priority,
 		CorrelationID: cid,
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
 			"failed to create job", false, cid)
+		return
+	}
+
+	respondJSON(w, http.StatusAccepted, map[string]any{
+		"job_id":     job.JobID,
+		"status":     string(job.Status),
+		"created_at": job.CreatedAt,
+	})
+}
+
+// Upload handles POST /api/admin/jobs/upload (multipart form).
+// Accepts a video file plus title/imdb_id/tmdb_id fields, saves the file to
+// the downloads directory, and enqueues it directly for conversion.
+func (h *JobsHandler) Upload(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+
+	// Override the global body size limit for file uploads (up to 50 GB).
+	r.Body = http.MaxBytesReader(w, r.Body, 50<<30)
+
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"failed to parse multipart form", false, cid)
+		return
+	}
+
+	title := r.FormValue("title")
+	if title == "" {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"title is required", false, cid)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+			"file is required", false, cid)
+		return
+	}
+	defer file.Close()
+
+	job, err := h.svc.CreateUploadJob(r.Context(), service.CreateUploadJobRequest{
+		RequestID:     r.FormValue("request_id"),
+		Title:         title,
+		IMDbID:        r.FormValue("imdb_id"),
+		TMDBID:        r.FormValue("tmdb_id"),
+		CorrelationID: cid,
+	}, file, header.Filename)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
+			"failed to create upload job", false, cid)
 		return
 	}
 

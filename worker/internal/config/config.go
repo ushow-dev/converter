@@ -28,6 +28,9 @@ type Config struct {
 
 	// Internal health server port
 	HealthPort string
+
+	// TMDB API key for backdrop download (optional)
+	TMDBAPIKey string
 }
 
 // Load reads configuration from environment variables.
@@ -42,6 +45,7 @@ func Load() (*Config, error) {
 		HealthPort:          getEnv("WORKER_HEALTH_PORT", "8001"),
 		DownloadConcurrency: intEnv("DOWNLOAD_CONCURRENCY", 2),
 		ConvertConcurrency:  intEnv("CONVERT_CONCURRENCY", 1),
+		TMDBAPIKey:          getEnv("TMDB_API_KEY", ""),
 	}
 	return cfg, nil
 }

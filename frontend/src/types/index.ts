@@ -1,7 +1,8 @@
 export type JobStatus = 'queued' | 'in_progress' | 'completed' | 'failed'
+export type JobStatusFilter = JobStatus | 'active'
 export type JobStage = 'download' | 'convert'
 export type ContentType = 'movie'
-export type SourceType = 'torrent'
+export type SourceType = 'torrent' | 'upload'
 export type Priority = 'low' | 'normal' | 'high'
 
 export interface SearchResultItem {
@@ -59,4 +60,23 @@ export interface ApiError {
     retryable: boolean
     correlation_id: string
   }
+}
+
+export interface Movie {
+  id: number
+  storage_key: string
+  imdb_id?: string
+  tmdb_id?: string
+  title?: string
+  year?: number
+  poster_url?: string
+  has_thumbnail: boolean
+  job_id?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MoviesResponse {
+  items: Movie[]
+  next_cursor: string | null
 }

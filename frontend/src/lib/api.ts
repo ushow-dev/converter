@@ -4,9 +4,12 @@ import type {
   JobsResponse,
   CreateJobResponse,
   JobStatus,
+  JobStatusFilter,
   ContentType,
   SourceType,
   Priority,
+  Movie,
+  MoviesResponse,
 } from '@/types'
 
 // ── Token storage ────────────────────────────────────────────────────────────
@@ -99,7 +102,7 @@ export async function search(
 
 // ── Jobs ─────────────────────────────────────────────────────────────────────
 
-export function jobsUrl(status?: JobStatus, limit = 50, cursor?: string): string {
+export function jobsUrl(status?: JobStatusFilter, limit = 50, cursor?: string): string {
   const p = new URLSearchParams({ limit: String(limit) })
   if (status) p.set('status', status)
   if (cursor) p.set('cursor', cursor)
@@ -122,6 +125,7 @@ export async function createJob(params: {
   source_ref: string
   imdb_id: string
   tmdb_id: string
+  title?: string
   source_type?: SourceType
   content_type?: ContentType
   priority?: Priority
@@ -135,9 +139,100 @@ export async function createJob(params: {
       source_ref: params.source_ref,
       imdb_id: params.imdb_id,
       tmdb_id: params.tmdb_id,
+      title: params.title ?? '',
       priority: params.priority ?? 'normal',
     }),
   })
+}
+
+// ── Movies ────────────────────────────────────────────────────────────────────
+
+export function moviesUrl(limit = 100, cursor?: string): string {
+  const p = new URLSearchParams({ limit: String(limit) })
+  if (cursor) p.set('cursor', cursor)
+  return `/api/admin/movies?${p}`
+}
+
+export async function getMovies(limit = 100, cursor?: string): Promise<MoviesResponse> {
+  return apiFetch<MoviesResponse>(moviesUrl(limit, cursor))
+}
+
+export function movieThumbnailSrc(movieId: number): string {
+  const token = getToken()
+  return `/api/admin/movies/${movieId}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`
+}
+
+
+export async function tmdbLookup(tmdbId: string): Promise<{
+  title: string
+  imdb_id: string
+  poster_url: string
+  overview: string
+  release_date: string
+}> {
+  return apiFetch(`/api/admin/movies/tmdb/${encodeURIComponent(tmdbId)}`)
+}
+
+export async function uploadMovie(
+  file: File,
+  params: { title: string; imdb_id: string; tmdb_id: string },
+  onProgress?: (percent: number) => void,
+): Promise<CreateJobResponse> {
+  return new Promise((resolve, reject) => {
+    const token = getToken()
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('title', params.title)
+    formData.append('imdb_id', params.imdb_id)
+    formData.append('tmdb_id', params.tmdb_id)
+    formData.append('request_id', crypto.randomUUID())
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/admin/jobs/upload')
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as CreateJobResponse)
+        } catch {
+          reject(new Error('Invalid response from server'))
+        }
+      } else {
+        try {
+          const body = JSON.parse(xhr.responseText)
+          reject(new Error(body?.error?.message ?? `HTTP ${xhr.status}`))
+        } catch {
+          reject(new Error(`HTTP ${xhr.status}`))
+        }
+      }
+    }
+
+    xhr.onerror = () => reject(new Error('Network error during upload'))
+    xhr.send(formData)
+  })
+}
+
+export async function updateMovieIDs(movieId: number, imdbId: string, tmdbId: string, title: string): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`/api/admin/movies/${movieId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ imdb_id: imdbId, tmdb_id: tmdbId, title }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
 }
 
 export async function deleteJob(jobId: string): Promise<void> {

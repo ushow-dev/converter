@@ -172,6 +172,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			FinalDir:      finalDir,
 			IMDbID:        msg.Payload.IMDbID,
 			TMDBID:        msg.Payload.TMDBID,
+			Title:         msg.Payload.Title,
 		},
 	}
 	if err := w.q.Push(ctx, queue.ConvertQueue, convertMsg); err != nil {

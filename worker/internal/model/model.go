@@ -37,6 +37,7 @@ type DownloadJob struct {
 	SourceRef  string `json:"source_ref"`
 	IMDbID     string `json:"imdb_id"`
 	TMDBID     string `json:"tmdb_id"`
+	Title      string `json:"title"`
 	TargetDir  string `json:"target_dir"`
 	Priority   string `json:"priority"`
 	RequestID  string `json:"request_id"`
@@ -64,6 +65,7 @@ type ConvertJob struct {
 	FinalDir      string `json:"final_dir"`
 	IMDbID        string `json:"imdb_id"`
 	TMDBID        string `json:"tmdb_id"`
+	Title         string `json:"title"`
 }
 
 // ─── Asset ───────────────────────────────────────────────────────────────────
@@ -89,7 +91,9 @@ type Movie struct {
 	StorageKey string
 	IMDbID     *string
 	TMDBID     *string
-	PosterURL *string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Title      *string
+	Year       *int
+	PosterURL  *string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }

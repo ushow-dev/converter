@@ -25,10 +25,11 @@ func NewMovieRepository(pool *pgxpool.Pool) *MovieRepository {
 
 // Upsert inserts or updates movie metadata and always returns a stable storage key.
 func (r *MovieRepository) Upsert(
-	ctx context.Context, imdbID, tmdbID string, posterURL *string,
+	ctx context.Context, imdbID, tmdbID, title string, posterURL *string,
 ) (*model.Movie, error) {
 	imdb := nullableText(imdbID)
 	tmdb := nullableText(tmdbID)
+	ttl := nullableText(title)
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -44,12 +45,13 @@ func (r *MovieRepository) Upsert(
 	if existing != nil {
 		if _, err := tx.Exec(ctx, `
 			UPDATE movies
-			SET imdb_id = COALESCE(imdb_id, $2),
-				tmdb_id = COALESCE(tmdb_id, $3),
-				poster_url = COALESCE(poster_url, $4),
-				updated_at = NOW()
+			SET imdb_id    = COALESCE(imdb_id, $2),
+			    tmdb_id    = COALESCE(tmdb_id, $3),
+			    title      = COALESCE(title, $4),
+			    poster_url = COALESCE(poster_url, $5),
+			    updated_at = NOW()
 			WHERE id = $1`,
-			existing.ID, imdb, tmdb, posterURL); err != nil {
+			existing.ID, imdb, tmdb, ttl, posterURL); err != nil {
 			return nil, fmt.Errorf("update movie %d: %w", existing.ID, err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -60,11 +62,11 @@ func (r *MovieRepository) Upsert(
 
 	m := &model.Movie{}
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO movies (storage_key, imdb_id, tmdb_id, poster_url)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, storage_key, imdb_id, tmdb_id, poster_url, created_at, updated_at`,
-		generateStorageKey(), imdb, tmdb, posterURL,
-	).Scan(&m.ID, &m.StorageKey, &m.IMDbID, &m.TMDBID, &m.PosterURL, &m.CreatedAt, &m.UpdatedAt); err != nil {
+		INSERT INTO movies (storage_key, imdb_id, tmdb_id, title, poster_url)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, storage_key, imdb_id, tmdb_id, title, year, poster_url, created_at, updated_at`,
+		generateStorageKey(), imdb, tmdb, ttl, posterURL,
+	).Scan(&m.ID, &m.StorageKey, &m.IMDbID, &m.TMDBID, &m.Title, &m.Year, &m.PosterURL, &m.CreatedAt, &m.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("insert movie: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -102,12 +104,12 @@ func (r *MovieRepository) findByExternalID(
 
 func fetchMovieBy(ctx context.Context, tx pgx.Tx, field, value string) (*model.Movie, error) {
 	query := fmt.Sprintf(`
-		SELECT id, storage_key, imdb_id, tmdb_id, poster_url, created_at, updated_at
+		SELECT id, storage_key, imdb_id, tmdb_id, title, year, poster_url, created_at, updated_at
 		FROM movies WHERE %s = $1 LIMIT 1`, field)
 
 	m := &model.Movie{}
 	err := tx.QueryRow(ctx, query, value).
-		Scan(&m.ID, &m.StorageKey, &m.IMDbID, &m.TMDBID, &m.PosterURL, &m.CreatedAt, &m.UpdatedAt)
+		Scan(&m.ID, &m.StorageKey, &m.IMDbID, &m.TMDBID, &m.Title, &m.Year, &m.PosterURL, &m.CreatedAt, &m.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

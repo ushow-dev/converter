@@ -5,8 +5,11 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"app/api/internal/model"
@@ -14,15 +17,18 @@ import (
 	"app/api/internal/repository"
 )
 
+var unsafeChars = regexp.MustCompile(`[^a-zA-Z0-9._\-]`)
+
 // CreateJobRequest holds input for creating a new media job.
 type CreateJobRequest struct {
-	RequestID   string
-	ContentType string
-	SourceType  string
-	SourceRef   string
-	IMDbID      string
-	TMDBID      string
-	Priority    model.JobPriority
+	RequestID     string
+	ContentType   string
+	SourceType    string
+	SourceRef     string
+	IMDbID        string
+	TMDBID        string
+	Title         string
+	Priority      model.JobPriority
 	CorrelationID string
 }
 
@@ -94,6 +100,7 @@ func (s *JobService) CreateJob(ctx context.Context, req CreateJobRequest) (*mode
 			SourceRef:  created.SourceRef,
 			IMDbID:     req.IMDbID,
 			TMDBID:     req.TMDBID,
+			Title:      req.Title,
 			TargetDir:  fmt.Sprintf("/media/downloads/%s", created.JobID),
 			Priority:   string(created.Priority),
 			RequestID:  reqID,
@@ -105,6 +112,106 @@ func (s *JobService) CreateJob(ctx context.Context, req CreateJobRequest) (*mode
 		// Mark as created (not queued) so the state is accurate.
 		_ = s.jobs.UpdateStatus(ctx, created.JobID, model.JobStatusCreated, nil, 0)
 		return created, fmt.Errorf("enqueue download job: %w", err)
+	}
+
+	return created, nil
+}
+
+// CreateUploadJobRequest holds input for creating a job from a local file upload.
+type CreateUploadJobRequest struct {
+	RequestID     string
+	Title         string
+	IMDbID        string
+	TMDBID        string
+	CorrelationID string
+}
+
+// CreateUploadJob saves the uploaded file to /media/downloads/{jobID}/ and
+// enqueues it directly to convert_queue (skipping the download worker).
+func (s *JobService) CreateUploadJob(
+	ctx context.Context,
+	req CreateUploadJobRequest,
+	file multipart.File,
+	filename string,
+) (*model.Job, error) {
+	jobID := generateJobID()
+	now := time.Now().UTC()
+
+	// Sanitize filename: keep only safe characters.
+	safe := unsafeChars.ReplaceAllString(filepath.Base(filename), "_")
+	if safe == "" {
+		safe = "video.mkv"
+	}
+
+	// Write the uploaded file to /media/downloads/{jobID}/{safe}.
+	destDir := filepath.Join(s.mediaRoot, "downloads", jobID)
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create download dir: %w", err)
+	}
+	destPath := filepath.Join(destDir, safe)
+	dst, err := os.Create(destPath)
+	if err != nil {
+		return nil, fmt.Errorf("create dest file: %w", err)
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, file); err != nil {
+		_ = os.RemoveAll(destDir)
+		return nil, fmt.Errorf("write uploaded file: %w", err)
+	}
+
+	title := req.Title
+	job := &model.Job{
+		JobID:         jobID,
+		ContentType:   "movie",
+		SourceType:    model.SourceTypeUpload,
+		SourceRef:     safe,
+		Title:         &title,
+		Priority:      model.JobPriorityNormal,
+		Status:        model.JobStatusQueued,
+		CorrelationID: &req.CorrelationID,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if req.RequestID != "" {
+		job.RequestID = &req.RequestID
+	}
+
+	created, err := s.jobs.Create(ctx, job)
+	if err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			return created, nil
+		}
+		_ = os.RemoveAll(destDir)
+		return nil, fmt.Errorf("create job: %w", err)
+	}
+
+	// Push directly to convert_queue (no download stage needed).
+	corrID := ""
+	if job.CorrelationID != nil {
+		corrID = *job.CorrelationID
+	}
+	payload := model.ConvertPayload{
+		SchemaVersion: "v1",
+		JobID:         created.JobID,
+		JobType:       "convert",
+		ContentType:   "movie",
+		CorrelationID: corrID,
+		Attempt:       1,
+		MaxAttempts:   5,
+		CreatedAt:     now,
+		Payload: model.ConvertJob{
+			InputPath:     destPath,
+			OutputPath:    fmt.Sprintf("%s/temp/%s", s.mediaRoot, created.JobID),
+			OutputProfile: "mp4_h264_aac_1080p",
+			FinalDir:      fmt.Sprintf("%s/converted", s.mediaRoot),
+			IMDbID:        req.IMDbID,
+			TMDBID:        req.TMDBID,
+			Title:         req.Title,
+		},
+	}
+	if err := s.queue.Enqueue(ctx, queue.ConvertQueue, payload); err != nil {
+		_ = s.jobs.UpdateStatus(ctx, created.JobID, model.JobStatusCreated, nil, 0)
+		return created, fmt.Errorf("enqueue convert job: %w", err)
 	}
 
 	return created, nil

@@ -1,40 +1,30 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { getToken, fetcher, jobsUrl, formatDate, deleteJob } from '@/lib/api'
-import { Nav } from '@/components/Nav'
 import { useSWRConfig } from 'swr'
-import type { Job, JobsResponse } from '@/types'
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-function parseTitle(job: Job): string {
-  if (job.title) return job.title
-  if (job.source_ref?.startsWith('magnet:')) {
-    try {
-      const dn = new URL(job.source_ref).searchParams.get('dn')
-      if (dn) return decodeURIComponent(dn.replace(/\+/g, ' '))
-    } catch { /* ignore */ }
-  }
-  return job.job_id
-}
-
-function thumbnailSrc(jobId: string): string {
-  const token = getToken()
-  return `/api/admin/jobs/${jobId}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`
-}
+import { getToken, fetcher, moviesUrl, movieThumbnailSrc, formatDate, deleteJob, updateMovieIDs } from '@/lib/api'
+import { Nav } from '@/components/Nav'
+import type { Movie, MoviesResponse } from '@/types'
 
 // ── Thumbnail cell ────────────────────────────────────────────────────────────
 
-function Thumbnail({ job }: { job: Job }) {
-  if (job.thumbnail_path) {
+function FilmIcon() {
+  return (
+    <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+    </svg>
+  )
+}
+
+function Thumbnail({ movie }: { movie: Movie }) {
+  if (movie.has_thumbnail) {
     return (
       <div className="relative h-16 w-11 shrink-0 overflow-hidden rounded bg-gray-800">
         <img
-          src={thumbnailSrc(job.job_id)}
+          src={movieThumbnailSrc(movie.id)}
           alt=""
           className="h-full w-full object-cover"
           onError={e => {
@@ -52,80 +42,145 @@ function Thumbnail({ job }: { job: Job }) {
 
   return (
     <div className="flex h-16 w-11 shrink-0 items-center justify-center rounded bg-gray-800/60">
-      {job.status === 'in_progress' ? (
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-400" />
-      ) : (
-        <FilmIcon />
-      )}
+      <FilmIcon />
     </div>
   )
 }
 
-function FilmIcon() {
+// ── Editable ID cell ──────────────────────────────────────────────────────────
+
+function EditableID({
+  value,
+  placeholder,
+  width,
+  onSave,
+}: {
+  value: string | undefined
+  placeholder: string
+  width: string
+  onSave: (v: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  function open() {
+    setDraft(value ?? '')
+    setEditing(true)
+  }
+
+  function commit() {
+    setEditing(false)
+    if (draft !== (value ?? '')) onSave(draft)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') commit()
+    if (e.key === 'Escape') setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        className={`${width} rounded border border-indigo-500 bg-gray-900 px-1.5 py-0.5 font-mono text-xs text-gray-100 outline-none`}
+      />
+    )
+  }
+
   return (
-    <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-    </svg>
+    <button
+      onClick={open}
+      title="Нажмите для редактирования"
+      className="font-mono text-xs text-gray-400 hover:text-indigo-400 transition-colors"
+    >
+      {value ?? <span className="text-gray-700">—</span>}
+    </button>
   )
 }
 
 // ── Table row ─────────────────────────────────────────────────────────────────
 
-function MovieRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void }) {
-  const title = parseTitle(job)
-
+function MovieRow({
+  movie,
+  onDelete,
+  onUpdate,
+}: {
+  movie: Movie
+  onDelete: (jobId: string) => void
+  onUpdate: (movieId: number, imdbId: string, tmdbId: string, title: string) => void
+}) {
   return (
     <tr className="group border-b border-gray-800 hover:bg-gray-900/60">
       {/* Poster */}
       <td className="w-14 px-3 py-2">
-        <Link href={`/jobs/${job.job_id}`}>
-          <Thumbnail job={job} />
-        </Link>
+        <Thumbnail movie={movie} />
       </td>
 
       {/* Movie ID */}
       <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-400">
-        {job.movie_id ?? '—'}
+        {movie.id}
       </td>
 
       {/* IMDb */}
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-gray-400">
-        {job.imdb_id ?? '—'}
+      <td className="whitespace-nowrap px-3 py-2">
+        <EditableID
+          value={movie.imdb_id}
+          placeholder="tt0000000"
+          width="w-28"
+          onSave={v => onUpdate(movie.id, v, movie.tmdb_id ?? '', movie.title ?? '')}
+        />
       </td>
 
       {/* TMDB */}
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-gray-400">
-        {job.tmdb_id ?? '—'}
+      <td className="whitespace-nowrap px-3 py-2">
+        <EditableID
+          value={movie.tmdb_id}
+          placeholder="12345"
+          width="w-20"
+          onSave={v => onUpdate(movie.id, movie.imdb_id ?? '', v, movie.title ?? '')}
+        />
       </td>
 
       {/* Title */}
       <td className="px-3 py-2">
-        <Link
-          href={`/jobs/${job.job_id}`}
-          className="block max-w-lg truncate text-sm font-medium text-gray-100 hover:text-white"
-          title={title}
-        >
-          {title}
-        </Link>
+        <div className="flex items-baseline gap-2">
+          <EditableID
+            value={movie.title}
+            placeholder="Название фильма"
+            width="w-72"
+            onSave={v => onUpdate(movie.id, movie.imdb_id ?? '', movie.tmdb_id ?? '', v)}
+          />
+          {movie.year && <span className="shrink-0 text-xs text-gray-500">({movie.year})</span>}
+        </div>
+        {!movie.title && (
+          <span className="mt-0.5 block font-mono text-[10px] text-gray-700">{movie.storage_key}</span>
+        )}
       </td>
 
       {/* Date */}
       <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">
-        {formatDate(job.created_at)}
+        {formatDate(movie.created_at)}
       </td>
 
       {/* Delete */}
       <td className="px-3 py-2 text-right">
-        <button
-          onClick={() => onDelete(job.job_id)}
-          className="rounded p-1.5 text-gray-600 hover:bg-red-900/40 hover:text-red-400 transition-colors"
-          title="Удалить"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
+        {movie.job_id && (
+          <button
+            onClick={() => onDelete(movie.job_id!)}
+            className="rounded p-1.5 text-gray-600 hover:bg-red-900/40 hover:text-red-400 transition-colors"
+            title="Удалить"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        )}
       </td>
     </tr>
   )
@@ -136,16 +191,16 @@ function MovieRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void 
 export default function MoviesPage() {
   const router = useRouter()
   const { mutate } = useSWRConfig()
-  const swrKey = jobsUrl('completed', 100)
+  const swrKey = moviesUrl(100)
 
   useEffect(() => {
     if (!getToken()) router.replace('/login')
   }, [router])
 
-  const { data, error, isLoading } = useSWR<JobsResponse>(
+  const { data, error, isLoading } = useSWR<MoviesResponse>(
     swrKey,
     fetcher,
-    { refreshInterval: 5000 },
+    { refreshInterval: 10000 },
   )
 
   async function handleDelete(jobId: string) {
@@ -158,6 +213,15 @@ export default function MoviesPage() {
     }
   }
 
+  async function handleUpdate(movieId: number, imdbId: string, tmdbId: string, title: string) {
+    try {
+      await updateMovieIDs(movieId, imdbId, tmdbId, title)
+      mutate(swrKey)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Ошибка при сохранении')
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <Nav />
@@ -166,7 +230,7 @@ export default function MoviesPage() {
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-xl font-semibold text-white">Фильмы</h1>
           <Link
-            href="/search"
+            href="/upload"
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
           >
             + Добавить
@@ -194,10 +258,10 @@ export default function MoviesPage() {
               <p className="mt-1 text-sm text-gray-600">Найдите и добавьте первый фильм</p>
             </div>
             <Link
-              href="/search"
+              href="/upload"
               className="rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
             >
-              Найти фильм
+              Добавить фильм
             </Link>
           </div>
         )}
@@ -217,8 +281,8 @@ export default function MoviesPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.items.map(job => (
-                  <MovieRow key={job.job_id} job={job} onDelete={handleDelete} />
+                {data.items.map(movie => (
+                  <MovieRow key={movie.id} movie={movie} onDelete={handleDelete} onUpdate={handleUpdate} />
                 ))}
               </tbody>
             </table>

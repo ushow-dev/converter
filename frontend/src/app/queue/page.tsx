@@ -149,7 +149,7 @@ function QueueRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void 
 export default function QueuePage() {
   const router = useRouter()
   const { mutate } = useSWRConfig()
-  const swrKey = jobsUrl(undefined, 100)
+  const swrKey = jobsUrl('active', 100)
 
   useEffect(() => {
     if (!getToken()) router.replace('/login')
@@ -161,7 +161,7 @@ export default function QueuePage() {
     { refreshInterval: 3000 },
   )
 
-  const activeJobs = data?.items.filter(j => j.status !== 'completed') ?? []
+  const activeJobs = data?.items ?? []
 
   async function handleDelete(jobId: string) {
     if (!window.confirm('Удалить задачу?')) return

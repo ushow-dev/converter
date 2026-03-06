@@ -32,6 +32,9 @@ type Config struct {
 	ProwlarrBaseURL string
 	ProwlarrAPIKey  string
 
+	// TMDB
+	TMDBAPIKey string
+
 	// Worker
 	WorkerHealthPort string
 
@@ -58,6 +61,7 @@ func Load() (*Config, error) {
 		AdminEmail:       getEnv("ADMIN_EMAIL", "admin@example.com"),
 		ProwlarrBaseURL:  getEnv("PROWLARR_BASE_URL", "http://prowlarr:9696"),
 		ProwlarrAPIKey:   getEnv("PROWLARR_API_KEY", ""),
+		TMDBAPIKey:       getEnv("TMDB_API_KEY", ""),
 		WorkerHealthPort: getEnv("WORKER_HEALTH_PORT", "8001"),
 		MediaRoot:        getEnv("MEDIA_ROOT", "/media"),
 		MediaBaseURL:     getEnv("MEDIA_BASE_URL", ""),

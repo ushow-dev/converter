@@ -76,13 +76,17 @@ type Asset struct {
 
 // Movie represents catalog metadata used to resolve player links.
 type Movie struct {
-	ID        int64      `json:"id"`
-	StorageKey string    `json:"storage_key"`
-	IMDbID    *string    `json:"imdb_id,omitempty"`
-	TMDBID    *string    `json:"tmdb_id,omitempty"`
-	PosterURL *string    `json:"poster_url,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID           int64     `json:"id"`
+	StorageKey   string    `json:"storage_key"`
+	IMDbID       *string   `json:"imdb_id,omitempty"`
+	TMDBID       *string   `json:"tmdb_id,omitempty"`
+	Title        *string   `json:"title,omitempty"`
+	Year         *int      `json:"year,omitempty"`
+	PosterURL    *string   `json:"poster_url,omitempty"`
+	HasThumbnail bool      `json:"has_thumbnail"`
+	JobID        *string   `json:"job_id,omitempty"` // from media_assets, used for delete
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // ─── SearchResult ─────────────────────────────────────────────────────────────
@@ -100,6 +104,13 @@ type SearchResult struct {
 	ContentType string    `json:"content_type"`
 	CreatedAt   time.Time `json:"created_at"`
 }
+
+// ─── Source types ─────────────────────────────────────────────────────────────
+
+const (
+	SourceTypeTorrent = "torrent"
+	SourceTypeUpload  = "upload"
+)
 
 // ─── Queue payloads ──────────────────────────────────────────────────────────
 
@@ -122,7 +133,34 @@ type DownloadJob struct {
 	SourceRef  string `json:"source_ref"`
 	IMDbID     string `json:"imdb_id"`
 	TMDBID     string `json:"tmdb_id"`
+	Title      string `json:"title"`
 	TargetDir  string `json:"target_dir"`
 	Priority   string `json:"priority"`
 	RequestID  string `json:"request_id"`
+}
+
+// ConvertPayload is the message envelope pushed directly to convert_queue
+// by the API for upload jobs (bypassing the download worker).
+// JSON-compatible with worker/internal/model.ConvertMessage.
+type ConvertPayload struct {
+	SchemaVersion string     `json:"schema_version"`
+	JobID         string     `json:"job_id"`
+	JobType       string     `json:"job_type"`
+	ContentType   string     `json:"content_type"`
+	CorrelationID string     `json:"correlation_id"`
+	Attempt       int        `json:"attempt"`
+	MaxAttempts   int        `json:"max_attempts"`
+	CreatedAt     time.Time  `json:"created_at"`
+	Payload       ConvertJob `json:"payload"`
+}
+
+// ConvertJob is the inner payload for a convert task.
+type ConvertJob struct {
+	InputPath     string `json:"input_path"`
+	OutputPath    string `json:"output_path"`
+	OutputProfile string `json:"output_profile"`
+	FinalDir      string `json:"final_dir"`
+	IMDbID        string `json:"imdb_id"`
+	TMDBID        string `json:"tmdb_id"`
+	Title         string `json:"title"`
 }

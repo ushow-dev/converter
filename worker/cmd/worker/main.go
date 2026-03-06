@@ -95,7 +95,7 @@ func main() {
 
 	// ── Pipeline workers ───────────────────────────────────────────────────────
 	dlWorker := downloader.New(redisClient, jobRepo, qbt, cfg.MediaRoot)
-	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo, cfg.MediaRoot)
+	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo, cfg.MediaRoot, cfg.TMDBAPIKey)
 
 	// ── Health server ──────────────────────────────────────────────────────────
 	go health.Start(cfg.HealthPort, redisClient)

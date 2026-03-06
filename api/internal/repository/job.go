@@ -20,13 +20,15 @@ var ErrNotFound = errors.New("not found")
 var ErrConflict = errors.New("conflict")
 
 // jobBaseSelect is the base SELECT used by all read queries.
-// It LEFT JOINs search_results for title and media_assets for thumbnail_path.
+// Title is resolved from media_jobs.title first (upload jobs), falling back
+// to search_results.title (torrent jobs).
 const jobBaseSelect = `
 	SELECT j.job_id, j.content_type, j.source_type, j.source_ref,
 	       j.priority, j.status, j.stage, j.progress_percent,
 	       j.error_code, j.error_message, j.retryable,
 	       j.request_id, j.correlation_id, j.created_at, j.updated_at,
-	       sr.title, a.thumbnail_path, m.id, m.imdb_id, m.tmdb_id
+	       COALESCE(j.title, sr.title) AS title,
+	       a.thumbnail_path, m.id, m.imdb_id, m.tmdb_id
 	FROM media_jobs j
 	LEFT JOIN search_results sr ON sr.source_ref = j.source_ref
 	LEFT JOIN media_assets a ON a.job_id = j.job_id
@@ -53,11 +55,11 @@ func NewJobRepository(pool *pgxpool.Pool) *JobRepository {
 func (r *JobRepository) Create(ctx context.Context, job *model.Job) (*model.Job, error) {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO media_jobs
-			(job_id, content_type, source_type, source_ref, priority, status,
+			(job_id, content_type, source_type, source_ref, title, priority, status,
 			 request_id, correlation_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		job.JobID, job.ContentType, job.SourceType, job.SourceRef,
-		string(job.Priority), string(job.Status),
+		job.Title, string(job.Priority), string(job.Status),
 		job.RequestID, job.CorrelationID,
 		job.CreatedAt, job.UpdatedAt,
 	)
@@ -97,7 +99,22 @@ func (r *JobRepository) List(
 	var rows pgx.Rows
 	var err error
 
+	// "active" is a virtual filter: queued + in_progress + failed (everything except completed).
+	const activeFilter = `j.status IN ('queued', 'in_progress', 'failed')`
+
 	switch {
+	case status == "active" && cursor != "":
+		rows, err = r.pool.Query(ctx,
+			jobBaseSelect+`
+			WHERE `+activeFilter+` AND j.created_at < $1::timestamptz
+			ORDER BY j.created_at DESC LIMIT $2`,
+			cursor, limit+1)
+	case status == "active":
+		rows, err = r.pool.Query(ctx,
+			jobBaseSelect+`
+			WHERE `+activeFilter+`
+			ORDER BY j.created_at DESC LIMIT $1`,
+			limit+1)
 	case status != "" && cursor != "":
 		rows, err = r.pool.Query(ctx,
 			jobBaseSelect+`

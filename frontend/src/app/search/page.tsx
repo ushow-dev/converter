@@ -50,6 +50,7 @@ export default function SearchPage() {
         source_ref: item.source_ref,
         imdb_id: imdb,
         tmdb_id: tmdb,
+        title: item.title,
         source_type: 'torrent',
         content_type: 'movie',
       })

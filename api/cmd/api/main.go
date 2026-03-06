@@ -74,6 +74,7 @@ func main() {
 	authH := handler.NewAuthHandler(cfg)
 	searchH := handler.NewSearchHandler(searchSvc)
 	jobsH := handler.NewJobsHandler(jobSvc, assetRepo)
+	moviesH := handler.NewMoviesHandler(cfg.TMDBAPIKey, movieRepo)
 	playerH := handler.NewPlayerHandler(
 		jobSvc,
 		assetRepo,
@@ -90,6 +91,7 @@ func main() {
 		AuthHandler:   authH,
 		SearchHandler: searchH,
 		JobsHandler:   jobsH,
+		MoviesHandler: moviesH,
 		PlayerHandler: playerH,
 	})
 
