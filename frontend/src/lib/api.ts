@@ -15,6 +15,28 @@ import type {
 // ── Token storage ────────────────────────────────────────────────────────────
 
 const TOKEN_KEY = 'admin_token'
+const UPLOAD_PATH = '/api/admin/jobs/upload'
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '')
+}
+
+function getUploadEndpoint(): string {
+  const configuredOrigin = process.env.NEXT_PUBLIC_UPLOAD_ORIGIN?.trim()
+  if (configuredOrigin) {
+    return `${trimTrailingSlash(configuredOrigin)}${UPLOAD_PATH}`
+  }
+
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location
+    if (hostname.startsWith('admin.')) {
+      const baseDomain = hostname.slice('admin.'.length)
+      return `${protocol}//upload.${baseDomain}${UPLOAD_PATH}`
+    }
+  }
+
+  return UPLOAD_PATH
+}
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null
@@ -188,7 +210,7 @@ export async function uploadMovie(
     formData.append('request_id', crypto.randomUUID())
 
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/api/admin/jobs/upload')
+    xhr.open('POST', getUploadEndpoint())
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
 
     xhr.upload.onprogress = (e) => {
