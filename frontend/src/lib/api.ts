@@ -10,6 +10,7 @@ import type {
   Priority,
   Movie,
   MoviesResponse,
+  SubtitlesResponse,
 } from '@/types'
 
 // ── Token storage ────────────────────────────────────────────────────────────
@@ -267,6 +268,56 @@ export async function deleteJob(jobId: string): Promise<void> {
     const body = await res.json().catch(() => ({}))
     throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
   }
+}
+
+// ── Subtitles ─────────────────────────────────────────────────────────────────
+
+export async function getMovieSubtitles(movieId: number): Promise<SubtitlesResponse> {
+  return apiFetch<SubtitlesResponse>(`/api/admin/movies/${movieId}/subtitles`)
+}
+
+export async function uploadSubtitle(
+  movieId: number,
+  language: string,
+  file: File,
+): Promise<SubtitlesResponse> {
+  const token = getToken()
+  const formData = new FormData()
+  formData.append('language', language)
+  formData.append('file', file)
+  const res = await fetch(`/api/admin/movies/${movieId}/subtitles`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<SubtitlesResponse>
+}
+
+export async function browseRemoteUrl(url: string): Promise<import('@/types').RemoteMovie[]> {
+  return apiFetch<import('@/types').RemoteMovie[]>(
+    `/api/admin/remote-browse?url=${encodeURIComponent(url)}`,
+  )
+}
+
+export async function createRemoteDownloadJob(
+  url: string,
+  filename: string,
+): Promise<import('@/types').RemoteDownloadResponse> {
+  return apiFetch<import('@/types').RemoteDownloadResponse>(
+    '/api/admin/jobs/remote-download',
+    { method: 'POST', body: JSON.stringify({ url, filename }) },
+  )
+}
+
+export async function searchSubtitles(movieId: number): Promise<SubtitlesResponse & { found: number }> {
+  return apiFetch<SubtitlesResponse & { found: number }>(
+    `/api/admin/movies/${movieId}/subtitles/search`,
+    { method: 'POST' },
+  )
 }
 
 // ── Formatters ───────────────────────────────────────────────────────────────

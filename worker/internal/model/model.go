@@ -68,6 +68,29 @@ type ConvertJob struct {
 	Title         string `json:"title"`
 }
 
+// RemoteDownloadMessage is the envelope consumed from remote_download_queue.
+type RemoteDownloadMessage struct {
+	SchemaVersion string            `json:"schema_version"`
+	JobID         string            `json:"job_id"`
+	JobType       string            `json:"job_type"`
+	ContentType   string            `json:"content_type"`
+	CorrelationID string            `json:"correlation_id"`
+	Attempt       int               `json:"attempt"`
+	MaxAttempts   int               `json:"max_attempts"`
+	CreatedAt     time.Time         `json:"created_at"`
+	Payload       RemoteDownloadJob `json:"payload"`
+}
+
+// RemoteDownloadJob is the inner payload for an HTTP download task.
+type RemoteDownloadJob struct {
+	SourceURL string `json:"source_url"`
+	Filename  string `json:"filename"`
+	IMDbID    string `json:"imdb_id"`
+	TMDBID    string `json:"tmdb_id"`
+	Title     string `json:"title"`
+	TargetDir string `json:"target_dir"`
+}
+
 // ─── Asset ───────────────────────────────────────────────────────────────────
 
 // Asset is the record created after successful conversion.
@@ -96,4 +119,18 @@ type Movie struct {
 	PosterURL  *string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// ─── Subtitle ─────────────────────────────────────────────────────────────────
+
+// Subtitle represents a subtitle track stored for a movie.
+type Subtitle struct {
+	ID          int64
+	MovieID     int64
+	Language    string  // ISO 639-1, e.g. "ru", "en"
+	Source      string  // "opensubtitles" | "upload"
+	StoragePath string
+	ExternalID  *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }

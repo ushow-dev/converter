@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -44,6 +45,10 @@ type Config struct {
 	MediaSigningKey string
 	MediaSigningTTL time.Duration
 
+	// OpenSubtitles
+	OpenSubtitlesAPIKey string
+	SubtitleLanguages   []string // ISO 639-1 codes, e.g. ["ru","en"]
+
 	// App
 	Environment string
 }
@@ -67,7 +72,9 @@ func Load() (*Config, error) {
 		MediaBaseURL:     getEnv("MEDIA_BASE_URL", ""),
 		MediaSigningKey:  getEnv("MEDIA_SIGNING_KEY", ""),
 		MediaSigningTTL:  getEnvDuration("MEDIA_SIGNING_TTL", 2*time.Minute),
-		Environment:      getEnv("APP_ENV", "development"),
+		Environment:         getEnv("APP_ENV", "development"),
+		OpenSubtitlesAPIKey: getEnv("OPENSUBTITLES_API_KEY", ""),
+		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "ru,en")),
 	}
 
 	// Resolve admin password: prefer pre-hashed value, fall back to plaintext
@@ -102,6 +109,17 @@ func mustEnv(key string) string {
 		panic(fmt.Sprintf("required environment variable %q is not set", key))
 	}
 	return v
+}
+
+func parseCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func getEnvDuration(key string, defaultVal time.Duration) time.Duration {

@@ -17,13 +17,15 @@ import (
 
 // Dependencies bundles all wired-up components needed to build the router.
 type Dependencies struct {
-	Cfg           *config.Config
-	HealthHandler *handler.HealthHandler
-	AuthHandler   *handler.AuthHandler
-	SearchHandler *handler.SearchHandler
-	JobsHandler   *handler.JobsHandler
-	MoviesHandler *handler.MoviesHandler
-	PlayerHandler *handler.PlayerHandler
+	Cfg             *config.Config
+	HealthHandler   *handler.HealthHandler
+	AuthHandler     *handler.AuthHandler
+	SearchHandler   *handler.SearchHandler
+	JobsHandler     *handler.JobsHandler
+	MoviesHandler   *handler.MoviesHandler
+	PlayerHandler   *handler.PlayerHandler
+	SubtitleHandler *handler.SubtitleHandler
+	BrowseHandler   *handler.BrowseHandler
 }
 
 // New builds the chi router with all routes and middleware registered.
@@ -60,6 +62,12 @@ func New(deps Dependencies) http.Handler {
 			r.Get("/movies", deps.MoviesHandler.List)
 			r.Patch("/movies/{movieId}", deps.MoviesHandler.UpdateIDs)
 			r.Get("/movies/tmdb/{tmdbId}", deps.MoviesHandler.TMDBLookup)
+			r.Get("/movies/{movieId}/subtitles", deps.SubtitleHandler.List)
+			r.Post("/movies/{movieId}/subtitles", deps.SubtitleHandler.Upload)
+			r.Post("/movies/{movieId}/subtitles/search", deps.SubtitleHandler.Search)
+			r.Get("/remote-browse", deps.BrowseHandler.Browse)
+			r.Post("/jobs/remote-download", deps.JobsHandler.RemoteDownload)
+			r.Get("/movies/tmdb/search", deps.MoviesHandler.TMDBSearch)
 		})
 
 		// Thumbnail: JWT via header or ?token= query param (for <img src>)

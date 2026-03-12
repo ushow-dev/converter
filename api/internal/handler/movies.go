@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -96,6 +97,86 @@ func (h *MoviesHandler) TMDBLookup(w http.ResponseWriter, r *http.Request) {
 		"poster_url":   posterURL,
 		"overview":     tmdb.Overview,
 		"release_date": tmdb.ReleaseDate,
+	})
+}
+
+type tmdbSearchResponse struct {
+	Results []struct {
+		ID          int64  `json:"id"`
+		Title       string `json:"title"`
+		ReleaseDate string `json:"release_date"`
+		PosterPath  string `json:"poster_path"`
+	} `json:"results"`
+}
+
+// TMDBSearch handles GET /api/admin/movies/tmdb/search?q=title&year=2025.
+// Returns the best TMDB match for a title, used by the remote-download flow.
+func (h *MoviesHandler) TMDBSearch(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+	q := r.URL.Query().Get("q")
+	if q == "" {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "q is required", false, cid)
+		return
+	}
+	if h.tmdbAPIKey == "" {
+		respondError(w, http.StatusServiceUnavailable, "NOT_CONFIGURED", "TMDB API key is not configured", false, cid)
+		return
+	}
+
+	params := url.Values{}
+	params.Set("query", q)
+	params.Set("api_key", h.tmdbAPIKey)
+	if year := r.URL.Query().Get("year"); year != "" {
+		params.Set("year", year)
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://api.themoviedb.org/3/search/movie?"+params.Encode(), nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to build TMDB request", false, cid)
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		respondError(w, http.StatusBadGateway, "TMDB_ERROR", "failed to reach TMDB", true, cid)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respondError(w, http.StatusBadGateway, "TMDB_ERROR",
+			fmt.Sprintf("TMDB returned status %d", resp.StatusCode), true, cid)
+		return
+	}
+
+	var tmdb tmdbSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tmdb); err != nil {
+		respondError(w, http.StatusBadGateway, "TMDB_ERROR", "failed to parse TMDB response", false, cid)
+		return
+	}
+	if len(tmdb.Results) == 0 {
+		respondJSON(w, http.StatusOK, map[string]any{"found": false})
+		return
+	}
+
+	best := tmdb.Results[0]
+	posterURL := ""
+	if best.PosterPath != "" {
+		posterURL = "https://image.tmdb.org/t/p/w342" + best.PosterPath
+	}
+	year := ""
+	if len(best.ReleaseDate) >= 4 {
+		year = best.ReleaseDate[:4]
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"found":      true,
+		"tmdb_id":    fmt.Sprintf("%d", best.ID),
+		"title":      best.Title,
+		"year":       year,
+		"poster_url": posterURL,
 	})
 }
 

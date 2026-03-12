@@ -110,6 +110,7 @@ type SearchResult struct {
 const (
 	SourceTypeTorrent = "torrent"
 	SourceTypeUpload  = "upload"
+	SourceTypeHTTP    = "http"
 )
 
 // ─── Queue payloads ──────────────────────────────────────────────────────────
@@ -139,6 +140,20 @@ type DownloadJob struct {
 	RequestID  string `json:"request_id"`
 }
 
+// ─── Subtitle ─────────────────────────────────────────────────────────────────
+
+// Subtitle represents a subtitle track stored for a movie.
+type Subtitle struct {
+	ID          int64     `json:"id"`
+	MovieID     int64     `json:"movie_id"`
+	Language    string    `json:"language"`     // ISO 639-1, e.g. "ru", "en"
+	Source      string    `json:"source"`       // "opensubtitles" | "upload"
+	StoragePath string    `json:"storage_path"` // absolute path on disk
+	ExternalID  *string   `json:"external_id,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 // ConvertPayload is the message envelope pushed directly to convert_queue
 // by the API for upload jobs (bypassing the download worker).
 // JSON-compatible with worker/internal/model.ConvertMessage.
@@ -163,4 +178,28 @@ type ConvertJob struct {
 	IMDbID        string `json:"imdb_id"`
 	TMDBID        string `json:"tmdb_id"`
 	Title         string `json:"title"`
+}
+
+// RemoteDownloadPayload is the message envelope pushed to remote_download_queue.
+// JSON-compatible with worker/internal/model.RemoteDownloadMessage.
+type RemoteDownloadPayload struct {
+	SchemaVersion string            `json:"schema_version"`
+	JobID         string            `json:"job_id"`
+	JobType       string            `json:"job_type"`
+	ContentType   string            `json:"content_type"`
+	CorrelationID string            `json:"correlation_id"`
+	Attempt       int               `json:"attempt"`
+	MaxAttempts   int               `json:"max_attempts"`
+	CreatedAt     time.Time         `json:"created_at"`
+	Payload       RemoteDownloadJob `json:"payload"`
+}
+
+// RemoteDownloadJob is the inner payload for an HTTP download task.
+type RemoteDownloadJob struct {
+	SourceURL string `json:"source_url"` // HTTP(S) URL of the video file
+	Filename  string `json:"filename"`   // sanitized filename to save as
+	IMDbID    string `json:"imdb_id"`
+	TMDBID    string `json:"tmdb_id"`
+	Title     string `json:"title"`
+	TargetDir string `json:"target_dir"`
 }

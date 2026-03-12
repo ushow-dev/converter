@@ -6,6 +6,7 @@ import Link from 'next/link'
 import useSWR from 'swr'
 import { getToken, fetcher, formatDate } from '@/lib/api'
 import { Nav } from '@/components/Nav'
+import { SubtitleSection } from '@/components/SubtitleSection'
 import type { Job, JobStatus } from '@/types'
 
 const STATUS_BADGE: Record<JobStatus, string> = {
@@ -118,6 +119,10 @@ export default function JobDetailPage({ params }: { params: { jobId: string } })
 
         {job?.status === 'in_progress' && (
           <p className="mt-4 text-xs text-gray-500">Auto-refreshing every 3 s…</p>
+        )}
+
+        {job?.status === 'completed' && job.movie_id != null && (
+          <SubtitleSection movieId={job.movie_id} />
         )}
       </main>
     </div>

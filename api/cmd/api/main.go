@@ -15,6 +15,7 @@ import (
 	"app/api/internal/repository"
 	"app/api/internal/server"
 	"app/api/internal/service"
+	"app/api/internal/subtitles"
 )
 
 func main() {
@@ -60,13 +61,17 @@ func main() {
 	assetRepo := repository.NewAssetRepository(pool)
 	movieRepo := repository.NewMovieRepository(pool)
 	searchRepo := repository.NewSearchRepository(pool)
+	subtitleRepo := repository.NewSubtitleRepository(pool)
 
 	// ── Indexer backend ────────────────────────────────────────────────────────
 	prowlarr := indexer.NewProwlarrClient(cfg.ProwlarrBaseURL, cfg.ProwlarrAPIKey)
 
 	// ── Services ───────────────────────────────────────────────────────────────
 	searchSvc := service.NewSearchService(prowlarr, searchRepo)
-	jobSvc := service.NewJobService(jobRepo, redisClient, cfg.MediaRoot)
+	jobSvc := service.NewJobService(jobRepo, redisClient, cfg.MediaRoot, cfg.TMDBAPIKey)
+
+	// ── OpenSubtitles client (optional) ────────────────────────────────────────
+	osClient := subtitles.NewClient(cfg.OpenSubtitlesAPIKey)
 
 	// ── Handlers ───────────────────────────────────────────────────────────────
 	// pool and redisClient both satisfy handler.Pinger via their Ping methods.
@@ -79,20 +84,25 @@ func main() {
 		jobSvc,
 		assetRepo,
 		movieRepo,
+		subtitleRepo,
 		cfg.MediaBaseURL,
 		cfg.MediaSigningKey,
 		cfg.MediaSigningTTL,
 	)
+	subtitleH := handler.NewSubtitleHandler(movieRepo, subtitleRepo, osClient, cfg.MediaRoot, cfg.SubtitleLanguages)
+	browseH := handler.NewBrowseHandler()
 
 	// ── HTTP server ────────────────────────────────────────────────────────────
 	h := server.New(server.Dependencies{
-		Cfg:           cfg,
-		HealthHandler: healthH,
-		AuthHandler:   authH,
-		SearchHandler: searchH,
-		JobsHandler:   jobsH,
-		MoviesHandler: moviesH,
-		PlayerHandler: playerH,
+		Cfg:             cfg,
+		HealthHandler:   healthH,
+		AuthHandler:     authH,
+		SearchHandler:   searchH,
+		JobsHandler:     jobsH,
+		MoviesHandler:   moviesH,
+		PlayerHandler:   playerH,
+		SubtitleHandler: subtitleH,
+		BrowseHandler:   browseH,
 	})
 
 	if err := server.Start(ctx, cfg, h); err != nil {

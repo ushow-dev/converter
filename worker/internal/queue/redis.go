@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	DownloadQueue = "download_queue"
-	ConvertQueue  = "convert_queue"
+	DownloadQueue       = "download_queue"
+	ConvertQueue        = "convert_queue"
+	RemoteDownloadQueue = "remote_download_queue"
 
 	lockTTL = time.Hour
 )

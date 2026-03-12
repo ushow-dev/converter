@@ -25,6 +25,7 @@ type PlayerHandler struct {
 	jobSvc       *service.JobService
 	assetRepo    *repository.AssetRepository
 	movieRepo    *repository.MovieRepository
+	subtitleRepo *repository.SubtitleRepository
 	mediaBaseURL string
 	mediaSigner  *mediaURLSigner
 }
@@ -34,6 +35,7 @@ func NewPlayerHandler(
 	jobSvc *service.JobService,
 	assetRepo *repository.AssetRepository,
 	movieRepo *repository.MovieRepository,
+	subtitleRepo *repository.SubtitleRepository,
 	mediaBaseURL string,
 	mediaSigningKey string,
 	mediaSigningTTL time.Duration,
@@ -42,6 +44,7 @@ func NewPlayerHandler(
 		jobSvc:       jobSvc,
 		assetRepo:    assetRepo,
 		movieRepo:    movieRepo,
+		subtitleRepo: subtitleRepo,
 		mediaBaseURL: mediaBaseURL,
 		mediaSigner:  newMediaURLSigner(mediaSigningKey, mediaSigningTTL),
 	}
@@ -128,6 +131,17 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build subtitle list.
+	subtitleTracks := []map[string]string{}
+	if subs, err := h.subtitleRepo.ListByMovieID(r.Context(), movie.id); err == nil {
+		for _, sub := range subs {
+			subtitleTracks = append(subtitleTracks, map[string]string{
+				"language": sub.Language,
+				"url":      h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.storageKey, "subtitles/"+sub.Language+".vtt")),
+			})
+		}
+	}
+
 	respondJSON(w, http.StatusOK, map[string]any{
 		"data": map[string]any{
 			"movie": map[string]any{
@@ -141,6 +155,7 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 			"assets": map[string]any{
 				"poster": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.storageKey, "thumbnail.jpg")),
 			},
+			"subtitles": subtitleTracks,
 		},
 		"meta": map[string]any{
 			"version": "v1",

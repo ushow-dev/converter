@@ -210,6 +210,49 @@ func (h *JobsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// RemoteDownload handles POST /api/admin/jobs/remote-download.
+// Accepts a JSON body with the URL of a remote video file, parses the title/year
+// from the filename, optionally searches TMDB, creates the job, and enqueues it
+// for the HTTP download worker.
+func (h *JobsHandler) RemoteDownload(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+
+	var req struct {
+		URL      string `json:"url"`
+		Filename string `json:"filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid JSON body", false, cid)
+		return
+	}
+	if req.URL == "" || req.Filename == "" {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "url and filename are required", false, cid)
+		return
+	}
+
+	job, tmdbID, err := h.svc.CreateRemoteDownloadJob(r.Context(), service.CreateRemoteDownloadJobRequest{
+		SourceURL:     req.URL,
+		Filename:      req.Filename,
+		CorrelationID: cid,
+	})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create remote download job", false, cid)
+		return
+	}
+
+	title := ""
+	if job.Title != nil {
+		title = *job.Title
+	}
+	respondJSON(w, http.StatusAccepted, map[string]any{
+		"job_id":     job.JobID,
+		"status":     string(job.Status),
+		"title":      title,
+		"tmdb_id":    tmdbID,
+		"created_at": job.CreatedAt,
+	})
+}
+
 // Thumbnail handles GET /api/admin/jobs/{jobID}/thumbnail.
 // Serves the JPEG thumbnail for a completed job. Accepts JWT via Authorization
 // header or ?token= query parameter (needed for use in <img src>).

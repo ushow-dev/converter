@@ -11,7 +11,8 @@
       "Bash(docker compose up -d worker api)",
       "Bash(docker compose build api frontend)",
       "Bash(docker compose build frontend)",
-      "Bash(docker compose up -d api frontend)"
+      "Bash(docker compose up -d api frontend)",
+      "Bash(ls /Users/robospot/prj/cleaner/converter/*.md)"
     ]
   }
 }

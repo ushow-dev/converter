@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all runtime configuration for the worker service.
@@ -23,14 +24,21 @@ type Config struct {
 	MediaRoot string
 
 	// Worker concurrency
-	DownloadConcurrency int
-	ConvertConcurrency  int
+	DownloadConcurrency     int
+	ConvertConcurrency      int
+	HTTPDownloadConcurrency int
 
 	// Internal health server port
 	HealthPort string
 
 	// TMDB API key for backdrop download (optional)
 	TMDBAPIKey string
+
+	// OpenSubtitles.com API key (optional; subtitle search disabled if empty)
+	OpenSubtitlesAPIKey string
+
+	// Languages to fetch subtitles for, e.g. ["ru","en"]
+	SubtitleLanguages []string
 }
 
 // Load reads configuration from environment variables.
@@ -43,9 +51,12 @@ func Load() (*Config, error) {
 		QBittorrentPass:     getEnv("QBITTORRENT_PASSWORD", "adminadmin"),
 		MediaRoot:           getEnv("MEDIA_ROOT", "/media"),
 		HealthPort:          getEnv("WORKER_HEALTH_PORT", "8001"),
-		DownloadConcurrency: intEnv("DOWNLOAD_CONCURRENCY", 2),
-		ConvertConcurrency:  intEnv("CONVERT_CONCURRENCY", 1),
+		DownloadConcurrency:     intEnv("DOWNLOAD_CONCURRENCY", 2),
+		ConvertConcurrency:      intEnv("CONVERT_CONCURRENCY", 1),
+		HTTPDownloadConcurrency: intEnv("HTTP_DOWNLOAD_CONCURRENCY", 3),
 		TMDBAPIKey:          getEnv("TMDB_API_KEY", ""),
+		OpenSubtitlesAPIKey: getEnv("OPENSUBTITLES_API_KEY", ""),
+		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "ru,en")),
 	}
 	return cfg, nil
 }
@@ -63,6 +74,17 @@ func mustEnv(key string) string {
 		panic(fmt.Sprintf("required env %q is not set", key))
 	}
 	return v
+}
+
+func parseCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func intEnv(key string, def int) int {

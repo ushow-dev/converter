@@ -203,6 +203,8 @@ docker compose down && docker compose up -d --build
 Остановка:
 docker compose down
 
+админка
+http://127.0.0.1:3000/login
 
 плеер доступен по адресу:
 http://127.0.0.1:3100/?imdb_id=333
@@ -217,3 +219,5 @@ curl --location 'http://localhost:3000/api/player/movie?imdb_id=333' \
 БД
 посмотреть содержимое БД:
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT * FROM movies ORDER BY id;"
+
+

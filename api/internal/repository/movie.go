@@ -99,6 +99,31 @@ func (r *MovieRepository) UpdateMeta(ctx context.Context, movieID int64, imdbID,
 	return err
 }
 
+// GetByID fetches a movie row by its primary key.
+func (r *MovieRepository) GetByID(ctx context.Context, id int64) (*model.Movie, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT m.id, m.storage_key, m.imdb_id, m.tmdb_id, m.title, m.year, m.poster_url,
+		       (a.thumbnail_path IS NOT NULL) AS has_thumbnail,
+		       a.job_id,
+		       m.created_at, m.updated_at
+		FROM movies m
+		LEFT JOIN media_assets a ON a.movie_id = m.id AND a.is_ready = true
+		WHERE m.id = $1 LIMIT 1`, id)
+	if err != nil {
+		return nil, fmt.Errorf("query movie by id: %w", err)
+	}
+	defer rows.Close()
+
+	movies, err := scanMovieRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(movies) == 0 {
+		return nil, ErrNotFound
+	}
+	return movies[0], nil
+}
+
 // ThumbnailPath returns the filesystem path to the thumbnail for a movie, or ErrNotFound.
 func (r *MovieRepository) ThumbnailPath(ctx context.Context, movieID int64) (string, error) {
 	var path string

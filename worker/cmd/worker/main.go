@@ -16,9 +16,11 @@ import (
 	"app/worker/internal/downloader"
 	"app/worker/internal/ffmpeg"
 	"app/worker/internal/health"
+	"app/worker/internal/httpdownloader"
 	"app/worker/internal/qbittorrent"
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
+	"app/worker/internal/subtitles"
 )
 
 func main() {
@@ -92,10 +94,22 @@ func main() {
 	jobRepo := repository.NewJobRepository(pool)
 	assetRepo := repository.NewAssetRepository(pool)
 	movieRepo := repository.NewMovieRepository(pool)
+	subtitleRepo := repository.NewSubtitleRepository(pool)
+
+	// ── Subtitle fetcher (optional) ────────────────────────────────────────────
+	var subtitleFetcher *subtitles.Fetcher
+	if cfg.OpenSubtitlesAPIKey != "" {
+		subtitleFetcher = subtitles.NewFetcher(cfg.OpenSubtitlesAPIKey, cfg.SubtitleLanguages)
+		slog.Info("subtitle fetcher enabled", "languages", cfg.SubtitleLanguages)
+	} else {
+		slog.Info("subtitle fetcher disabled (OPENSUBTITLES_API_KEY not set)")
+	}
 
 	// ── Pipeline workers ───────────────────────────────────────────────────────
 	dlWorker := downloader.New(redisClient, jobRepo, qbt, cfg.MediaRoot)
-	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo, cfg.MediaRoot, cfg.TMDBAPIKey)
+	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo,
+		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey)
+	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot)
 
 	// ── Health server ──────────────────────────────────────────────────────────
 	go health.Start(cfg.HealthPort, redisClient)
@@ -121,9 +135,19 @@ func main() {
 		}()
 	}
 
+	// HTTP download worker(s)
+	for i := 0; i < cfg.HTTPDownloadConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			httpDlWorker.Run(ctx)
+		}()
+	}
+
 	slog.Info("worker running",
 		"download_concurrency", cfg.DownloadConcurrency,
 		"convert_concurrency", cfg.ConvertConcurrency,
+		"http_download_concurrency", cfg.HTTPDownloadConcurrency,
 	)
 
 	wg.Wait()

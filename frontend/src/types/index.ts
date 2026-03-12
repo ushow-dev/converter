@@ -80,3 +80,46 @@ export interface MoviesResponse {
   items: Movie[]
   next_cursor: string | null
 }
+
+export interface Subtitle {
+  id: number
+  movie_id: number
+  language: string
+  source: 'opensubtitles' | 'upload'
+  created_at: string
+  updated_at: string
+}
+
+export interface SubtitlesResponse {
+  items: Subtitle[]
+}
+
+export interface RemoteFile {
+  name: string
+  size: string
+  url: string
+}
+
+export interface RemoteMovie {
+  name: string
+  url: string
+  video_file: RemoteFile | null
+  subtitle_files: RemoteFile[]
+}
+
+export interface RemoteDownloadResponse {
+  job_id: string
+  status: string
+  title: string
+  tmdb_id: string
+  created_at: string
+}
+
+export type DownloadItemState = 'idle' | 'submitting' | 'queued' | 'error'
+
+export interface DownloadItem {
+  movie: RemoteMovie
+  state: DownloadItemState
+  jobId?: string
+  error?: string
+}

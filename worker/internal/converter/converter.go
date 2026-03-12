@@ -17,16 +17,19 @@ import (
 	"app/worker/internal/model"
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
+	"app/worker/internal/subtitles"
 )
 
 // Worker consumes convert_queue and orchestrates HLS conversions.
 type Worker struct {
-	q           *queue.Client
-	jobRepo     *repository.JobRepository
-	assetRepo   *repository.AssetRepository
-	movieRepo   *repository.MovieRepository
-	mediaRoot   string
-	tmdbAPIKey  string
+	q               *queue.Client
+	jobRepo         *repository.JobRepository
+	assetRepo       *repository.AssetRepository
+	movieRepo       *repository.MovieRepository
+	subtitleFetcher *subtitles.Fetcher       // nil if OpenSubtitles not configured
+	subtitleRepo    *repository.SubtitleRepository
+	mediaRoot       string
+	tmdbAPIKey      string
 }
 
 // New creates a convert Worker.
@@ -35,11 +38,14 @@ func New(
 	jobRepo *repository.JobRepository,
 	assetRepo *repository.AssetRepository,
 	movieRepo *repository.MovieRepository,
+	subtitleFetcher *subtitles.Fetcher,
+	subtitleRepo *repository.SubtitleRepository,
 	mediaRoot string,
 	tmdbAPIKey string,
 ) *Worker {
 	return &Worker{
 		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
+		subtitleFetcher: subtitleFetcher, subtitleRepo: subtitleRepo,
 		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey,
 	}
 }
@@ -226,6 +232,21 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 
 	log.Info("job completed", "asset_id", assetID, "master", masterPath)
+
+	// ── Subtitle fetch (best-effort, non-fatal) ───────────────────────────────
+	if w.subtitleFetcher != nil && msg.Payload.TMDBID != "" {
+		results := w.subtitleFetcher.FetchAndSave(ctx, msg.Payload.TMDBID, finalDir)
+		for _, sub := range results {
+			extID := &sub.ExternalID
+			if sub.ExternalID == "" {
+				extID = nil
+			}
+			if err := w.subtitleRepo.Upsert(ctx, movie.ID, sub.Language, "opensubtitles", sub.FilePath, extID); err != nil {
+				log.Warn("subtitle upsert failed", "lang", sub.Language, "error", err)
+			}
+		}
+		log.Info("subtitles fetched", "count", len(results))
+	}
 }
 
 // failJob marks the job as permanently failed.
