@@ -119,6 +119,63 @@ export ALL_PROXY="socks5h://proxyuser:EYomlhjnUV8e@IP_СЕРВЕРА:1080"
 curl https://api.ipify.org
 ```
 
+
+
+Настройка firewall 
+
+1. Установить UFW (если не установлен):
+
+```
+sudo apt update
+sudo apt install ufw
+```
+
+1. Разрешить SSH, чтобы не потерять доступ к серверу:
+
+```
+sudo ufw allow OpenSSH
+```
+
+или
+
+```
+sudo ufw allow 22/tcp
+```
+
+1. Разрешить доступ к SOCKS прокси только со своего IP:
+
+```
+sudo ufw allow from 128.0.210.38 to any port 1080 proto tcp
+```
+
+1. Запретить порт прокси для всех остальных:
+
+```
+sudo ufw deny 1080/tcp
+```
+
+1. Проверить добавленные правила:
+
+```
+sudo ufw show added
+```
+
+1. Включить firewall:
+
+```
+sudo ufw enable
+```
+
+1. Проверить статус:
+
+```
+sudo ufw status numbered
+```
+
+Ожидаемый результат: SSH разрешён, порт 1080 разрешён только для вашего IP, для остальных IP порт закрыт.
+
+
+
 ### Браузер / приложения
 
 В настройках сети укажите SOCKS5:

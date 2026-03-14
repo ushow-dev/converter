@@ -60,19 +60,16 @@ func RunHLS(
 	hasAudio := probeHasAudio(ctx, inputPath)
 
 	segS := strconv.Itoa(segDur)
-	fpsS := strconv.FormatFloat(targetFPS, 'f', 3, 64)
 	gopS := strconv.Itoa(gop)
 
 	slog.Info("HLS encode params",
 		"target_fps", targetFPS, "gop", gop,
 		"seg_dur", segDur, "has_audio", hasAudio)
 
-	filterComplex := fmt.Sprintf(
-		"[0:v]split=3[v720][v480][v360];"+
-			"[v720]fps=%s,scale=-2:720:flags=lanczos[v720o];"+
-			"[v480]fps=%s,scale=-2:480:flags=lanczos[v480o];"+
-			"[v360]fps=%s,scale=-2:360:flags=lanczos[v360o]",
-		fpsS, fpsS, fpsS)
+	filterComplex := "[0:v]split=3[v720][v480][v360];" +
+		"[v720]scale=-2:720:flags=bicubic[v720o];" +
+		"[v480]scale=-2:480:flags=bicubic[v480o];" +
+		"[v360]scale=-2:360:flags=bicubic[v360o]"
 
 	// audio source index: 0 = original file audio; 1 = synthetic silence.
 	aSrc := "0"
@@ -90,34 +87,41 @@ func RunHLS(
 		"-filter_complex", filterComplex,
 	)
 
-	// 720p stream
+	// 720p stream — per-stream map keeps HLS muxer happy (shared audio causes exit 234).
+	// bufsize ~2× maxrate gives the encoder headroom for variable scenes.
 	args = append(args,
 		"-map", "[v720o]", "-map", aSrc+":a:0",
-		"-c:v:0", "libx264", "-preset", "medium", "-pix_fmt", "yuv420p", "-sc_threshold", "0",
-		"-b:v:0", "1050k", "-maxrate:v:0", "1155k", "-bufsize:v:0", "1600k",
+		"-c:v:0", "libx264", "-preset", "faster",
+		"-profile:v:0", "high", "-level:v:0", "4.0",
+		"-pix_fmt:v:0", "yuv420p", "-sc_threshold:v:0", "0",
+		"-x264-params:v:0", "rc-lookahead=10",
+		"-b:v:0", "1050k", "-maxrate:v:0", "1155k", "-bufsize:v:0", "2300k",
 		"-g:v:0", gopS, "-keyint_min:v:0", gopS,
-		"-force_key_frames:v:0", "expr:gte(t,n_forced*"+segS+")",
 		"-c:a:0", "aac", "-b:a:0", "80k", "-ar:a:0", "48000", "-ac:a:0", "2",
 	)
 
 	// 480p stream
 	args = append(args,
 		"-map", "[v480o]", "-map", aSrc+":a:0",
-		"-c:v:1", "libx264", "-preset", "medium", "-pix_fmt", "yuv420p", "-sc_threshold", "0",
-		"-b:v:1", "700k", "-maxrate:v:1", "770k", "-bufsize:v:1", "1100k",
+		"-c:v:1", "libx264", "-preset", "faster",
+		"-profile:v:1", "high", "-level:v:1", "4.0",
+		"-pix_fmt:v:1", "yuv420p", "-sc_threshold:v:1", "0",
+		"-x264-params:v:1", "rc-lookahead=10",
+		"-b:v:1", "700k", "-maxrate:v:1", "770k", "-bufsize:v:1", "1500k",
 		"-g:v:1", gopS, "-keyint_min:v:1", gopS,
-		"-force_key_frames:v:1", "expr:gte(t,n_forced*"+segS+")",
-		"-c:a:1", "aac", "-b:a:1", "64k", "-ar:a:1", "48000", "-ac:a:1", "2",
+		"-c:a:1", "aac", "-b:a:1", "80k", "-ar:a:1", "48000", "-ac:a:1", "2",
 	)
 
 	// 360p stream
 	args = append(args,
 		"-map", "[v360o]", "-map", aSrc+":a:0",
-		"-c:v:2", "libx264", "-preset", "medium", "-pix_fmt", "yuv420p", "-sc_threshold", "0",
-		"-b:v:2", "320k", "-maxrate:v:2", "352k", "-bufsize:v:2", "500k",
+		"-c:v:2", "libx264", "-preset", "faster",
+		"-profile:v:2", "high", "-level:v:2", "4.0",
+		"-pix_fmt:v:2", "yuv420p", "-sc_threshold:v:2", "0",
+		"-x264-params:v:2", "rc-lookahead=10",
+		"-b:v:2", "320k", "-maxrate:v:2", "352k", "-bufsize:v:2", "700k",
 		"-g:v:2", gopS, "-keyint_min:v:2", gopS,
-		"-force_key_frames:v:2", "expr:gte(t,n_forced*"+segS+")",
-		"-c:a:2", "aac", "-b:a:2", "48k", "-ar:a:2", "48000", "-ac:a:2", "2",
+		"-c:a:2", "aac", "-b:a:2", "80k", "-ar:a:2", "48000", "-ac:a:2", "2",
 	)
 
 	if !hasAudio {
