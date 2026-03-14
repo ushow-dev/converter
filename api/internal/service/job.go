@@ -256,9 +256,10 @@ func (s *JobService) ListJobs(
 
 // CreateRemoteDownloadJobRequest holds input for a remote HTTP download job.
 type CreateRemoteDownloadJobRequest struct {
-	SourceURL     string // HTTP(S) URL of the video file
-	Filename      string // original filename (used to parse title/year)
+	SourceURL     string             // HTTP(S) URL of the video file
+	Filename      string             // original filename (used to parse title/year)
 	CorrelationID string
+	ProxyConfig   *model.ProxyConfig // optional proxy for the download
 }
 
 // CreateRemoteDownloadJob creates a job for downloading a video from an HTTP URL.
@@ -322,11 +323,12 @@ func (s *JobService) CreateRemoteDownloadJob(
 		MaxAttempts:   3,
 		CreatedAt:     now,
 		Payload: model.RemoteDownloadJob{
-			SourceURL: req.SourceURL,
-			Filename:  safe,
-			TMDBID:    tmdbID,
-			Title:     title,
-			TargetDir: fmt.Sprintf("%s/downloads/%s", s.mediaRoot, created.JobID),
+			SourceURL:   req.SourceURL,
+			Filename:    safe,
+			TMDBID:      tmdbID,
+			Title:       title,
+			TargetDir:   fmt.Sprintf("%s/downloads/%s", s.mediaRoot, created.JobID),
+			ProxyConfig: req.ProxyConfig,
 		},
 	}
 	if err := s.queue.Enqueue(ctx, queue.RemoteDownloadQueue, payload); err != nil {

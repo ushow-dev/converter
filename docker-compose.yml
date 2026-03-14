@@ -169,8 +169,10 @@ services:
       MEDIA_SIGNING_TTL: ${MEDIA_SIGNING_TTL:-2m}
       ADMIN_EMAIL:       ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD:    ${ADMIN_PASSWORD}
-      MEDIA_ROOT:        /media
-      TMDB_API_KEY:      ${TMDB_API_KEY:-}
+      MEDIA_ROOT:               /media
+      TMDB_API_KEY:             ${TMDB_API_KEY:-}
+      OPENSUBTITLES_API_KEY:    ${OPENSUBTITLES_API_KEY:-}
+      SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-ru,en}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
     networks:
@@ -211,6 +213,8 @@ services:
       TMDB_API_KEY:             ${TMDB_API_KEY:-}
       DOWNLOAD_CONCURRENCY:     ${DOWNLOAD_CONCURRENCY:-2}
       CONVERT_CONCURRENCY:      ${CONVERT_CONCURRENCY:-1}
+      OPENSUBTITLES_API_KEY:    ${OPENSUBTITLES_API_KEY:-}
+      SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-ru,en}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
     networks:

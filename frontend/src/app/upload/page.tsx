@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Nav } from '@/components/Nav'
 import { tmdbLookup, uploadMovie, browseRemoteUrl, createRemoteDownloadJob } from '@/lib/api'
-import type { RemoteMovie, DownloadItem } from '@/types'
+import type { RemoteMovie, DownloadItem, ProxyConfig } from '@/types'
 
 type Tab = 'local' | 'remote'
 
@@ -100,6 +100,46 @@ export default function UploadPage() {
   const [downloadItems, setDownloadItems] = useState<Map<string, DownloadItem>>(new Map())
   const [downloading, setDownloading] = useState(false)
 
+  // ── Proxy state ───────────────────────────────────────────────────────────
+  const [proxyEnabled, setProxyEnabled] = useState(false)
+  const [proxyHost, setProxyHost] = useState('')
+  const [proxyPort, setProxyPort] = useState('')
+  const [proxyType, setProxyType] = useState<'SOCKS5' | 'HTTP'>('SOCKS5')
+  const [proxyUser, setProxyUser] = useState('')
+  const [proxyPass, setProxyPass] = useState('')
+
+  // Load proxy settings from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('proxySettings')
+      if (saved) {
+        const p = JSON.parse(saved)
+        if (p.enabled !== undefined) setProxyEnabled(p.enabled)
+        if (p.host) setProxyHost(p.host)
+        if (p.port) setProxyPort(p.port)
+        if (p.type === 'SOCKS5' || p.type === 'HTTP') setProxyType(p.type)
+        if (p.username) setProxyUser(p.username)
+        if (p.password) setProxyPass(p.password)
+      }
+    } catch {}
+  }, [])
+
+  // Save proxy settings to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('proxySettings', JSON.stringify({
+        enabled: proxyEnabled, host: proxyHost, port: proxyPort,
+        type: proxyType, username: proxyUser, password: proxyPass,
+      }))
+    } catch {}
+  }, [proxyEnabled, proxyHost, proxyPort, proxyType, proxyUser, proxyPass])
+
+  function buildProxyConfig(): ProxyConfig | undefined {
+    if (!proxyEnabled) return undefined
+    return { enabled: true, host: proxyHost, port: parseInt(proxyPort, 10) || 0, type: proxyType,
+             username: proxyUser, password: proxyPass }
+  }
+
   async function handleBrowse() {
     if (!remoteUrl.trim()) return
     setBrowsing(true)
@@ -108,7 +148,7 @@ export default function UploadPage() {
     setSelected(new Set())
     setDownloadItems(new Map())
     try {
-      const movies = await browseRemoteUrl(remoteUrl.trim())
+      const movies = await browseRemoteUrl(remoteUrl.trim(), buildProxyConfig())
       const sorted = [...movies].sort((a, b) => a.name.localeCompare(b.name))
       setRemoteMovies(sorted)
     } catch (err: unknown) {
@@ -150,7 +190,7 @@ export default function UploadPage() {
     // Submit all in parallel
     await Promise.all(toDownload.map(async (movie) => {
       try {
-        const resp = await createRemoteDownloadJob(movie.video_file!.url, movie.video_file!.name)
+        const resp = await createRemoteDownloadJob(movie.video_file!.url, movie.video_file!.name, buildProxyConfig())
         setDownloadItems((prev) => new Map(prev).set(movie.url, {
           movie, state: 'queued', jobId: resp.job_id,
         }))
@@ -359,6 +399,76 @@ export default function UploadPage() {
               </button>
             </div>
 
+            {/* Proxy settings */}
+            <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3 space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={proxyEnabled}
+                  onChange={(e) => setProxyEnabled(e.target.checked)}
+                  className="rounded border-gray-600 bg-gray-700 text-indigo-500 focus:ring-indigo-500"
+                />
+                <span className="text-sm font-medium text-gray-300">Использовать прокси</span>
+              </label>
+              {proxyEnabled && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2 flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-500 mb-1">Хост</label>
+                      <input
+                        type="text"
+                        value={proxyHost}
+                        onChange={(e) => setProxyHost(e.target.value)}
+                        placeholder="103.163.247.44"
+                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="w-24">
+                      <label className="block text-xs text-gray-500 mb-1">Порт</label>
+                      <input
+                        type="text"
+                        value={proxyPort}
+                        onChange={(e) => setProxyPort(e.target.value)}
+                        placeholder="1080"
+                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="w-28">
+                      <label className="block text-xs text-gray-500 mb-1">Тип</label>
+                      <select
+                        value={proxyType}
+                        onChange={(e) => setProxyType(e.target.value as 'SOCKS5' | 'HTTP')}
+                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="SOCKS5">SOCKS5</option>
+                        <option value="HTTP">HTTP</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Логин</label>
+                    <input
+                      type="text"
+                      value={proxyUser}
+                      onChange={(e) => setProxyUser(e.target.value)}
+                      placeholder="proxyuser"
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Пароль</label>
+                    <input
+                      type="password"
+                      value={proxyPass}
+                      onChange={(e) => setProxyPass(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {browseError && (
               <p className="text-sm text-red-400">{browseError}</p>
             )}
@@ -383,7 +493,7 @@ export default function UploadPage() {
                   <div className="flex gap-2">
                     {queuedCount > 0 && (
                       <button
-                        onClick={() => router.push('/jobs')}
+                        onClick={() => router.push('/queue')}
                         className="px-4 py-1.5 bg-green-700 hover:bg-green-600 rounded text-sm font-medium"
                       >
                         Открыть задания

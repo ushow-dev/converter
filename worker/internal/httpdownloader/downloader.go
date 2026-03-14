@@ -8,13 +8,16 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"app/worker/internal/model"
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
+	"golang.org/x/net/proxy"
 )
 
 // Worker consumes remote_download_queue and downloads video files via HTTP.
@@ -23,7 +26,6 @@ type Worker struct {
 	q         *queue.Client
 	jobRepo   *repository.JobRepository
 	mediaRoot string
-	client    *http.Client
 }
 
 // New creates an HTTP download Worker.
@@ -32,7 +34,6 @@ func New(q *queue.Client, jobRepo *repository.JobRepository, mediaRoot string) *
 		q:         q,
 		jobRepo:   jobRepo,
 		mediaRoot: mediaRoot,
-		client:    &http.Client{}, // no global timeout — downloads can take a long time
 	}
 }
 
@@ -114,7 +115,8 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	log.Info("starting HTTP download", "url", msg.Payload.SourceURL, "dest", destPath)
 
-	if err := w.downloadWithProgress(ctx, msg.JobID, msg.Payload.SourceURL, destPath, log); err != nil {
+	client := buildHTTPClient(msg.Payload.ProxyConfig)
+	if err := w.downloadWithProgress(ctx, client, msg.JobID, msg.Payload.SourceURL, destPath, log); err != nil {
 		if ctx.Err() != nil {
 			return
 		}
@@ -156,9 +158,52 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	log.Info("convert job enqueued")
 }
 
+// buildHTTPClient returns an *http.Client configured to use the given proxy settings.
+// If cfg is nil, disabled, or has no host, it returns a plain client with no global timeout.
+func buildHTTPClient(cfg *model.ProxyConfig) *http.Client {
+	if cfg == nil || !cfg.Enabled || cfg.Host == "" {
+		return &http.Client{} // no global timeout — downloads can take a long time
+	}
+
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+
+	switch strings.ToUpper(cfg.Type) {
+	case "SOCKS5":
+		var auth *proxy.Auth
+		if cfg.Username != "" {
+			auth = &proxy.Auth{User: cfg.Username, Password: cfg.Password}
+		}
+		dialer, err := proxy.SOCKS5("tcp", addr, auth, proxy.Direct)
+		if err != nil {
+			break
+		}
+		if cd, ok := dialer.(proxy.ContextDialer); ok {
+			return &http.Client{
+				Transport: &http.Transport{DialContext: cd.DialContext},
+			}
+		}
+	case "HTTP":
+		var userInfo *url.Userinfo
+		if cfg.Username != "" {
+			userInfo = url.UserPassword(cfg.Username, cfg.Password)
+		}
+		proxyURL := &url.URL{
+			Scheme: "http",
+			Host:   addr,
+			User:   userInfo,
+		}
+		return &http.Client{
+			Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)},
+		}
+	}
+
+	return &http.Client{}
+}
+
 // downloadWithProgress streams a remote URL to destPath, reporting progress to the DB.
 func (w *Worker) downloadWithProgress(
 	ctx context.Context,
+	client *http.Client,
 	jobID, sourceURL, destPath string,
 	log *slog.Logger,
 ) error {
@@ -167,7 +212,7 @@ func (w *Worker) downloadWithProgress(
 		return fmt.Errorf("build request: %w", err)
 	}
 
-	resp, err := w.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("http get: %w", err)
 	}

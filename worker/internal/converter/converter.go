@@ -29,10 +29,11 @@ type Worker struct {
 	jobRepo         *repository.JobRepository
 	assetRepo       *repository.AssetRepository
 	movieRepo       *repository.MovieRepository
-	subtitleFetcher *subtitles.Fetcher       // nil if OpenSubtitles not configured
+	subtitleFetcher *subtitles.Fetcher // nil if OpenSubtitles not configured
 	subtitleRepo    *repository.SubtitleRepository
 	mediaRoot       string
 	tmdbAPIKey      string
+	ffmpegThreads   int // 0 = auto
 }
 
 // New creates a convert Worker.
@@ -45,11 +46,12 @@ func New(
 	subtitleRepo *repository.SubtitleRepository,
 	mediaRoot string,
 	tmdbAPIKey string,
+	ffmpegThreads int,
 ) *Worker {
 	return &Worker{
 		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
 		subtitleFetcher: subtitleFetcher, subtitleRepo: subtitleRepo,
-		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey,
+		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey, ffmpegThreads: ffmpegThreads,
 	}
 }
 
@@ -135,7 +137,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	// ── HLS encode ───────────────────────────────────────────────────────────
 	start := time.Now()
-	result, err := ffmpeg.RunHLS(ctx, inputPath, outputDir, 4, func(pct int) {
+	result, err := ffmpeg.RunHLS(ctx, inputPath, outputDir, 4, w.ffmpegThreads, func(pct int) {
 		_ = w.jobRepo.UpdateProgress(ctx, msg.JobID, pct)
 		log.Info("convert progress", "pct", pct)
 	})

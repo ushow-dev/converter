@@ -30,11 +30,14 @@ type HLSResult struct {
 //	  360/index.m3u8  360/seg000.ts …
 //
 // segDur is the HLS segment duration in seconds (4 is recommended).
+// threads limits CPU threads per ffmpeg invocation (0 = auto, use all cores).
+// Set to cpu_count/ConvertConcurrency when running parallel conversions.
 // progressFn is called periodically with 0–99 (100 is set by the caller on success).
 func RunHLS(
 	ctx context.Context,
 	inputPath, outputDir string,
 	segDur int,
+	threads int,
 	progressFn func(int),
 ) (*HLSResult, error) {
 	// Create variant subdirs — ffmpeg requires them to exist.
@@ -74,6 +77,9 @@ func RunHLS(
 	// audio source index: 0 = original file audio; 1 = synthetic silence.
 	aSrc := "0"
 	var args []string
+	if threads > 0 {
+		args = append(args, "-threads", strconv.Itoa(threads))
+	}
 	args = append(args, "-hide_banner", "-y", "-i", inputPath)
 	if !hasAudio {
 		args = append(args,
@@ -91,10 +97,10 @@ func RunHLS(
 	// bufsize ~2× maxrate gives the encoder headroom for variable scenes.
 	args = append(args,
 		"-map", "[v720o]", "-map", aSrc+":a:0",
-		"-c:v:0", "libx264", "-preset", "faster",
+		"-c:v:0", "libx264", "-preset", "fast",
 		"-profile:v:0", "high", "-level:v:0", "4.0",
 		"-pix_fmt:v:0", "yuv420p", "-sc_threshold:v:0", "0",
-		"-x264-params:v:0", "rc-lookahead=10",
+		"-x264-params:v:0", "rc-lookahead=30",
 		"-b:v:0", "1050k", "-maxrate:v:0", "1155k", "-bufsize:v:0", "2300k",
 		"-g:v:0", gopS, "-keyint_min:v:0", gopS,
 		"-c:a:0", "aac", "-b:a:0", "80k", "-ar:a:0", "48000", "-ac:a:0", "2",
@@ -103,10 +109,10 @@ func RunHLS(
 	// 480p stream
 	args = append(args,
 		"-map", "[v480o]", "-map", aSrc+":a:0",
-		"-c:v:1", "libx264", "-preset", "faster",
+		"-c:v:1", "libx264", "-preset", "fast",
 		"-profile:v:1", "high", "-level:v:1", "4.0",
 		"-pix_fmt:v:1", "yuv420p", "-sc_threshold:v:1", "0",
-		"-x264-params:v:1", "rc-lookahead=10",
+		"-x264-params:v:1", "rc-lookahead=30",
 		"-b:v:1", "700k", "-maxrate:v:1", "770k", "-bufsize:v:1", "1500k",
 		"-g:v:1", gopS, "-keyint_min:v:1", gopS,
 		"-c:a:1", "aac", "-b:a:1", "80k", "-ar:a:1", "48000", "-ac:a:1", "2",
@@ -115,10 +121,10 @@ func RunHLS(
 	// 360p stream
 	args = append(args,
 		"-map", "[v360o]", "-map", aSrc+":a:0",
-		"-c:v:2", "libx264", "-preset", "faster",
+		"-c:v:2", "libx264", "-preset", "fast",
 		"-profile:v:2", "high", "-level:v:2", "4.0",
 		"-pix_fmt:v:2", "yuv420p", "-sc_threshold:v:2", "0",
-		"-x264-params:v:2", "rc-lookahead=10",
+		"-x264-params:v:2", "rc-lookahead=30",
 		"-b:v:2", "320k", "-maxrate:v:2", "352k", "-bufsize:v:2", "700k",
 		"-g:v:2", gopS, "-keyint_min:v:2", gopS,
 		"-c:a:2", "aac", "-b:a:2", "80k", "-ar:a:2", "48000", "-ac:a:2", "2",

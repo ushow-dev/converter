@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { useSWRConfig } from 'swr'
-import { getToken, fetcher, moviesUrl, movieThumbnailSrc, formatDate, deleteJob, updateMovieIDs } from '@/lib/api'
+import { getToken, fetcher, moviesUrl, movieThumbnailSrc, formatDate, deleteJob, updateMovieIDs, getMovieSubtitles, searchSubtitles } from '@/lib/api'
 import { Nav } from '@/components/Nav'
-import type { Movie, MoviesResponse } from '@/types'
+import type { Movie, MoviesResponse, Subtitle } from '@/types'
 
 // ── Thumbnail cell ────────────────────────────────────────────────────────────
 
@@ -43,6 +43,60 @@ function Thumbnail({ movie }: { movie: Movie }) {
   return (
     <div className="flex h-16 w-11 shrink-0 items-center justify-center rounded bg-gray-800/60">
       <FilmIcon />
+    </div>
+  )
+}
+
+// ── Subtitle cell ─────────────────────────────────────────────────────────────
+
+function SubtitleCell({ movie }: { movie: Movie }) {
+  const [subs, setSubs] = useState<Subtitle[] | null>(null)
+  const [searching, setSearching] = useState(false)
+
+  useEffect(() => {
+    getMovieSubtitles(movie.id).then(r => setSubs(r.items)).catch(() => setSubs([]))
+  }, [movie.id])
+
+  async function handleSearch() {
+    setSearching(true)
+    try {
+      const result = await searchSubtitles(movie.id)
+      setSubs(result.items)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Ошибка при поиске субтитров')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap min-w-0">
+      {subs === null ? (
+        <span className="text-[10px] text-gray-700">…</span>
+      ) : subs.length === 0 ? (
+        <span className="text-[10px] text-gray-700">—</span>
+      ) : (
+        subs.map(s => (
+          <span key={s.language} className="rounded px-1.5 py-0.5 text-[10px] font-mono uppercase bg-gray-800 text-gray-400">
+            {s.language}
+          </span>
+        ))
+      )}
+      <button
+        onClick={handleSearch}
+        disabled={searching || !movie.tmdb_id}
+        title={!movie.tmdb_id ? 'Требуется TMDB ID' : 'Поиск субтитров на OpenSubtitles'}
+        className="ml-0.5 rounded p-1 text-gray-600 hover:bg-indigo-900/40 hover:text-indigo-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        {searching ? (
+          <div className="h-3.5 w-3.5 animate-spin rounded-full border border-gray-600 border-t-indigo-400" />
+        ) : (
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M7 8h10M7 12h6m-6 4h4M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" />
+          </svg>
+        )}
+      </button>
     </div>
   )
 }
@@ -167,6 +221,11 @@ function MovieRow({
         {formatDate(movie.created_at)}
       </td>
 
+      {/* Subtitles */}
+      <td className="px-3 py-2">
+        <SubtitleCell movie={movie} />
+      </td>
+
       {/* Delete */}
       <td className="px-3 py-2 text-right">
         {movie.job_id && (
@@ -277,6 +336,7 @@ export default function MoviesPage() {
                   <th className="px-3 py-2">TMDB</th>
                   <th className="px-3 py-2">Название</th>
                   <th className="px-3 py-2">Добавлен</th>
+                  <th className="px-3 py-2">Субтитры</th>
                   <th className="px-3 py-2 w-10" />
                 </tr>
               </thead>

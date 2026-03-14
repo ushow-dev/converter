@@ -218,8 +218,9 @@ func (h *JobsHandler) RemoteDownload(w http.ResponseWriter, r *http.Request) {
 	cid := auth.GetCorrelationID(r.Context())
 
 	var req struct {
-		URL      string `json:"url"`
-		Filename string `json:"filename"`
+		URL         string             `json:"url"`
+		Filename    string             `json:"filename"`
+		ProxyConfig *model.ProxyConfig `json:"proxy_config"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid JSON body", false, cid)
@@ -234,6 +235,7 @@ func (h *JobsHandler) RemoteDownload(w http.ResponseWriter, r *http.Request) {
 		SourceURL:     req.URL,
 		Filename:      req.Filename,
 		CorrelationID: cid,
+		ProxyConfig:   req.ProxyConfig,
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create remote download job", false, cid)

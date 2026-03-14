@@ -28,6 +28,11 @@ type Config struct {
 	ConvertConcurrency      int
 	HTTPDownloadConcurrency int
 
+	// FFmpeg thread limit per job (0 = auto/all cores).
+	// Set to cpu_count/ConvertConcurrency when running parallel conversions,
+	// e.g. FFMPEG_THREADS=8 with CONVERT_CONCURRENCY=2 on a 16-core host.
+	FFmpegThreads int
+
 	// Internal health server port
 	HealthPort string
 
@@ -54,6 +59,7 @@ func Load() (*Config, error) {
 		DownloadConcurrency:     intEnv("DOWNLOAD_CONCURRENCY", 2),
 		ConvertConcurrency:      intEnv("CONVERT_CONCURRENCY", 1),
 		HTTPDownloadConcurrency: intEnv("HTTP_DOWNLOAD_CONCURRENCY", 3),
+		FFmpegThreads:           intEnv("FFMPEG_THREADS", 0),
 		TMDBAPIKey:          getEnv("TMDB_API_KEY", ""),
 		OpenSubtitlesAPIKey: getEnv("OPENSUBTITLES_API_KEY", ""),
 		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "ru,en")),

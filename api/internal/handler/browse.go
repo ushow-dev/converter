@@ -1,16 +1,20 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"app/api/internal/auth"
+	"app/api/internal/model"
+	"golang.org/x/net/proxy"
 )
 
 // RemoteFile describes a single file found in a remote directory listing.
@@ -54,44 +58,51 @@ var (
 )
 
 // BrowseHandler handles remote directory listing requests.
-type BrowseHandler struct {
-	client *http.Client
-}
+type BrowseHandler struct{}
 
-// NewBrowseHandler creates a BrowseHandler with a 15-second timeout.
+// NewBrowseHandler creates a BrowseHandler.
 func NewBrowseHandler() *BrowseHandler {
-	return &BrowseHandler{
-		client: &http.Client{Timeout: 15 * time.Second},
-	}
+	return &BrowseHandler{}
 }
 
-// Browse handles GET /api/admin/remote-browse?url=...
+// Browse handles POST /api/admin/remote-browse.
+// Body: {"url": "...", "proxy_config": {...} | null}
 // It fetches the given URL (expected: Apache/Nginx directory listing),
 // discovers one level of subdirectories, and for each returns the
 // video file and subtitle files found inside.
 func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 	cid := auth.GetCorrelationID(r.Context())
-	rawURL := r.URL.Query().Get("url")
-	if rawURL == "" {
-		respondError(w, http.StatusBadRequest, "MISSING_URL", "url query parameter is required", false, cid)
+
+	var req struct {
+		URL         string             `json:"url"`
+		ProxyConfig *model.ProxyConfig `json:"proxy_config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid JSON body", false, cid)
+		return
+	}
+	if req.URL == "" {
+		respondError(w, http.StatusBadRequest, "MISSING_URL", "url is required", false, cid)
 		return
 	}
 
-	base, err := url.Parse(rawURL)
+	base, err := url.Parse(req.URL)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "INVALID_URL", "invalid url: "+err.Error(), false, cid)
 		return
 	}
 
+	client := buildProxyClient(req.ProxyConfig, 15*time.Second)
+
 	// Fetch root listing
-	body, err := h.fetch(rawURL)
+	body, err := fetchURL(client, req.URL)
 	if err != nil {
 		respondError(w, http.StatusBadGateway, "FETCH_ERROR", "failed to fetch url: "+err.Error(), true, cid)
 		return
 	}
 
 	// Find subdirectory links (href ending with "/", not "..", not absolute http(s))
-	dirs := h.findDirs(base, body)
+	dirs := findDirs(base, body)
 	if len(dirs) == 0 {
 		respondJSON(w, http.StatusOK, []RemoteMovie{})
 		return
@@ -110,7 +121,7 @@ func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			movie := h.scanDir(name, dirURL)
+			movie := scanDir(client, name, dirURL)
 			mu.Lock()
 			movies = append(movies, movie)
 			mu.Unlock()
@@ -121,9 +132,53 @@ func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, movies)
 }
 
-// fetch GETs a URL and returns the response body as a string.
-func (h *BrowseHandler) fetch(rawURL string) (string, error) {
-	resp, err := h.client.Get(rawURL) //nolint:noctx
+// buildProxyClient returns an *http.Client configured to use the given proxy settings.
+// If cfg is nil, disabled, or has no host, it returns a plain client with the given timeout.
+func buildProxyClient(cfg *model.ProxyConfig, timeout time.Duration) *http.Client {
+	if cfg == nil || !cfg.Enabled || cfg.Host == "" {
+		return &http.Client{Timeout: timeout}
+	}
+
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+
+	switch strings.ToUpper(cfg.Type) {
+	case "SOCKS5":
+		var auth *proxy.Auth
+		if cfg.Username != "" {
+			auth = &proxy.Auth{User: cfg.Username, Password: cfg.Password}
+		}
+		dialer, err := proxy.SOCKS5("tcp", addr, auth, proxy.Direct)
+		if err != nil {
+			break
+		}
+		if cd, ok := dialer.(proxy.ContextDialer); ok {
+			return &http.Client{
+				Transport: &http.Transport{DialContext: cd.DialContext},
+				Timeout:   timeout,
+			}
+		}
+	case "HTTP":
+		var userInfo *url.Userinfo
+		if cfg.Username != "" {
+			userInfo = url.UserPassword(cfg.Username, cfg.Password)
+		}
+		proxyURL := &url.URL{
+			Scheme: "http",
+			Host:   addr,
+			User:   userInfo,
+		}
+		return &http.Client{
+			Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)},
+			Timeout:   timeout,
+		}
+	}
+
+	return &http.Client{Timeout: timeout}
+}
+
+// fetchURL GETs a URL using the given client and returns the response body as a string.
+func fetchURL(client *http.Client, rawURL string) (string, error) {
+	resp, err := client.Get(rawURL) //nolint:noctx
 	if err != nil {
 		return "", err
 	}
@@ -137,7 +192,7 @@ func (h *BrowseHandler) fetch(rawURL string) (string, error) {
 
 // findDirs parses directory listing HTML and returns name→absoluteURL map
 // for all entries that look like subdirectories (href ending with "/").
-func (h *BrowseHandler) findDirs(base *url.URL, body string) map[string]string {
+func findDirs(base *url.URL, body string) map[string]string {
 	dirs := make(map[string]string)
 	for _, m := range hrefRe.FindAllStringSubmatch(body, -1) {
 		href := m[1]
@@ -158,10 +213,11 @@ func (h *BrowseHandler) findDirs(base *url.URL, body string) map[string]string {
 			continue
 		}
 		abs := base.ResolveReference(ref).String()
-		// Use the unescaped directory name (trim trailing slash)
-		name, _ := url.PathUnescape(strings.TrimSuffix(href, "/"))
-		if name == "" {
-			name = href
+		// Use only the last path component as the directory name
+		decoded, _ := url.PathUnescape(strings.TrimSuffix(href, "/"))
+		name := path.Base(decoded)
+		if name == "" || name == "." {
+			name = strings.TrimSuffix(href, "/")
 		}
 		dirs[name] = abs
 	}
@@ -169,14 +225,14 @@ func (h *BrowseHandler) findDirs(base *url.URL, body string) map[string]string {
 }
 
 // scanDir fetches a subdirectory URL and returns a RemoteMovie describing its contents.
-func (h *BrowseHandler) scanDir(name, dirURL string) RemoteMovie {
+func scanDir(client *http.Client, name, dirURL string) RemoteMovie {
 	movie := RemoteMovie{
 		Name:          name,
 		URL:           dirURL,
 		SubtitleFiles: []RemoteFile{},
 	}
 
-	body, err := h.fetch(dirURL)
+	body, err := fetchURL(client, dirURL)
 	if err != nil {
 		return movie
 	}
@@ -209,7 +265,8 @@ func (h *BrowseHandler) scanDir(name, dirURL string) RemoteMovie {
 			continue
 		}
 		abs := base.ResolveReference(ref).String()
-		fname, _ := url.PathUnescape(href)
+		decoded, _ := url.PathUnescape(href)
+		fname := path.Base(decoded)
 
 		// Try to extract size from the surrounding row in the HTML body.
 		size := extractSize(body, href)

@@ -94,6 +94,15 @@ export interface SubtitlesResponse {
   items: Subtitle[]
 }
 
+export interface ProxyConfig {
+  enabled: boolean
+  host: string
+  port: number
+  type: 'SOCKS5' | 'HTTP'
+  username: string
+  password: string
+}
+
 export interface RemoteFile {
   name: string
   size: string

@@ -297,19 +297,24 @@ export async function uploadSubtitle(
   return res.json() as Promise<SubtitlesResponse>
 }
 
-export async function browseRemoteUrl(url: string): Promise<import('@/types').RemoteMovie[]> {
+export async function browseRemoteUrl(
+  url: string,
+  proxy?: import('@/types').ProxyConfig,
+): Promise<import('@/types').RemoteMovie[]> {
   return apiFetch<import('@/types').RemoteMovie[]>(
-    `/api/admin/remote-browse?url=${encodeURIComponent(url)}`,
+    '/api/admin/remote-browse',
+    { method: 'POST', body: JSON.stringify({ url, proxy_config: proxy ?? null }) },
   )
 }
 
 export async function createRemoteDownloadJob(
   url: string,
   filename: string,
+  proxy?: import('@/types').ProxyConfig,
 ): Promise<import('@/types').RemoteDownloadResponse> {
   return apiFetch<import('@/types').RemoteDownloadResponse>(
     '/api/admin/jobs/remote-download',
-    { method: 'POST', body: JSON.stringify({ url, filename }) },
+    { method: 'POST', body: JSON.stringify({ url, filename, proxy_config: proxy ?? null }) },
   )
 }
 

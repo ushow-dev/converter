@@ -65,7 +65,7 @@ func New(deps Dependencies) http.Handler {
 			r.Get("/movies/{movieId}/subtitles", deps.SubtitleHandler.List)
 			r.Post("/movies/{movieId}/subtitles", deps.SubtitleHandler.Upload)
 			r.Post("/movies/{movieId}/subtitles/search", deps.SubtitleHandler.Search)
-			r.Get("/remote-browse", deps.BrowseHandler.Browse)
+			r.Post("/remote-browse", deps.BrowseHandler.Browse)
 			r.Post("/jobs/remote-download", deps.JobsHandler.RemoteDownload)
 			r.Get("/movies/tmdb/search", deps.MoviesHandler.TMDBSearch)
 		})

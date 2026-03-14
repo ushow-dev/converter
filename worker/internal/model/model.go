@@ -68,6 +68,16 @@ type ConvertJob struct {
 	Title         string `json:"title"`
 }
 
+// ProxyConfig holds optional proxy settings for remote HTTP requests.
+type ProxyConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Type     string `json:"type"`     // "SOCKS5" or "HTTP"
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // RemoteDownloadMessage is the envelope consumed from remote_download_queue.
 type RemoteDownloadMessage struct {
 	SchemaVersion string            `json:"schema_version"`
@@ -83,12 +93,13 @@ type RemoteDownloadMessage struct {
 
 // RemoteDownloadJob is the inner payload for an HTTP download task.
 type RemoteDownloadJob struct {
-	SourceURL string `json:"source_url"`
-	Filename  string `json:"filename"`
-	IMDbID    string `json:"imdb_id"`
-	TMDBID    string `json:"tmdb_id"`
-	Title     string `json:"title"`
-	TargetDir string `json:"target_dir"`
+	SourceURL   string       `json:"source_url"`
+	Filename    string       `json:"filename"`
+	IMDbID      string       `json:"imdb_id"`
+	TMDBID      string       `json:"tmdb_id"`
+	Title       string       `json:"title"`
+	TargetDir   string       `json:"target_dir"`
+	ProxyConfig *ProxyConfig `json:"proxy_config,omitempty"`
 }
 
 // ─── Asset ───────────────────────────────────────────────────────────────────
