@@ -124,6 +124,21 @@ export interface RemoteDownloadResponse {
   created_at: string
 }
 
+export interface PlayerSubtitle {
+  language: string
+  url: string
+}
+
+export interface PlayerMovieResponse {
+  data: {
+    movie: { id: number; imdb_id: string | null; tmdb_id: string | null }
+    playback: { hls: string }
+    assets: { poster: string }
+    subtitles: PlayerSubtitle[]
+  }
+  meta: { version: string }
+}
+
 export type DownloadItemState = 'idle' | 'submitting' | 'queued' | 'error'
 
 export interface DownloadItem {

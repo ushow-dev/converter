@@ -11,6 +11,7 @@ import type {
   Movie,
   MoviesResponse,
   SubtitlesResponse,
+  PlayerMovieResponse,
 } from '@/types'
 
 // ── Token storage ────────────────────────────────────────────────────────────
@@ -323,6 +324,19 @@ export async function searchSubtitles(movieId: number): Promise<SubtitlesRespons
     `/api/admin/movies/${movieId}/subtitles/search`,
     { method: 'POST' },
   )
+}
+
+export async function getPlayerMovie(params: {
+  tmdb_id?: string
+  imdb_id?: string
+}): Promise<PlayerMovieResponse> {
+  const p = new URLSearchParams()
+  if (params.tmdb_id) p.set('tmdb_id', params.tmdb_id)
+  else if (params.imdb_id) p.set('imdb_id', params.imdb_id)
+  const playerKey = process.env.NEXT_PUBLIC_PLAYER_KEY ?? ''
+  return apiFetch<PlayerMovieResponse>(`/api/player/movie?${p}`, {
+    headers: { 'X-Player-Key': playerKey },
+  })
 }
 
 // ── Formatters ───────────────────────────────────────────────────────────────

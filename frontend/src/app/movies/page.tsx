@@ -157,16 +157,63 @@ function EditableID({
   )
 }
 
+// ── Player modal ──────────────────────────────────────────────────────────────
+
+const PLAYER_URL = (process.env.NEXT_PUBLIC_PLAYER_URL ?? '').replace(/\/$/, '')
+
+function PlayerModal({ movie, onClose }: { movie: Movie; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const src = `${PLAYER_URL}/?tmdb_id=${movie.tmdb_id}`
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-3xl mx-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute -top-8 right-0 text-gray-400 hover:text-white text-sm"
+        >
+          ✕ закрыть
+        </button>
+        <div className="w-full overflow-hidden rounded-lg bg-black" style={{ aspectRatio: '16/10' }}>
+          <iframe
+            src={src}
+            style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
+            scrolling="no"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+        {movie.title && (
+          <p className="mt-2 text-center text-sm text-gray-400">{movie.title}{movie.year ? ` (${movie.year})` : ''}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Table row ─────────────────────────────────────────────────────────────────
 
 function MovieRow({
   movie,
   onDelete,
   onUpdate,
+  onPlay,
 }: {
   movie: Movie
   onDelete: (jobId: string) => void
   onUpdate: (movieId: number, imdbId: string, tmdbId: string, title: string) => void
+  onPlay: (movie: Movie) => void
 }) {
   return (
     <tr className="group border-b border-gray-800 hover:bg-gray-900/60">
@@ -226,6 +273,20 @@ function MovieRow({
         <SubtitleCell movie={movie} />
       </td>
 
+      {/* Play */}
+      <td className="px-2 py-2">
+        <button
+          onClick={() => onPlay(movie)}
+          disabled={!movie.tmdb_id}
+          title={!movie.tmdb_id ? 'Требуется TMDB ID' : 'Смотреть'}
+          className="rounded p-1.5 text-gray-600 hover:bg-green-900/40 hover:text-green-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </button>
+      </td>
+
       {/* Delete */}
       <td className="px-3 py-2 text-right">
         {movie.job_id && (
@@ -251,6 +312,7 @@ export default function MoviesPage() {
   const router = useRouter()
   const { mutate } = useSWRConfig()
   const swrKey = moviesUrl(100)
+  const [playingMovie, setPlayingMovie] = useState<Movie | null>(null)
 
   useEffect(() => {
     if (!getToken()) router.replace('/login')
@@ -283,6 +345,7 @@ export default function MoviesPage() {
 
   return (
     <div className="min-h-screen">
+      {playingMovie && <PlayerModal movie={playingMovie} onClose={() => setPlayingMovie(null)} />}
       <Nav />
 
       <main className="px-6 py-8">
@@ -337,12 +400,13 @@ export default function MoviesPage() {
                   <th className="px-3 py-2">Название</th>
                   <th className="px-3 py-2">Добавлен</th>
                   <th className="px-3 py-2">Субтитры</th>
+                  <th className="px-3 py-2 w-8" />
                   <th className="px-3 py-2 w-10" />
                 </tr>
               </thead>
               <tbody>
                 {data.items.map(movie => (
-                  <MovieRow key={movie.id} movie={movie} onDelete={handleDelete} onUpdate={handleUpdate} />
+                  <MovieRow key={movie.id} movie={movie} onDelete={handleDelete} onUpdate={handleUpdate} onPlay={setPlayingMovie} />
                 ))}
               </tbody>
             </table>

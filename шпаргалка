@@ -220,4 +220,24 @@ curl --location 'http://localhost:3000/api/player/movie?imdb_id=333' \
 посмотреть содержимое БД:
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT * FROM movies ORDER BY id;"
 
+Копирование фильма на сервер:
+scp -r /Users/robospot/prj/cleaner/converter/media/converted/mov_80baaede8740795c \
+root@89.167.98.18:/opt/converter/media/converted/
 
+
+Добавить фильм в БД:
+docker compose exec -T postgres psql -U app -d mediadb <<'EOF'
+INSERT INTO movies (storage_key, tmdb_id, imdb_id, title)
+VALUES ('mov_80baaede8740795c', '993988', NULL, NULL)
+ON CONFLICT (storage_key) DO UPDATE
+    SET tmdb_id = EXCLUDED.tmdb_id;
+
+INSERT INTO movie_subtitles (movie_id, language, source, storage_path)
+VALUES (
+    (SELECT id FROM movies WHERE storage_key = 'mov_80baaede8740795c'),
+    'en',
+    'upload',
+    'media/converted/mov_80baaede8740795c/subtitles/en.vtt'
+)
+ON CONFLICT (movie_id, language) DO NOTHING;
+EOF

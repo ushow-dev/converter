@@ -8,6 +8,7 @@ export interface MovieResponse {
     movie: { id: number; imdb_id: string; tmdb_id: string }
     playback: { hls: string }
     assets: { poster: string }
+    subtitles?: { language: string; url: string }[]
   }
   meta: { version: string }
 }
@@ -32,6 +33,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const [qualities, setQualities] = useState<QualityLevel[]>([])
   const [selectedQuality, setSelectedQuality] = useState<string>('auto')
   const [showQualityMenu, setShowQualityMenu] = useState(false)
+  const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const quickbarRef = useRef<HTMLDivElement>(null)
@@ -378,6 +380,21 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
   }, [fluidReady, movieData, reattachHlsAfterAd, mountSettingsInPlayer, streamMode])
 
+  // Sync subtitle track visibility whenever activeSubtitle changes
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const sync = () => {
+      const tracks = video.textTracks
+      for (let i = 0; i < tracks.length; i++) {
+        tracks[i].mode = tracks[i].language === activeSubtitle ? 'showing' : 'hidden'
+      }
+    }
+    sync()
+    const id = setTimeout(sync, 200)
+    return () => clearTimeout(id)
+  }, [activeSubtitle])
+
   const applyQuality = useCallback(
     (value: string) => {
       qualityModeRef.current = value
@@ -406,6 +423,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   }, [])
 
   const poster = movieData.data.assets.poster
+  const subtitles = movieData.data.subtitles ?? []
 
   return (
     <>
@@ -425,7 +443,17 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
             playsInline
             crossOrigin="anonymous"
             preload="metadata"
-          />
+          >
+            {subtitles.map(sub => (
+              <track
+                key={sub.language}
+                kind="subtitles"
+                src={sub.url}
+                srcLang={sub.language}
+                label={sub.language.toUpperCase()}
+              />
+            ))}
+          </video>
         </div>
 
         <div className="quality-quickbar" ref={quickbarRef}>
@@ -445,6 +473,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
           </button>
 
           <div className={`settings-menu${showQualityMenu ? ' is-open' : ''}`}>
+            <div className="settings-section-label">Качество</div>
             <button
               type="button"
               className={`quality-item${selectedQuality === 'auto' ? ' is-active' : ''}`}
@@ -462,6 +491,29 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
                 {q.label}
               </button>
             ))}
+            {subtitles.length > 0 && (
+              <>
+                <div className="settings-menu-separator" />
+                <div className="settings-section-label">Субтитры</div>
+                <button
+                  type="button"
+                  className={`quality-item${activeSubtitle === null ? ' is-active' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveSubtitle(null); setShowQualityMenu(false) }}
+                >
+                  выкл
+                </button>
+                {subtitles.map(sub => (
+                  <button
+                    key={sub.language}
+                    type="button"
+                    className={`quality-item${activeSubtitle === sub.language ? ' is-active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setActiveSubtitle(sub.language); setShowQualityMenu(false) }}
+                  >
+                    {sub.language.toUpperCase()}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -47,6 +47,20 @@ html, body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 
 }
 .settings-menu.is-open { display: block; }
 
+/* Section separator inside settings menu */
+.settings-menu-separator {
+  height: 1px; background: #333;
+  margin: 4px 0;
+}
+
+/* Section label inside settings menu */
+.settings-section-label {
+  padding: 4px 9px 2px;
+  font-size: 10px; line-height: 1.2;
+  color: #666; text-transform: uppercase;
+  letter-spacing: 0.06em; pointer-events: none;
+}
+
 /* Quality option buttons */
 .quality-item {
   display: block; width: 100%;
