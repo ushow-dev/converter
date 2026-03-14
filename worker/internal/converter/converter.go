@@ -11,6 +11,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"app/worker/internal/ffmpeg"
@@ -168,6 +171,18 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		return
 	}
 	finalDir := filepath.Join(w.mediaRoot, "converted", movie.StorageKey)
+
+	// ── Preserve original source file inside temp output dir ─────────────────
+	// Moving it here (before the Rename below) carries it atomically to finalDir.
+	// RemoveAll(downloadsDir) later won't touch it since it's already moved out.
+	if src := msg.Payload.InputPath; src != "" {
+		destName := buildSourceFilename(movie, msg.Payload.Title, msg.Payload.TMDBID, filepath.Ext(src))
+		if err := os.Rename(src, filepath.Join(outputDir, destName)); err != nil {
+			log.Warn("could not preserve source file", "src", src, "error", err)
+		} else {
+			log.Info("source file staged for final dir", "name", destName)
+		}
+	}
 
 	// ── Move temp → final ─────────────────────────────────────────────────────
 	// Remove stale final dir from a previous attempt if present.
@@ -346,4 +361,70 @@ func downloadTMDBBackdrop(ctx context.Context, apiKey, tmdbID, destPath string) 
 
 	_, err = io.Copy(f, imgResp.Body)
 	return err
+}
+
+// ─── source file naming ───────────────────────────────────────────────────────
+
+var reYear = regexp.MustCompile(`\((\d{4})\)`)
+
+// buildSourceFilename constructs a clean, filesystem-safe name for the preserved
+// original video file: title_year_tmdbID.ext  (e.g. inception_2010_tmdb27205.mkv).
+func buildSourceFilename(movie *model.Movie, fallbackTitle, fallbackTMDB, ext string) string {
+	title := fallbackTitle
+	if movie.Title != nil && *movie.Title != "" {
+		title = *movie.Title
+	}
+
+	tmdbID := fallbackTMDB
+	if movie.TMDBID != nil && *movie.TMDBID != "" {
+		tmdbID = *movie.TMDBID
+	}
+
+	// Try year from DB; if absent, parse from title string (e.g. "Inception (2010)").
+	var year int
+	if movie.Year != nil {
+		year = *movie.Year
+	} else if m := reYear.FindStringSubmatch(title); m != nil {
+		if y, err := strconv.Atoi(m[1]); err == nil {
+			year = y
+		}
+		// Strip "(year)" from the title so it doesn't appear twice.
+		title = strings.TrimSpace(reYear.ReplaceAllString(title, ""))
+	}
+
+	norm := normalizeFilenameSegment(title)
+	if norm == "" {
+		norm = "source"
+	}
+
+	var name string
+	switch {
+	case year > 0 && tmdbID != "":
+		name = fmt.Sprintf("%s_%d_%s", norm, year, tmdbID)
+	case year > 0:
+		name = fmt.Sprintf("%s_%d", norm, year)
+	case tmdbID != "":
+		name = fmt.Sprintf("%s_%s", norm, tmdbID)
+	default:
+		name = norm
+	}
+
+	return name + ext
+}
+
+// normalizeFilenameSegment lowercases s and replaces any run of non-alphanumeric
+// characters with a single underscore, trimming leading/trailing underscores.
+func normalizeFilenameSegment(s string) string {
+	var b strings.Builder
+	inSep := true // start true to trim leading separators
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			inSep = false
+		} else if !inSep {
+			b.WriteByte('_')
+			inSep = true
+		}
+	}
+	return strings.TrimRight(b.String(), "_")
 }
