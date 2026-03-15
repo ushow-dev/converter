@@ -74,7 +74,7 @@ func Load() (*Config, error) {
 		MediaSigningTTL:  getEnvDuration("MEDIA_SIGNING_TTL", 2*time.Minute),
 		Environment:         getEnv("APP_ENV", "development"),
 		OpenSubtitlesAPIKey: getEnv("OPENSUBTITLES_API_KEY", ""),
-		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "ru,en")),
+		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "en,bn,hi")),
 	}
 
 	// Resolve admin password: prefer pre-hashed value, fall back to plaintext

@@ -111,7 +111,7 @@
 
 Воркер вызывает OpenSubtitles.com REST API v1 после завершения конвертации:
 
-- `GET /api/v1/subtitles?tmdb_id=<id>&languages=ru,en` — поиск (выбирается запись с наибольшим download_count на язык);
+- `GET /api/v1/subtitles?tmdb_id=<id>&languages=en,bn,hi` — поиск (выбирается запись с наибольшим download_count на язык);
 - `POST /api/v1/download` — получение одноразовой ссылки на скачивание;
 - скачанный SRT конвертируется в WebVTT: добавляется заголовок `WEBVTT` и заменяется `,` на `.` в таймстемпах.
 
@@ -122,7 +122,7 @@
 | Переменная              | По умолчанию | Назначение                              |
 |-------------------------|--------------|-----------------------------------------|
 | `OPENSUBTITLES_API_KEY` | (пусто)      | API-ключ OpenSubtitles.com              |
-| `SUBTITLE_LANGUAGES`    | `ru,en`      | Языки через запятую (ISO 639-1)         |
+| `SUBTITLE_LANGUAGES`    | `en,bn,hi`   | Языки через запятую (ISO 639-1)         |
 
 ### Хранение
 

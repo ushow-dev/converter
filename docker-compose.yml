@@ -172,7 +172,7 @@ services:
       MEDIA_ROOT:               /media
       TMDB_API_KEY:             ${TMDB_API_KEY:-}
       OPENSUBTITLES_API_KEY:    ${OPENSUBTITLES_API_KEY:-}
-      SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-ru,en}
+      SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-en,bn,hi}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
     networks:
@@ -214,7 +214,7 @@ services:
       DOWNLOAD_CONCURRENCY:     ${DOWNLOAD_CONCURRENCY:-2}
       CONVERT_CONCURRENCY:      ${CONVERT_CONCURRENCY:-1}
       OPENSUBTITLES_API_KEY:    ${OPENSUBTITLES_API_KEY:-}
-      SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-ru,en}
+      SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-en,bn,hi}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
     networks:

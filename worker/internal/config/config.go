@@ -62,7 +62,7 @@ func Load() (*Config, error) {
 		FFmpegThreads:           intEnv("FFMPEG_THREADS", 0),
 		TMDBAPIKey:          getEnv("TMDB_API_KEY", ""),
 		OpenSubtitlesAPIKey: getEnv("OPENSUBTITLES_API_KEY", ""),
-		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "ru,en")),
+		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "en,bn,hi")),
 	}
 	return cfg, nil
 }

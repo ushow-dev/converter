@@ -216,6 +216,12 @@ http://localhost:3000/api/player/movie?imdb_id=333
 curl --location 'http://localhost:3000/api/player/movie?imdb_id=333' \
 --header 'X-Player-Key: 4VfFKjtqqkLN'
 
+Чтобы запустить веб-сервер локально:
+cd /Users/robospot/prj/cleaner/converter
+npx http-server . -p 8088 --cors
+
+затем http://127.0.0.1:3100/?tmdb_id=993988
+
 БД
 посмотреть содержимое БД:
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT * FROM movies ORDER BY id;"

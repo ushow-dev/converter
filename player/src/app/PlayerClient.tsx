@@ -18,6 +18,33 @@ interface QualityLevel {
   index: number
 }
 
+const SUBTITLE_LABELS: Record<string, string> = {
+  ru: 'Русский',
+  en: 'English',
+  uk: 'Українська',
+  es: 'Espanol',
+  fr: 'Francais',
+  de: 'Deutsch',
+  it: 'Italiano',
+  pt: 'Portugues',
+  pl: 'Polski',
+  tr: 'Turkce',
+  ja: 'Japanese',
+  ko: 'Korean',
+  zh: 'Chinese',
+}
+
+function normalizeLanguageCode(lang: string): string {
+  const trimmed = lang.trim().toLowerCase()
+  if (!trimmed) return 'und'
+  return trimmed.split(/[-_]/)[0] || 'und'
+}
+
+function subtitleLabel(lang: string): string {
+  const normalized = normalizeLanguageCode(lang)
+  return SUBTITLE_LABELS[normalized] ?? normalized.toUpperCase()
+}
+
 declare global {
   interface Window {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,7 +60,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const [qualities, setQualities] = useState<QualityLevel[]>([])
   const [selectedQuality, setSelectedQuality] = useState<string>('auto')
   const [showQualityMenu, setShowQualityMenu] = useState(false)
-  const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const quickbarRef = useRef<HTMLDivElement>(null)
@@ -48,6 +74,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const seekLoadStoppedRef = useRef(false)
   const seekWasPlayingRef = useRef(false)
   const streamUrlRef = useRef<string>(movieData.data.playback.hls)
+  const subtitleTracks = movieData.data.subtitles ?? []
 
   const setupHlsJsMode = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -314,6 +341,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         fillToContainer: true,
         responsive: true,
         autoPlay: false,
+        subtitlesEnabled: subtitleTracks.length > 0,
         playbackRateControl: false,
         qualityControl: false,
         contextMenu: {
@@ -380,21 +408,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
   }, [fluidReady, movieData, reattachHlsAfterAd, mountSettingsInPlayer, streamMode])
 
-  // Sync subtitle track visibility whenever activeSubtitle changes
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    const sync = () => {
-      const tracks = video.textTracks
-      for (let i = 0; i < tracks.length; i++) {
-        tracks[i].mode = tracks[i].language === activeSubtitle ? 'showing' : 'hidden'
-      }
-    }
-    sync()
-    const id = setTimeout(sync, 200)
-    return () => clearTimeout(id)
-  }, [activeSubtitle])
-
   const applyQuality = useCallback(
     (value: string) => {
       qualityModeRef.current = value
@@ -423,7 +436,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   }, [])
 
   const poster = movieData.data.assets.poster
-  const subtitles = movieData.data.subtitles ?? []
 
   return (
     <>
@@ -444,15 +456,19 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
             crossOrigin="anonymous"
             preload="metadata"
           >
-            {subtitles.map(sub => (
-              <track
-                key={sub.language}
-                kind="subtitles"
-                src={sub.url}
-                srcLang={sub.language}
-                label={sub.language.toUpperCase()}
-              />
-            ))}
+            {subtitleTracks.map((subtitle) => {
+              const langCode = normalizeLanguageCode(subtitle.language)
+              return (
+                <track
+                  key={`${langCode}-${subtitle.url}`}
+                  kind="metadata"
+                  src={subtitle.url}
+                  srcLang={langCode}
+                  label={subtitleLabel(subtitle.language)}
+                  default={langCode === 'ru'}
+                />
+              )
+            })}
           </video>
         </div>
 
@@ -491,29 +507,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
                 {q.label}
               </button>
             ))}
-            {subtitles.length > 0 && (
-              <>
-                <div className="settings-menu-separator" />
-                <div className="settings-section-label">Субтитры</div>
-                <button
-                  type="button"
-                  className={`quality-item${activeSubtitle === null ? ' is-active' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); setActiveSubtitle(null); setShowQualityMenu(false) }}
-                >
-                  выкл
-                </button>
-                {subtitles.map(sub => (
-                  <button
-                    key={sub.language}
-                    type="button"
-                    className={`quality-item${activeSubtitle === sub.language ? ' is-active' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); setActiveSubtitle(sub.language); setShowQualityMenu(false) }}
-                  >
-                    {sub.language.toUpperCase()}
-                  </button>
-                ))}
-              </>
-            )}
           </div>
         </div>
       </div>
