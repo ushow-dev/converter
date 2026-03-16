@@ -247,18 +247,20 @@ function MovieRow({
 
       {/* Title */}
       <td className="px-3 py-2">
-        <div className="flex items-baseline gap-2">
-          <EditableID
-            value={movie.title}
-            placeholder="Название фильма"
-            width="w-72"
-            onSave={v => onUpdate(movie.id, movie.imdb_id ?? '', movie.tmdb_id ?? '', v)}
-          />
-          {movie.year && <span className="shrink-0 text-xs text-gray-500">({movie.year})</span>}
-        </div>
+        <EditableID
+          value={movie.title}
+          placeholder="Название фильма"
+          width="w-72"
+          onSave={v => onUpdate(movie.id, movie.imdb_id ?? '', movie.tmdb_id ?? '', v)}
+        />
         {!movie.title && (
           <span className="mt-0.5 block font-mono text-[10px] text-gray-700">{movie.storage_key}</span>
         )}
+      </td>
+
+      {/* Year */}
+      <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-400">
+        {movie.year ?? <span className="text-gray-700">—</span>}
       </td>
 
       {/* Date */}
@@ -404,6 +406,7 @@ export default function MoviesPage() {
                   <th className="px-3 py-2">IMDb</th>
                   <th className="px-3 py-2">TMDB</th>
                   <th className="px-3 py-2">Название</th>
+                  <th className="px-3 py-2">Год</th>
                   <th className="px-3 py-2">Добавлен</th>
                   <th className="px-3 py-2">Субтитры</th>
                   <th className="px-3 py-2 w-8" />
