@@ -250,7 +250,9 @@ services:
       # API_URL is server-side only — used by Next.js rewrites to proxy /api/*.
       # Never exposed to the browser; client code uses relative /api/... paths.
       API_URL: http://api:8000
-      NEXT_PUBLIC_PLAYER_URL: ${NEXT_PUBLIC_PLAYER_URL:-}
+      # PLAYER_URL is served via /api/app-config route at runtime.
+      # No rebuild needed when changing this value — just restart the frontend container.
+      PLAYER_URL: ${PLAYER_URL:-}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"   # Only service exposed to host
     networks:

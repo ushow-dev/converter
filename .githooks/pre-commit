@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#
+# pre-commit hook: быстрые проверки перед коммитом
+# Installed via: git config core.hooksPath .githooks
+#
+
+set -e
+
+STAGED_GO=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
+
+# --- Go vet для изменённых Go-файлов ---
+if [ -n "$STAGED_GO" ]; then
+  echo "→ go vet (api)..."
+  if [ -d "api" ]; then
+    (cd api && go vet ./... 2>&1) || {
+      echo "  ✗ go vet api провалился. Исправьте ошибки перед коммитом."
+      exit 1
+    }
+  fi
+
+  echo "→ go vet (worker)..."
+  if [ -d "worker" ]; then
+    (cd worker && go vet ./... 2>&1) || {
+      echo "  ✗ go vet worker провалился. Исправьте ошибки перед коммитом."
+      exit 1
+    }
+  fi
+fi
+
+# --- Проверка .env не попадает в коммит ---
+STAGED_ENV=$(git diff --cached --name-only | grep -E '^(\.env|.*\.env)$' | grep -v '\.env\.example' || true)
+if [ -n "$STAGED_ENV" ]; then
+  echo ""
+  echo "  ✗ СТОП: вы пытаетесь закоммитить .env файл с секретами!"
+  echo "  Файлы: $STAGED_ENV"
+  echo ""
+  echo "  Выполните: git reset HEAD $STAGED_ENV"
+  echo ""
+  exit 1
+fi
+
+# --- Проверка на случайно добавленные секреты ---
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$STAGED_FILES" ]; then
+  # Простая проверка на паттерны секретов в staged изменениях
+  SECRET_PATTERNS='(password|secret|api_key|apikey|private_key)\s*=\s*["\x27][^"\x27]{8,}'
+  FOUND=$(git diff --cached | grep -iE "^\+.*$SECRET_PATTERNS" || true)
+  if [ -n "$FOUND" ]; then
+    echo ""
+    echo "  ⚠ Предупреждение: найдены возможные секреты в коммите:"
+    echo "$FOUND" | head -5
+    echo ""
+    echo "  Если это тестовые данные — продолжите с: git commit --no-verify"
+    echo "  Если реальные секреты — уберите их из кода."
+    echo ""
+    exit 1
+  fi
+fi
+
+exit 0

@@ -159,16 +159,14 @@ function EditableID({
 
 // ── Player modal ──────────────────────────────────────────────────────────────
 
-const PLAYER_URL = (process.env.NEXT_PUBLIC_PLAYER_URL ?? '').replace(/\/$/, '')
-
-function PlayerModal({ movie, onClose }: { movie: Movie; onClose: () => void }) {
+function PlayerModal({ movie, playerUrl, onClose }: { movie: Movie; playerUrl: string; onClose: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const src = `${PLAYER_URL}/?tmdb_id=${movie.tmdb_id}`
+  const src = `${playerUrl}/?tmdb_id=${movie.tmdb_id}`
 
   return (
     <div
@@ -313,10 +311,18 @@ export default function MoviesPage() {
   const { mutate } = useSWRConfig()
   const swrKey = moviesUrl(100)
   const [playingMovie, setPlayingMovie] = useState<Movie | null>(null)
+  const [playerUrl, setPlayerUrl] = useState('')
 
   useEffect(() => {
     if (!getToken()) router.replace('/login')
   }, [router])
+
+  useEffect(() => {
+    fetch('/api/app-config')
+      .then(r => r.json())
+      .then(cfg => setPlayerUrl(cfg.playerUrl ?? ''))
+      .catch(() => {})
+  }, [])
 
   const { data, error, isLoading } = useSWR<MoviesResponse>(
     swrKey,
@@ -345,7 +351,7 @@ export default function MoviesPage() {
 
   return (
     <div className="min-h-screen">
-      {playingMovie && <PlayerModal movie={playingMovie} onClose={() => setPlayingMovie(null)} />}
+      {playingMovie && <PlayerModal movie={playingMovie} playerUrl={playerUrl} onClose={() => setPlayingMovie(null)} />}
       <Nav />
 
       <main className="px-6 py-8">
