@@ -92,7 +92,7 @@ func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := buildProxyClient(req.ProxyConfig, 15*time.Second)
+	client := buildProxyClient(req.ProxyConfig, 30*time.Second)
 
 	// Fetch root listing
 	body, err := fetchURL(client, req.URL)
@@ -104,7 +104,15 @@ func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 	// Find subdirectory links (href ending with "/", not "..", not absolute http(s))
 	dirs := findDirs(base, body)
 	if len(dirs) == 0 {
-		respondJSON(w, http.StatusOK, []RemoteMovie{})
+		// Fallback: no subdirectories found — scan the root URL itself.
+		// This handles flat structures where video files live directly
+		// in the listed folder (no per-movie subdirectory).
+		movie := scanDir(client, path.Base(strings.TrimSuffix(base.Path, "/")), req.URL)
+		if movie.VideoFile != nil || len(movie.SubtitleFiles) > 0 {
+			respondJSON(w, http.StatusOK, []RemoteMovie{movie})
+		} else {
+			respondJSON(w, http.StatusOK, []RemoteMovie{})
+		}
 		return
 	}
 
@@ -192,34 +200,48 @@ func fetchURL(client *http.Client, rawURL string) (string, error) {
 
 // findDirs parses directory listing HTML and returns name→absoluteURL map
 // for all entries that look like subdirectories (href ending with "/").
+// Handles both relative hrefs and absolute URLs on the same host.
 func findDirs(base *url.URL, body string) map[string]string {
 	dirs := make(map[string]string)
 	for _, m := range hrefRe.FindAllStringSubmatch(body, -1) {
 		href := m[1]
-		// skip parent dir, anchors, query strings, and absolute URLs
-		if strings.HasPrefix(href, "?") ||
-			strings.HasPrefix(href, "#") ||
-			strings.HasPrefix(href, "http://") ||
-			strings.HasPrefix(href, "https://") ||
-			href == "../" || href == "./" {
+		// skip anchors and query strings
+		if strings.HasPrefix(href, "?") || strings.HasPrefix(href, "#") {
 			continue
 		}
-		if !strings.HasSuffix(href, "/") {
+		// skip parent / self
+		if href == "../" || href == "./" {
 			continue
 		}
-		// Resolve relative to base
+
+		// Parse the href and resolve against base
 		ref, err := url.Parse(href)
 		if err != nil {
 			continue
 		}
-		abs := base.ResolveReference(ref).String()
+		abs := base.ResolveReference(ref)
+
+		// For absolute URLs: only keep entries on the same host
+		if ref.IsAbs() && abs.Host != base.Host {
+			continue
+		}
+
+		// Must be a directory (path ends with "/")
+		if !strings.HasSuffix(abs.Path, "/") {
+			continue
+		}
+		// Must be a child of base, not the base itself or a parent
+		if abs.Path == base.Path || !strings.HasPrefix(abs.Path, base.Path) {
+			continue
+		}
+
 		// Use only the last path component as the directory name
-		decoded, _ := url.PathUnescape(strings.TrimSuffix(href, "/"))
+		decoded, _ := url.PathUnescape(strings.TrimSuffix(abs.Path, "/"))
 		name := path.Base(decoded)
 		if name == "" || name == "." {
-			name = strings.TrimSuffix(href, "/")
+			name = abs.Path
 		}
-		dirs[name] = abs
+		dirs[name] = abs.String()
 	}
 	return dirs
 }
