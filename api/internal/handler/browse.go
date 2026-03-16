@@ -104,15 +104,9 @@ func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 	// Find subdirectory links (href ending with "/", not "..", not absolute http(s))
 	dirs := findDirs(base, body)
 	if len(dirs) == 0 {
-		// Fallback: no subdirectories found — scan the root URL itself.
-		// This handles flat structures where video files live directly
-		// in the listed folder (no per-movie subdirectory).
-		movie := scanDir(client, path.Base(strings.TrimSuffix(base.Path, "/")), req.URL)
-		if movie.VideoFile != nil || len(movie.SubtitleFiles) > 0 {
-			respondJSON(w, http.StatusOK, []RemoteMovie{movie})
-		} else {
-			respondJSON(w, http.StatusOK, []RemoteMovie{})
-		}
+		// Fallback: no subdirectories — treat each video file in the root as its own movie.
+		movies := scanFlatDir(base, body)
+		respondJSON(w, http.StatusOK, movies)
 		return
 	}
 
@@ -303,6 +297,55 @@ func scanDir(client *http.Client, name, dirURL string) RemoteMovie {
 	}
 
 	return movie
+}
+
+// scanFlatDir parses a directory listing that contains video files directly
+// (no per-movie subdirectories) and returns one RemoteMovie per video file.
+func scanFlatDir(base *url.URL, body string) []RemoteMovie {
+	var movies []RemoteMovie
+	for _, m := range hrefRe.FindAllStringSubmatch(body, -1) {
+		href := m[1]
+		if strings.HasPrefix(href, "?") || strings.HasPrefix(href, "#") {
+			continue
+		}
+		if href == "../" || href == "./" || strings.HasSuffix(href, "/") {
+			continue
+		}
+
+		lower := strings.ToLower(href)
+		ext := fileExt(lower)
+		if !videoExts[ext] {
+			continue
+		}
+
+		ref, err := url.Parse(href)
+		if err != nil {
+			continue
+		}
+		abs := base.ResolveReference(ref)
+		// For absolute hrefs: only accept same-host files
+		if ref.IsAbs() && abs.Host != base.Host {
+			continue
+		}
+
+		decoded, _ := url.PathUnescape(href)
+		fname := path.Base(decoded)
+		size := extractSize(body, href)
+
+		rf := RemoteFile{Name: fname, Size: size, URL: abs.String()}
+		// Use filename without extension as the movie name
+		name := strings.TrimSuffix(fname, path.Ext(fname))
+		movies = append(movies, RemoteMovie{
+			Name:          name,
+			URL:           abs.String(),
+			VideoFile:     &rf,
+			SubtitleFiles: []RemoteFile{},
+		})
+	}
+	if movies == nil {
+		return []RemoteMovie{}
+	}
+	return movies
 }
 
 // fileExt returns the lowercase file extension for a given filename/href.
