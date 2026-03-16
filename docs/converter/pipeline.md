@@ -12,58 +12,80 @@ Worker конвертирует входной видеофайл (любой ф
 ## Выходные данные
 
 ```
-/media/converted/{movieStorageKey}/
+/media/converted/movies/{movieStorageKey}/
 ├── master.m3u8           # Мастер-плейлист (ссылки на все варианты)
 ├── 360/
-│   ├── playlist_360p.m3u8
-│   └── segment_000.ts, segment_001.ts, ...
+│   ├── index.m3u8
+│   └── seg000.ts, seg001.ts, ...
 ├── 480/
-│   ├── playlist_480p.m3u8
-│   └── segment_000.ts, ...
+│   ├── index.m3u8
+│   └── seg000.ts, ...
 ├── 720/
-│   ├── playlist_720p.m3u8
-│   └── segment_000.ts, ...
-└── thumbnail.jpg         # JPEG превью (кадр из видео)
+│   ├── index.m3u8
+│   └── seg000.ts, ...
+└── thumbnail.jpg         # JPEG превью (кадр из видео или TMDB backdrop)
 ```
 
-## FFmpeg профиль (mp4_h264_aac_1080p)
+## FFmpeg профиль (hls_720_480_360)
+
+Одна команда FFmpeg создаёт все три варианта за один проход через `filter_complex` и `-var_stream_map`:
 
 ```bash
 ffmpeg -i {input} \
-  # 360p
-  -vf scale=640:360 -c:v libx264 -b:v 800k -c:a aac -b:a 128k \
-  -hls_time 10 -hls_playlist_type vod \
-  -hls_segment_filename /media/converted/{id}/360/segment_%03d.ts \
-  /media/converted/{id}/360/playlist_360p.m3u8 \
-  # 480p
-  -vf scale=854:480 -c:v libx264 -b:v 1400k -c:a aac -b:a 128k \
-  -hls_time 10 -hls_playlist_type vod \
-  -hls_segment_filename /media/converted/{id}/480/segment_%03d.ts \
-  /media/converted/{id}/480/playlist_480p.m3u8 \
+  -filter_complex "[0:v]split=3[v720][v480][v360]; \
+    [v720]scale=-2:720:flags=bicubic[v720o]; \
+    [v480]scale=-2:480:flags=bicubic[v480o]; \
+    [v360]scale=-2:360:flags=bicubic[v360o]" \
+  \
   # 720p
-  -vf scale=1280:720 -c:v libx264 -b:v 2800k -c:a aac -b:a 192k \
-  -hls_time 10 -hls_playlist_type vod \
-  -hls_segment_filename /media/converted/{id}/720/segment_%03d.ts \
-  /media/converted/{id}/720/playlist_720p.m3u8
+  -map [v720o] -map 0:a:0 \
+  -c:v:0 libx264 -preset fast -profile:v:0 high -level:v:0 4.0 \
+  -b:v:0 1050k -maxrate:v:0 1155k -bufsize:v:0 2300k \
+  -c:a:0 aac -b:a:0 80k -ar:a:0 48000 -ac:a:0 2 \
+  \
+  # 480p
+  -map [v480o] -map 0:a:0 \
+  -c:v:1 libx264 -preset fast -profile:v:1 high -level:v:1 4.0 \
+  -b:v:1 700k  -maxrate:v:1 770k  -bufsize:v:1 1540k \
+  -c:a:1 aac -b:a:1 80k -ar:a:1 48000 -ac:a:1 2 \
+  \
+  # 360p
+  -map [v360o] -map 0:a:0 \
+  -c:v:2 libx264 -preset fast -profile:v:2 high -level:v:2 4.0 \
+  -b:v:2 365k  -maxrate:v:2 400k  -bufsize:v:2 800k \
+  -c:a:2 aac -b:a:2 80k -ar:a:2 48000 -ac:a:2 2 \
+  \
+  -f hls -hls_time 4 -hls_playlist_type vod \
+  -hls_flags independent_segments \
+  -var_stream_map "v:0,a:0,name:720 v:1,a:1,name:480 v:2,a:2,name:360" \
+  -hls_segment_filename {outputDir}/%v/seg%03d.ts \
+  -master_pl_name master.m3u8 \
+  {outputDir}/%v/index.m3u8
 ```
+
+> Если у источника нет аудиодорожки, FFmpeg подмешивает беззвучный аудиоисточник (`anullsrc`).
 
 ## Параметры HLS
 
 | Параметр | Значение | Описание |
 |---|---|---|
-| Длительность сегмента | 10 секунд | `hls_time` |
+| Длительность сегмента | **4 секунды** | `hls_time 4` — стандарт Apple HLS Authoring Spec, быстрое ABR-переключение |
+| GOP | `round(4 × fps)` | Вычисляется автоматически по FPS источника; совпадает с границами сегментов |
 | Тип плейлиста | VOD | `hls_playlist_type vod` |
-| Видеокодек | H.264 (libx264) | Совместимость с hls.js |
-| Аудиокодек | AAC | Стандартный для HLS |
-| Выравнивание keyframe | Да | Для корректного переключения качества |
+| Флаги | `independent_segments` | Каждый сегмент декодируется независимо |
+| Видеокодек | H.264 (libx264) | Совместимость с hls.js и всеми браузерами |
+| Аудиокодек | AAC 80 kbps | Стандартный для HLS |
+| Выравнивание keyframe | Да (`-sc_threshold 0` + явный GOP) | Для корректного переключения качества |
 
 ## Разрешения и битрейты
 
-| Разрешение | Видео | Аудио | Ширина × Высота |
+| Разрешение | Видео | Аудио | Масштабирование |
 |---|---|---|---|
-| 360p | 800 kbps | 128 kbps | 640×360 |
-| 480p | 1400 kbps | 128 kbps | 854×480 |
-| 720p | 2800 kbps | 192 kbps | 1280×720 |
+| 720p | 1050 kbps (max 1155k) | 80 kbps | `-2:720` bicubic |
+| 480p | 700 kbps (max 770k) | 80 kbps | `-2:480` bicubic |
+| 360p | 365 kbps (max 400k) | 80 kbps | `-2:360` bicubic |
+
+> `-2:N` означает: высота = N пикселей, ширина выбирается автоматически кратной 2 (сохраняет соотношение сторон).
 
 ## Мастер-плейлист (master.m3u8)
 
@@ -71,60 +93,61 @@ ffmpeg -i {input} \
 #EXTM3U
 #EXT-X-VERSION:3
 
-#EXT-X-STREAM-INF:BANDWIDTH=928000,RESOLUTION=640x360
-360/playlist_360p.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1130000,RESOLUTION=1280x720
+720/index.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=1528000,RESOLUTION=854x480
-480/playlist_480p.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=780000,RESOLUTION=854x480
+480/index.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=2992000,RESOLUTION=1280x720
-720/playlist_720p.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=445000,RESOLUTION=640x360
+360/index.m3u8
 ```
 
 ## Thumbnail
 
-Получение кадра из видео:
+Worker пробует два источника по приоритету:
+
+1. **TMDB backdrop** — загружается после конвертации если задан `TMDB_API_KEY`
+2. **FFmpeg кадр** — извлекается из видео если TMDB недоступен или backdrop не найден
+
 ```bash
 ffmpeg -i {input} -vframes 1 -q:v 2 -ss 00:00:10 \
-  /media/converted/{id}/thumbnail.jpg
+  /media/converted/movies/{storageKey}/thumbnail.jpg
 ```
 
-Если FFmpeg не может извлечь кадр (например, повреждённый файл):
-- Worker загружает `backdrop` постер с TMDB
-- Если TMDB не настроен — thumbnail отсутствует (допустимо)
+Если ни один источник не сработал — thumbnail отсутствует (допустимо, плеер работает без него).
 
 ## Управление потоками
 
-```bash
-# Env переменная FFMPEG_THREADS_PER_CONVERSION
-# 0 = auto (FFmpeg сам выбирает)
-# N = явное ограничение (рекомендуется: cpu_count / CONVERT_CONCURRENCY)
--threads {N}
 ```
+CONVERT_CONCURRENCY=N  →  ffmpegThreads = max(1, cpu_count / N)
+```
+
+FFmpeg запускается с `-threads {ffmpegThreads}` чтобы не монополизировать CPU при параллельных конвертациях.
 
 ## Обработка ошибок
 
-1. FFmpeg завершился с ненулевым кодом → `status=failed`
-2. Воркер логирует stderr FFmpeg
-3. Временные файлы в `/media/temp/{jobID}/` удаляются
-4. `/media/converted/{movieStorageKey}/` удаляется при неполной конвертации
+1. FFmpeg завершился с ненулевым кодом → `status=failed`, stderr пишется в лог
+2. Временные файлы в `/media/temp/{jobID}/` удаляются
+3. `/media/converted/movies/{movieStorageKey}/` удаляется при неполной конвертации
 
 ## Этапы конвертационного воркера
 
 ```
 1. Получить ConvertPayload из convert_queue
-2. Установить Redis lock (NX, 1ч)
+2. Установить Redis lock (NX, 1 ч)
 3. UPDATE media_jobs: status=in_progress, stage=convert
-4. mkdir /media/converted/{movieStorageKey}/360, /480, /720
-5. Запустить FFmpeg (многоразрядный)
-6. Генерировать master.m3u8
-7. Извлечь thumbnail
-8. INSERT/UPSERT movies
-9. INSERT media_assets (is_ready=true, storage_path=master.m3u8)
-10. [optional] Fetch subtitles (OpenSubtitles)
-11. [optional] Download TMDB backdrop
-12. UPDATE media_jobs: status=completed
-13. Очистить /media/downloads/{jobID}/ (исходный файл)
+4. UPSERT movies → получить movie.StorageKey
+5. mkdir /media/converted/movies/{storageKey}/360, /480, /720
+6. Probe FPS источника (ffprobe), вычислить GOP
+7. Запустить FFmpeg (один проход, все три варианта)
+8. Сгенерировать master.m3u8
+9. Извлечь thumbnail (FFmpeg кадр)
+10. Загрузить TMDB backdrop (опционально, заменяет thumbnail)
+11. INSERT media_assets (is_ready=true, storage_path=master.m3u8)
+12. Fetch субтитры (OpenSubtitles, опционально)
+13. UPDATE media_jobs: status=completed
+14. Очистить /media/downloads/{jobID}/
 ```
 
 ## Конфигурация окружения
@@ -132,6 +155,5 @@ ffmpeg -i {input} -vframes 1 -q:v 2 -ss 00:00:10 \
 | Переменная | Назначение |
 |---|---|
 | `CONVERT_CONCURRENCY` | Параллельные конвертации (default: 1) |
-| `FFMPEG_PATH` | Путь к бинарнику ffmpeg (default: /usr/bin/ffmpeg) |
-| `TMDB_API_KEY` | Для загрузки метаданных и постеров |
+| `TMDB_API_KEY` | Для загрузки метаданных и postеров |
 | `OPENSUBTITLES_API_KEY` | Для авто-субтитров |
