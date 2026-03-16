@@ -117,7 +117,7 @@ func (h *SubtitleHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subtitleDir := filepath.Join(h.mediaRoot, "converted", movie.StorageKey, "subtitles")
+	subtitleDir := filepath.Join(h.mediaRoot, "converted", "movies", movie.StorageKey, "subtitles")
 	if err := os.MkdirAll(subtitleDir, 0o777); err != nil {
 		respondError(w, http.StatusInternalServerError, "IO_ERROR", "failed to create subtitle dir", false, cid)
 		return
@@ -186,7 +186,7 @@ func (h *SubtitleHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subtitleDir := filepath.Join(h.mediaRoot, "converted", movie.StorageKey, "subtitles")
+	subtitleDir := filepath.Join(h.mediaRoot, "converted", "movies", movie.StorageKey, "subtitles")
 	if err := os.MkdirAll(subtitleDir, 0o777); err != nil {
 		respondError(w, http.StatusInternalServerError, "IO_ERROR", "failed to create subtitle dir", false, cid)
 		return

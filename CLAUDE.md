@@ -55,7 +55,7 @@ The root of this repository is `/converter/`. All code, docs, and config live he
 ### 7. Media storage layout
 - Raw downloads: `/media/downloads/{jobID}/`
 - Temp FFmpeg workspace: `/media/temp/{jobID}/`
-- Converted HLS: `/media/converted/{movieStorageKey}/`
+- Converted HLS: `/media/converted/movies/{movieStorageKey}/`
 - This layout is assumed throughout — do not reorganize without updating all path references
 
 ---

@@ -11,6 +11,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `worker/internal/converter/converter.go`: HLS output now written to `media/converted/movies/{storageKey}/` instead of `media/converted/{storageKey}/`
+- `worker/internal/downloader/downloader.go`: `FinalDir` hint in convert message updated to new `converted/movies/` prefix
+- `api/internal/service/job.go`: upload job `FinalDir` updated to `converted/movies/` prefix
+- `api/internal/handler/player.go`: `buildMovieMediaURL` uses new `/media/converted/movies/{key}/{file}` URL format; `mediaSigningPath` updated to bind token at depth 4 (`/media/converted/movies/{key}/`)
+- `api/internal/handler/subtitles.go`: subtitle directory resolves to `converted/movies/{storageKey}/subtitles`
+- `api/internal/db/migrations/009_update_storage_path_movies_subdir.sql`: backfills existing `media_assets.storage_path`, `media_assets.thumbnail_path`, and `movie_subtitles.storage_path` rows to the new path prefix
+
 ### Fixed
 
 - `frontend/src/app/movies/page.tsx`: кнопка "смотреть" теперь корректно открывает плеер в модальном окне через iframe; URL плеера читается из runtime-переменной `PLAYER_URL` вместо build-time `NEXT_PUBLIC_PLAYER_URL`

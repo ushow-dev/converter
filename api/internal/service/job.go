@@ -211,7 +211,7 @@ func (s *JobService) CreateUploadJob(
 			InputPath:     destPath,
 			OutputPath:    fmt.Sprintf("%s/temp/%s", s.mediaRoot, created.JobID),
 			OutputProfile: "mp4_h264_aac_1080p",
-			FinalDir:      fmt.Sprintf("%s/converted", s.mediaRoot),
+			FinalDir:      fmt.Sprintf("%s/converted/movies", s.mediaRoot),
 			IMDbID:        req.IMDbID,
 			TMDBID:        req.TMDBID,
 			Title:         req.Title,

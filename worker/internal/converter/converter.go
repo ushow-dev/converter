@@ -172,7 +172,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
 		return
 	}
-	finalDir := filepath.Join(w.mediaRoot, "converted", movie.StorageKey)
+	finalDir := filepath.Join(w.mediaRoot, "converted", "movies", movie.StorageKey)
 
 	// ── Preserve original source file inside temp output dir ─────────────────
 	// Moving it here (before the Rename below) carries it atomically to finalDir.

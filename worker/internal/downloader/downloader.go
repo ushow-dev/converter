@@ -155,7 +155,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	// OutputPath is the temp dir where ffmpeg writes HLS files.
 	// FinalDir is where the completed HLS tree is moved after conversion.
 	outputPath := filepath.Join(w.mediaRoot, "temp", msg.JobID)
-	finalDir := filepath.Join(w.mediaRoot, "converted", msg.JobID)
+	finalDir := filepath.Join(w.mediaRoot, "converted", "movies", msg.JobID)
 	convertMsg := model.ConvertMessage{
 		SchemaVersion: "v1",
 		JobID:         msg.JobID,
