@@ -14,6 +14,26 @@ import (
 	"app/api/internal/service"
 )
 
+// respondIfDuplicate checks if err is a *service.DuplicateError and, if so,
+// writes a 409 response with movie_id and title, then returns true.
+func respondIfDuplicate(w http.ResponseWriter, err error, correlationID string) bool {
+	var dupErr *service.DuplicateError
+	if !errors.As(err, &dupErr) {
+		return false
+	}
+	respondJSON(w, http.StatusConflict, map[string]any{
+		"error": map[string]any{
+			"code":           "DUPLICATE",
+			"message":        "movie already exists",
+			"retryable":      false,
+			"correlation_id": correlationID,
+			"movie_id":       dupErr.MovieID,
+			"title":          dupErr.Title,
+		},
+	})
+	return true
+}
+
 // JobsHandler handles /api/admin/jobs endpoints.
 type JobsHandler struct {
 	svc       *service.JobService
@@ -80,6 +100,9 @@ func (h *JobsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CorrelationID: cid,
 	})
 	if err != nil {
+		if respondIfDuplicate(w, err, cid) {
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
 			"failed to create job", false, cid)
 		return
@@ -130,6 +153,9 @@ func (h *JobsHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		CorrelationID: cid,
 	}, file, header.Filename)
 	if err != nil {
+		if respondIfDuplicate(w, err, cid) {
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
 			"failed to create upload job", false, cid)
 		return
@@ -238,6 +264,9 @@ func (h *JobsHandler) RemoteDownload(w http.ResponseWriter, r *http.Request) {
 		ProxyConfig:   req.ProxyConfig,
 	})
 	if err != nil {
+		if respondIfDuplicate(w, err, cid) {
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create remote download job", false, cid)
 		return
 	}

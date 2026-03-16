@@ -58,6 +58,7 @@ export function clearToken(): void {
 interface FetchError extends Error {
   status: number
   code?: string
+  data?: Record<string, unknown>
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -77,6 +78,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     ) as FetchError
     err.status = res.status
     err.code = body?.error?.code
+    err.data = body?.error
     throw err
   }
 

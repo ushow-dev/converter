@@ -22,9 +22,20 @@ import (
 )
 
 var (
-	unsafeChars   = regexp.MustCompile(`[^a-zA-Z0-9._\-]`)
-	titleYearRe   = regexp.MustCompile(`^(.+?)\s*\((\d{4})\)`)
+	unsafeChars = regexp.MustCompile(`[^a-zA-Z0-9._\-]`)
+	titleYearRe = regexp.MustCompile(`^(.+?)\s*\((\d{4})\)`)
 )
+
+// DuplicateError is returned when a movie with the given TMDB/IMDb ID already
+// exists in the database with a completed (ready) asset.
+type DuplicateError struct {
+	MovieID int64
+	Title   string
+}
+
+func (e *DuplicateError) Error() string {
+	return fmt.Sprintf("movie already exists (id=%d)", e.MovieID)
+}
 
 // CreateJobRequest holds input for creating a new media job.
 type CreateJobRequest struct {
@@ -42,18 +53,55 @@ type CreateJobRequest struct {
 // JobService handles media job lifecycle.
 type JobService struct {
 	jobs       *repository.JobRepository
+	movieRepo  *repository.MovieRepository
 	queue      *queue.Client
 	mediaRoot  string
 	tmdbAPIKey string
 }
 
 // NewJobService creates a JobService.
-func NewJobService(jobs *repository.JobRepository, q *queue.Client, mediaRoot, tmdbAPIKey string) *JobService {
-	return &JobService{jobs: jobs, queue: q, mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey}
+func NewJobService(jobs *repository.JobRepository, movieRepo *repository.MovieRepository, q *queue.Client, mediaRoot, tmdbAPIKey string) *JobService {
+	return &JobService{jobs: jobs, movieRepo: movieRepo, queue: q, mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey}
+}
+
+// checkDuplicate looks up a movie by tmdbID or imdbID (in that order).
+// Returns *DuplicateError if the movie already has a completed (ready) asset.
+// Returns nil if not found or no ready asset yet — job creation proceeds normally.
+// Lookup errors are silently ignored so they never block job creation.
+func (s *JobService) checkDuplicate(ctx context.Context, tmdbID, imdbID string) error {
+	var movie *model.Movie
+	var err error
+
+	switch {
+	case tmdbID != "":
+		movie, err = s.movieRepo.GetByTMDBID(ctx, tmdbID)
+	case imdbID != "":
+		movie, err = s.movieRepo.GetByIMDbID(ctx, imdbID)
+	default:
+		return nil
+	}
+	if errors.Is(err, repository.ErrNotFound) || err != nil {
+		return nil // not found or lookup error — don't block
+	}
+
+	// movie.JobID is non-nil only when a ready asset exists (LEFT JOIN WHERE is_ready=true).
+	if movie.JobID == nil {
+		return nil // movie row exists but conversion not yet complete
+	}
+
+	title := ""
+	if movie.Title != nil {
+		title = *movie.Title
+	}
+	return &DuplicateError{MovieID: movie.ID, Title: title}
 }
 
 // CreateJob creates a media job (idempotent via request_id) and publishes it to the download queue.
 func (s *JobService) CreateJob(ctx context.Context, req CreateJobRequest) (*model.Job, error) {
+	if err := s.checkDuplicate(ctx, req.TMDBID, req.IMDbID); err != nil {
+		return nil, err
+	}
+
 	jobID := generateJobID()
 	now := time.Now().UTC()
 	priority := req.Priority
@@ -142,6 +190,10 @@ func (s *JobService) CreateUploadJob(
 	file multipart.File,
 	filename string,
 ) (*model.Job, error) {
+	if err := s.checkDuplicate(ctx, req.TMDBID, req.IMDbID); err != nil {
+		return nil, err
+	}
+
 	jobID := generateJobID()
 	now := time.Now().UTC()
 
@@ -277,6 +329,11 @@ func (s *JobService) CreateRemoteDownloadJob(
 	tmdbID := ""
 	if s.tmdbAPIKey != "" && title != "" {
 		tmdbID, _ = tmdbSearch(ctx, s.tmdbAPIKey, title, year)
+	}
+
+	// Duplicate check — runs after TMDB lookup so we have the tmdbID.
+	if err := s.checkDuplicate(ctx, tmdbID, ""); err != nil {
+		return nil, tmdbID, err
 	}
 
 	// Sanitize filename for storage.

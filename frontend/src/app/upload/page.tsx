@@ -195,9 +195,19 @@ export default function UploadPage() {
           movie, state: 'queued', jobId: resp.job_id,
         }))
       } catch (err: unknown) {
-        setDownloadItems((prev) => new Map(prev).set(movie.url, {
-          movie, state: 'error', error: err instanceof Error ? err.message : 'Ошибка',
-        }))
+        const fetchErr = err as { code?: string; data?: Record<string, unknown> }
+        if (fetchErr.code === 'DUPLICATE') {
+          setDownloadItems((prev) => new Map(prev).set(movie.url, {
+            movie,
+            state: 'duplicate',
+            movieId: fetchErr.data?.movie_id as number | undefined,
+            movieTitle: fetchErr.data?.title as string | undefined,
+          }))
+        } else {
+          setDownloadItems((prev) => new Map(prev).set(movie.url, {
+            movie, state: 'error', error: err instanceof Error ? err.message : 'Ошибка',
+          }))
+        }
       }
     }))
 
@@ -530,7 +540,7 @@ export default function UploadPage() {
                     <tbody className="divide-y divide-gray-800">
                       {remoteMovies.map((movie) => {
                         const dlItem = downloadItems.get(movie.url)
-                        const isSelectable = !!movie.video_file
+                        const isSelectable = !!movie.video_file && dlItem?.state !== 'duplicate'
                         const isSelected = selected.has(movie.url)
                         return (
                           <tr
@@ -579,6 +589,16 @@ export default function UploadPage() {
                                   className="text-xs text-green-400 hover:underline"
                                 >
                                   ✓ В очереди →
+                                </a>
+                              )}
+                              {dlItem?.state === 'duplicate' && (
+                                <a
+                                  href="/movies"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-xs text-yellow-400 hover:underline"
+                                  title={dlItem.movieTitle ?? 'Фильм уже есть в базе'}
+                                >
+                                  ⚠ Уже есть →
                                 </a>
                               )}
                               {dlItem?.state === 'error' && (
