@@ -27,6 +27,7 @@ func (r *MovieRepository) GetByIMDbID(ctx context.Context, imdbID string) (*mode
 		SELECT m.id, m.storage_key, m.imdb_id, m.tmdb_id, m.title, m.year, m.poster_url,
 		       (a.thumbnail_path IS NOT NULL) AS has_thumbnail,
 		       a.job_id,
+		       m.storage_location_id,
 		       m.created_at, m.updated_at
 		FROM movies m
 		LEFT JOIN media_assets a ON a.movie_id = m.id AND a.is_ready = true
@@ -39,6 +40,7 @@ func (r *MovieRepository) GetByTMDBID(ctx context.Context, tmdbID string) (*mode
 		SELECT m.id, m.storage_key, m.imdb_id, m.tmdb_id, m.title, m.year, m.poster_url,
 		       (a.thumbnail_path IS NOT NULL) AS has_thumbnail,
 		       a.job_id,
+		       m.storage_location_id,
 		       m.created_at, m.updated_at
 		FROM movies m
 		LEFT JOIN media_assets a ON a.movie_id = m.id AND a.is_ready = true
@@ -55,6 +57,7 @@ func (r *MovieRepository) List(ctx context.Context, limit int, cursor string) ([
 		SELECT m.id, m.storage_key, m.imdb_id, m.tmdb_id, m.title, m.year, m.poster_url,
 		       (a.thumbnail_path IS NOT NULL) AS has_thumbnail,
 		       a.job_id,
+		       m.storage_location_id,
 		       m.created_at, m.updated_at
 		FROM movies m
 		LEFT JOIN media_assets a ON a.movie_id = m.id AND a.is_ready = true`
@@ -99,12 +102,21 @@ func (r *MovieRepository) UpdateMeta(ctx context.Context, movieID int64, imdbID,
 	return err
 }
 
+// UpdateStorageLocation sets the storage_location_id for a movie.
+func (r *MovieRepository) UpdateStorageLocation(ctx context.Context, movieID, locationID int64) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE movies SET storage_location_id = $2, updated_at = NOW() WHERE id = $1`,
+		movieID, locationID)
+	return err
+}
+
 // GetByID fetches a movie row by its primary key.
 func (r *MovieRepository) GetByID(ctx context.Context, id int64) (*model.Movie, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT m.id, m.storage_key, m.imdb_id, m.tmdb_id, m.title, m.year, m.poster_url,
 		       (a.thumbnail_path IS NOT NULL) AS has_thumbnail,
 		       a.job_id,
+		       m.storage_location_id,
 		       m.created_at, m.updated_at
 		FROM movies m
 		LEFT JOIN media_assets a ON a.movie_id = m.id AND a.is_ready = true
@@ -164,6 +176,7 @@ func scanMovieRows(rows pgx.Rows) ([]*model.Movie, error) {
 		if err := rows.Scan(
 			&m.ID, &m.StorageKey, &m.IMDbID, &m.TMDBID, &m.Title, &m.Year, &m.PosterURL,
 			&m.HasThumbnail, &m.JobID,
+			&m.StorageLocationID,
 			&m.CreatedAt, &m.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan movie: %w", err)
