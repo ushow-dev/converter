@@ -76,17 +76,30 @@ type Asset struct {
 
 // Movie represents catalog metadata used to resolve player links.
 type Movie struct {
-	ID           int64     `json:"id"`
-	StorageKey   string    `json:"storage_key"`
-	IMDbID       *string   `json:"imdb_id,omitempty"`
-	TMDBID       *string   `json:"tmdb_id,omitempty"`
-	Title        *string   `json:"title,omitempty"`
-	Year         *int      `json:"year,omitempty"`
-	PosterURL    *string   `json:"poster_url,omitempty"`
-	HasThumbnail bool      `json:"has_thumbnail"`
-	JobID        *string   `json:"job_id,omitempty"` // from media_assets, used for delete
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                int64     `json:"id"`
+	StorageKey        string    `json:"storage_key"`
+	IMDbID            *string   `json:"imdb_id,omitempty"`
+	TMDBID            *string   `json:"tmdb_id,omitempty"`
+	Title             *string   `json:"title,omitempty"`
+	Year              *int      `json:"year,omitempty"`
+	PosterURL         *string   `json:"poster_url,omitempty"`
+	HasThumbnail      bool      `json:"has_thumbnail"`
+	JobID             *string   `json:"job_id,omitempty"` // from media_assets, used for delete
+	StorageLocationID *int64    `json:"storage_location_id,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+// ─── StorageLocation ──────────────────────────────────────────────────────────
+
+// StorageLocation represents a configured media storage backend.
+type StorageLocation struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`     // "sftp" | "s3" | "local"
+	BaseURL   string    `json:"base_url"` // empty = domain not yet configured
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // ─── SearchResult ─────────────────────────────────────────────────────────────
@@ -213,4 +226,20 @@ type RemoteDownloadJob struct {
 	Title       string       `json:"title"`
 	TargetDir   string       `json:"target_dir"`
 	ProxyConfig *ProxyConfig `json:"proxy_config,omitempty"` // optional proxy for the download
+}
+
+// TransferPayload is the message pushed to transfer_queue after HLS conversion.
+type TransferPayload struct {
+	SchemaVersion string      `json:"schema_version"`
+	JobID         string      `json:"job_id"`
+	CorrelationID string      `json:"correlation_id"`
+	CreatedAt     time.Time   `json:"created_at"`
+	Payload       TransferJob `json:"payload"`
+}
+
+// TransferJob holds details for a single rclone transfer operation.
+type TransferJob struct {
+	MovieID    int64  `json:"movie_id"`
+	StorageKey string `json:"storage_key"` // relative folder name, e.g. "Inception (2010)"
+	LocalPath  string `json:"local_path"`  // absolute local path to the movie folder
 }
