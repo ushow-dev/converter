@@ -108,7 +108,8 @@ func main() {
 	// ── Pipeline workers ───────────────────────────────────────────────────────
 	dlWorker := downloader.New(redisClient, jobRepo, qbt, cfg.MediaRoot)
 	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo,
-		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads)
+		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads,
+		cfg.RcloneRemote != "")
 	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot)
 
 	// ── Health server ──────────────────────────────────────────────────────────

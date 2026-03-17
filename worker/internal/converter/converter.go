@@ -33,7 +33,8 @@ type Worker struct {
 	subtitleRepo    *repository.SubtitleRepository
 	mediaRoot       string
 	tmdbAPIKey      string
-	ffmpegThreads   int // 0 = auto
+	ffmpegThreads   int  // 0 = auto
+	transferEnabled bool // true if remote transfer is configured
 }
 
 // New creates a convert Worker.
@@ -47,11 +48,13 @@ func New(
 	mediaRoot string,
 	tmdbAPIKey string,
 	ffmpegThreads int,
+	transferEnabled bool,
 ) *Worker {
 	return &Worker{
 		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
 		subtitleFetcher: subtitleFetcher, subtitleRepo: subtitleRepo,
 		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey, ffmpegThreads: ffmpegThreads,
+		transferEnabled: transferEnabled,
 	}
 }
 
@@ -283,6 +286,27 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			}
 		}
 		log.Info("subtitles fetched", "count", len(results))
+	}
+
+	// ── Enqueue transfer (if remote is configured) ────────────────────────────
+	if w.transferEnabled {
+		tfMsg := model.TransferMessage{
+			SchemaVersion: "1",
+			JobID:         msg.JobID,
+			CorrelationID: msg.CorrelationID,
+			CreatedAt:     time.Now().UTC(),
+			Payload: model.TransferJob{
+				MovieID:    movie.ID,
+				StorageKey: movie.StorageKey,
+				LocalPath:  finalDir,
+			},
+		}
+		if err := w.q.Push(ctx, queue.TransferQueue, tfMsg); err != nil {
+			log.Error("enqueue transfer failed", "error", err)
+			// Non-fatal: film is still available locally.
+		} else {
+			log.Info("transfer job enqueued", "movie_id", movie.ID)
+		}
 	}
 }
 
