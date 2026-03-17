@@ -86,8 +86,8 @@ func (r *MovieRepository) Upsert(
 		}
 		return nil, fmt.Errorf("insert movie: %w", err)
 	}
-	if m == nil || m.ID == 0 {
-		return nil, fmt.Errorf("insert movie: exhausted key attempts for %q", baseKey)
+	if m.ID == 0 {
+		return nil, fmt.Errorf("insert movie: exhausted key attempts for %q: %w", baseKey, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit movie insert: %w", err)
