@@ -217,6 +217,7 @@ services:
       SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-en,bn,hi}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
+      - ./secrets/mediarw_rclone:/secrets/mediarw_rclone:ro
     networks:
       - app_net
     depends_on:
