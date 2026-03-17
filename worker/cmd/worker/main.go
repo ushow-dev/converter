@@ -117,7 +117,7 @@ func main() {
 	const remoteStorageLocID = int64(2) // matches id from migration 011
 	var trWorker *transfer.Worker
 	if cfg.RcloneRemote != "" {
-		trWorker = transfer.New(redisClient, movieRepo,
+		trWorker = transfer.New(redisClient, movieRepo, jobRepo,
 			cfg.RcloneRemote, cfg.RcloneRemotePath, remoteStorageLocID)
 		slog.Info("transfer worker enabled", "remote", cfg.RcloneRemote)
 	} else {
