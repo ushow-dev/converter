@@ -13,6 +13,10 @@
 
 ### Changed
 
+- `worker/internal/repository/movie.go`: replaced random `mov_<hex>` storage key generation with human-readable `Title (Year)` format; added unique-constraint collision retry (up to 10 attempts with numeric suffix)
+
+
+
 - `worker/internal/converter/converter.go`: HLS output now written to `media/converted/movies/{storageKey}/` instead of `media/converted/{storageKey}/`
 - `worker/internal/downloader/downloader.go`: `FinalDir` hint in convert message updated to new `converted/movies/` prefix
 - `api/internal/service/job.go`: upload job `FinalDir` updated to `converted/movies/` prefix
