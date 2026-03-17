@@ -260,20 +260,17 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		// Non-fatal.
 	}
 
-	// Mark job as completed.
-	if err := w.jobRepo.UpdateStatus(ctx, msg.JobID, model.StatusCompleted, &stage, 100); err != nil {
-		log.Error("update status to completed", "error", err)
-	}
-
 	// Best-effort cleanup of original downloaded torrent data on successful convert.
 	downloadsDir := filepath.Join(w.mediaRoot, "downloads", msg.JobID)
 	if err := os.RemoveAll(downloadsDir); err != nil {
-		log.Warn("cleanup downloads dir failed", "path", downloadsDir, "error", err)
+		log.Error("cleanup downloads dir failed", "path", downloadsDir, "error", err)
 	}
 
 	log.Info("job completed", "asset_id", assetID, "master", masterPath)
 
 	// ── Subtitle fetch (best-effort, non-fatal) ───────────────────────────────
+	// Must run BEFORE transfer enqueue to avoid race: rclone move may start
+	// while subtitle files are still being written to finalDir.
 	if w.subtitleFetcher != nil && msg.Payload.TMDBID != "" {
 		results := w.subtitleFetcher.FetchAndSave(ctx, msg.Payload.TMDBID, finalDir)
 		for _, sub := range results {
@@ -288,8 +285,13 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		log.Info("subtitles fetched", "count", len(results))
 	}
 
-	// ── Enqueue transfer (if remote is configured) ────────────────────────────
+	// ── Mark job completed or hand off to transfer ────────────────────────────
 	if w.transferEnabled {
+		// Keep job in_progress; transfer worker will mark it completed.
+		if err := w.jobRepo.SetStageAndProgress(ctx, msg.JobID, model.StageTransfer, 0); err != nil {
+			log.Error("set transfer stage failed", "error", err)
+		}
+
 		tfMsg := model.TransferMessage{
 			SchemaVersion: "1",
 			JobID:         msg.JobID,
@@ -303,9 +305,17 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		}
 		if err := w.q.Push(ctx, queue.TransferQueue, tfMsg); err != nil {
 			log.Error("enqueue transfer failed", "error", err)
-			// Non-fatal: film is still available locally.
+			// Non-fatal: mark completed locally so the job doesn't stay stuck.
+			if err2 := w.jobRepo.UpdateStatus(ctx, msg.JobID, model.StatusCompleted, &stage, 100); err2 != nil {
+				log.Error("fallback complete failed", "error", err2)
+			}
 		} else {
 			log.Info("transfer job enqueued", "movie_id", movie.ID)
+		}
+	} else {
+		// No transfer configured: mark job completed immediately.
+		if err := w.jobRepo.UpdateStatus(ctx, msg.JobID, model.StatusCompleted, &stage, 100); err != nil {
+			log.Error("update status to completed", "error", err)
 		}
 	}
 }
