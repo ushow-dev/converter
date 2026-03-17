@@ -351,6 +351,23 @@ export default function MoviesPage() {
     }
   }
 
+  function handleExportCSV() {
+    if (!data?.items.length) return
+    const headers = ['id', 'title', 'year', 'imdb_id', 'tmdb_id', 'storage_key', 'poster_url', 'has_thumbnail', 'job_id', 'created_at', 'updated_at']
+    const escape = (v: unknown) => {
+      const s = v == null ? '' : String(v)
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const rows = data.items.map(m => headers.map(h => escape(m[h as keyof typeof m])).join(','))
+    const csv = [headers.join(','), ...rows].join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `movies_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen">
       {playingMovie && <PlayerModal movie={playingMovie} playerUrl={playerUrl} onClose={() => setPlayingMovie(null)} />}
@@ -359,12 +376,22 @@ export default function MoviesPage() {
       <main className="px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-xl font-semibold text-white">Фильмы</h1>
-          <Link
-            href="/upload"
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-          >
-            + Добавить
-          </Link>
+          <div className="flex items-center gap-2">
+            {data && data.items.length > 0 && (
+              <button
+                onClick={handleExportCSV}
+                className="rounded-md border border-gray-700 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+              >
+                Экспорт CSV
+              </button>
+            )}
+            <Link
+              href="/upload"
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              + Добавить
+            </Link>
+          </div>
         </div>
 
         {isLoading && (
