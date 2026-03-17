@@ -273,18 +273,34 @@ function MovieRow({
         <SubtitleCell movie={movie} />
       </td>
 
-      {/* Play */}
+      {/* Play + TMDB */}
       <td className="px-2 py-2">
-        <button
-          onClick={() => onPlay(movie)}
-          disabled={!movie.tmdb_id}
-          title={!movie.tmdb_id ? 'Требуется TMDB ID' : 'Смотреть'}
-          className="rounded p-1.5 text-gray-600 hover:bg-green-900/40 hover:text-green-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onPlay(movie)}
+            disabled={!movie.tmdb_id}
+            title={!movie.tmdb_id ? 'Требуется TMDB ID' : 'Смотреть'}
+            className="rounded p-1.5 text-gray-600 hover:bg-green-900/40 hover:text-green-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+          {movie.tmdb_id && (
+            <a
+              href={`https://www.themoviedb.org/movie/${movie.tmdb_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Посмотреть на TMDB"
+              className="rounded p-1.5 text-gray-600 hover:bg-blue-900/40 hover:text-blue-400 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          )}
+        </div>
       </td>
 
       {/* Delete */}
