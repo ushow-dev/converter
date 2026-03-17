@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `worker/internal/repository/movie.go`: `buildStorageKey` now uses underscores instead of spaces and `Title(Year)` format without space before parenthesis
+
 ### Added
 - `worker/internal/model/model.go`: add `StageTransfer` constant
 - `api/internal/model/model.go`: add `JobStageTransfer` constant

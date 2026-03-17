@@ -140,7 +140,8 @@ func fetchMovieBy(ctx context.Context, tx pgx.Tx, field, value string) (*model.M
 }
 
 // buildStorageKey builds a human-readable, filesystem-safe folder name.
-// Format: "Title (Year)" or "Title" if year is unknown, "untitled_<hex>" if title is empty.
+// Format: "Title(Year)" or "Title" if year is unknown, "untitled_<hex>" if title is empty.
+// Spaces are replaced with underscores for clean remote paths.
 func buildStorageKey(title string, year *int) string {
 	sanitized := strings.Map(func(r rune) rune {
 		// Drop chars invalid in folder names across Linux/macOS/rclone remotes
@@ -150,7 +151,7 @@ func buildStorageKey(title string, year *int) string {
 		}
 		return r
 	}, strings.TrimSpace(title))
-	sanitized = strings.Join(strings.Fields(sanitized), " ") // collapse whitespace
+	sanitized = strings.Join(strings.Fields(sanitized), "_") // collapse whitespace into underscores
 
 	if sanitized == "" {
 		b := make([]byte, 4)
@@ -159,7 +160,7 @@ func buildStorageKey(title string, year *int) string {
 	}
 
 	if year != nil && *year > 0 {
-		return fmt.Sprintf("%s (%d)", sanitized, *year)
+		return fmt.Sprintf("%s(%d)", sanitized, *year)
 	}
 	return sanitized
 }
