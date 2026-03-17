@@ -164,6 +164,14 @@ func buildStorageKey(title string, year *int) string {
 	return sanitized
 }
 
+// UpdateStorageLocation updates the storage location for a movie.
+func (r *MovieRepository) UpdateStorageLocation(ctx context.Context, movieID, locationID int64) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE movies SET storage_location_id = $2, updated_at = NOW() WHERE id = $1`,
+		movieID, locationID)
+	return err
+}
+
 func nullableText(v string) *string {
 	trimmed := strings.TrimSpace(v)
 	if trimmed == "" {
