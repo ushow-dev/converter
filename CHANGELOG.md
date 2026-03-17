@@ -12,6 +12,19 @@
 ## [Unreleased]
 
 ### Added
+- `worker/internal/model/model.go`: add `StageTransfer` constant
+- `api/internal/model/model.go`: add `JobStageTransfer` constant
+- `worker/internal/repository/job.go`: add `SetStageAndProgress` and `SetCompleted` methods for transfer stage tracking
+- `worker/internal/transfer/transfer.go`: rewrite transfer worker with rclone stderr progress parsing and job stage updates
+- `frontend/src/types/index.ts`: add `'transfer'` to `JobStage` type
+- `frontend/src/app/queue/page.tsx`: show "Перенос" label for transfer stage with progress bar
+- `frontend/src/app/jobs/[jobId]/page.tsx`: show "Перенос" label for transfer stage
+
+### Changed
+- `worker/internal/converter/converter.go`: transition job to `transfer` stage instead of `completed` when transfer is enabled; fix subtitle fetch ordering race with rclone
+- `worker/cmd/worker/main.go`: inject `jobRepo` into transfer worker constructor
+
+### Added
 - `api/internal/db/migrations/010_storage_locations.sql`: storage_locations table and movies.storage_location_id FK
 - `api/internal/db/migrations/011_seed_remote_storage_location.sql`: seed remote storage location row
 - `worker/internal/transfer/transfer.go`: TransferWorker — rclone-based post-conversion file transfer
