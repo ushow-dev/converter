@@ -42,6 +42,34 @@ func (r *JobRepository) UpdateProgress(ctx context.Context, jobID string, progre
 	return err
 }
 
+// SetStageAndProgress updates stage and progress_percent atomically.
+// Used by the transfer worker to track rclone upload progress.
+func (r *JobRepository) SetStageAndProgress(ctx context.Context, jobID, stage string, percent int) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE media_jobs
+		SET stage = $2, progress_percent = $3, updated_at = NOW()
+		WHERE job_id = $1`,
+		jobID, stage, percent)
+	if err != nil {
+		return fmt.Errorf("set stage and progress %s: %w", jobID, err)
+	}
+	return nil
+}
+
+// SetCompleted marks a job as completed with progress_percent=100.
+// Does NOT write stage — the stage column keeps its current value.
+func (r *JobRepository) SetCompleted(ctx context.Context, jobID string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE media_jobs
+		SET status = 'completed', progress_percent = 100, updated_at = NOW()
+		WHERE job_id = $1`,
+		jobID)
+	if err != nil {
+		return fmt.Errorf("set completed %s: %w", jobID, err)
+	}
+	return nil
+}
+
 // SetFailed marks a job as failed with error details.
 func (r *JobRepository) SetFailed(
 	ctx context.Context, jobID, errorCode, errorMessage string, retryable bool,

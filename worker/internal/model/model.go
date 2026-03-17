@@ -11,8 +11,9 @@ const (
 	StatusCompleted  = "completed"
 	StatusFailed     = "failed"
 
-	StageDownload = "download"
-	StageConvert  = "convert"
+	StageDownload  = "download"
+	StageConvert   = "convert"
+	StageTransfer  = "transfer"
 )
 
 // ─── Queue message envelopes ─────────────────────────────────────────────────

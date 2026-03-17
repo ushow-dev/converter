@@ -21,6 +21,7 @@ type JobStage string
 const (
 	JobStageDownload JobStage = "download"
 	JobStageConvert  JobStage = "convert"
+	JobStageTransfer JobStage = "transfer"
 )
 
 // JobPriority represents processing priority.
