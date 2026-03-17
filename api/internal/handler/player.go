@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"errors"
@@ -22,12 +23,13 @@ import (
 
 // PlayerHandler handles /api/player/* endpoints.
 type PlayerHandler struct {
-	jobSvc       *service.JobService
-	assetRepo    *repository.AssetRepository
-	movieRepo    *repository.MovieRepository
-	subtitleRepo *repository.SubtitleRepository
-	mediaBaseURL string
-	mediaSigner  *mediaURLSigner
+	jobSvc         *service.JobService
+	assetRepo      *repository.AssetRepository
+	movieRepo      *repository.MovieRepository
+	subtitleRepo   *repository.SubtitleRepository
+	storageLocRepo *repository.StorageLocationRepository
+	mediaBaseURL   string
+	mediaSigner    *mediaURLSigner
 }
 
 // NewPlayerHandler creates a PlayerHandler.
@@ -36,17 +38,19 @@ func NewPlayerHandler(
 	assetRepo *repository.AssetRepository,
 	movieRepo *repository.MovieRepository,
 	subtitleRepo *repository.SubtitleRepository,
+	storageLocRepo *repository.StorageLocationRepository,
 	mediaBaseURL string,
 	mediaSigningKey string,
 	mediaSigningTTL time.Duration,
 ) *PlayerHandler {
 	return &PlayerHandler{
-		jobSvc:       jobSvc,
-		assetRepo:    assetRepo,
-		movieRepo:    movieRepo,
-		subtitleRepo: subtitleRepo,
-		mediaBaseURL: mediaBaseURL,
-		mediaSigner:  newMediaURLSigner(mediaSigningKey, mediaSigningTTL),
+		jobSvc:         jobSvc,
+		assetRepo:      assetRepo,
+		movieRepo:      movieRepo,
+		subtitleRepo:   subtitleRepo,
+		storageLocRepo: storageLocRepo,
+		mediaBaseURL:   mediaBaseURL,
+		mediaSigner:    newMediaURLSigner(mediaSigningKey, mediaSigningTTL),
 	}
 }
 
@@ -131,13 +135,15 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	baseURL := h.resolveBaseURL(r.Context(), movie.storageLocationID)
+
 	// Build subtitle list.
 	subtitleTracks := []map[string]string{}
 	if subs, err := h.subtitleRepo.ListByMovieID(r.Context(), movie.id); err == nil {
 		for _, sub := range subs {
 			subtitleTracks = append(subtitleTracks, map[string]string{
 				"language": sub.Language,
-				"url":      h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.storageKey, "subtitles/"+sub.Language+".vtt")),
+				"url":      h.maybeSignMediaURL(buildMovieMediaURL(baseURL, movie.storageKey, "subtitles/"+sub.Language+".vtt")),
 			})
 		}
 	}
@@ -150,10 +156,10 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 				"tmdb_id": movie.tmdbID,
 			},
 			"playback": map[string]any{
-				"hls": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.storageKey, "master.m3u8")),
+				"hls": h.maybeSignMediaURL(buildMovieMediaURL(baseURL, movie.storageKey, "master.m3u8")),
 			},
 			"assets": map[string]any{
-				"poster": h.maybeSignMediaURL(buildMovieMediaURL(h.mediaBaseURL, movie.storageKey, "thumbnail.jpg")),
+				"poster": h.maybeSignMediaURL(buildMovieMediaURL(baseURL, movie.storageKey, "thumbnail.jpg")),
 			},
 			"subtitles": subtitleTracks,
 		},
@@ -164,10 +170,11 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 }
 
 type repositoryMovieView struct {
-	id         int64
-	storageKey string
-	imdbID     *string
-	tmdbID     *string
+	id                int64
+	storageKey        string
+	imdbID            *string
+	tmdbID            *string
+	storageLocationID *int64
 }
 
 func (h *PlayerHandler) getMovieByIMDbID(r *http.Request, imdbID string) (*repositoryMovieView, error) {
@@ -175,7 +182,7 @@ func (h *PlayerHandler) getMovieByIMDbID(r *http.Request, imdbID string) (*repos
 	if err != nil {
 		return nil, err
 	}
-	return &repositoryMovieView{id: m.ID, storageKey: m.StorageKey, imdbID: m.IMDbID, tmdbID: m.TMDBID}, nil
+	return &repositoryMovieView{id: m.ID, storageKey: m.StorageKey, imdbID: m.IMDbID, tmdbID: m.TMDBID, storageLocationID: m.StorageLocationID}, nil
 }
 
 func (h *PlayerHandler) getMovieByTMDBID(r *http.Request, tmdbID string) (*repositoryMovieView, error) {
@@ -183,7 +190,22 @@ func (h *PlayerHandler) getMovieByTMDBID(r *http.Request, tmdbID string) (*repos
 	if err != nil {
 		return nil, err
 	}
-	return &repositoryMovieView{id: m.ID, storageKey: m.StorageKey, imdbID: m.IMDbID, tmdbID: m.TMDBID}, nil
+	return &repositoryMovieView{id: m.ID, storageKey: m.StorageKey, imdbID: m.IMDbID, tmdbID: m.TMDBID, storageLocationID: m.StorageLocationID}, nil
+}
+
+// resolveBaseURL returns the appropriate media base URL for a movie.
+// If the movie is on a remote storage location with a configured base_url, use that.
+// Falls back to the global MEDIA_BASE_URL (covers local movies and remote movies
+// whose domain is not yet configured).
+func (h *PlayerHandler) resolveBaseURL(ctx context.Context, storageLocationID *int64) string {
+	if storageLocationID != nil && *storageLocationID > 1 {
+		loc, err := h.storageLocRepo.GetByID(ctx, *storageLocationID)
+		if err == nil && loc.BaseURL != "" {
+			return loc.BaseURL
+		}
+		// base_url empty = domain not yet configured; fall through to local
+	}
+	return h.mediaBaseURL
 }
 
 func buildMovieMediaURL(baseURL, storageKey, fileName string) string {
