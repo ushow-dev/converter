@@ -148,7 +148,25 @@ FFmpeg запускается с `-threads {ffmpegThreads}` чтобы не мо
 12. Fetch субтитры (OpenSubtitles, опционально)
 13. UPDATE media_jobs: status=completed
 14. Очистить /media/downloads/{jobID}/
+15. RPUSH transfer_queue {TransferMessage} (если RCLONE_REMOTE задан)
 ```
+
+## Этап переноса (transfer stage)
+
+После успешной конвертации converter отправляет сообщение в `transfer_queue`. `TransferWorker` переносит HLS-файлы на удалённый сервер:
+
+```
+convert → [HLS готов в /media/converted/movies/<Title (Year)>/]
+        → transfer_queue → rclone move → remote:/storage/movies/<Title (Year)>/
+        → movies.storage_location_id обновлён
+```
+
+Если `RCLONE_REMOTE` не задан — сообщение не отправляется, файлы остаются локально.
+
+После успешного переноса:
+- `movies.storage_location_id` обновляется на ID удалённого хранилища
+- Плеер получает `base_url` из `storage_locations` и строит URL к сегментам
+- Если `base_url` пустой (прокси ещё не готов) — плеер использует `MEDIA_BASE_URL` (локальный доступ)
 
 ## Конфигурация окружения
 
@@ -157,3 +175,4 @@ FFmpeg запускается с `-threads {ffmpegThreads}` чтобы не мо
 | `CONVERT_CONCURRENCY` | Параллельные конвертации (default: 1) |
 | `TMDB_API_KEY` | Для загрузки метаданных и postеров |
 | `OPENSUBTITLES_API_KEY` | Для авто-субтитров |
+| `RCLONE_REMOTE` | Имя rclone remote для переноса файлов (например `myserver:`); если не задан — перенос отключён |

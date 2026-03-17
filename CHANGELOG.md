@@ -11,25 +11,12 @@
 
 ## [Unreleased]
 
-### Changed
-
-- `worker/internal/repository/movie.go`: replaced random `mov_<hex>` storage key generation with human-readable `Title (Year)` format; added unique-constraint collision retry (up to 10 attempts with numeric suffix)
-
-
-
-- `worker/internal/converter/converter.go`: HLS output now written to `media/converted/movies/{storageKey}/` instead of `media/converted/{storageKey}/`
-- `worker/internal/downloader/downloader.go`: `FinalDir` hint in convert message updated to new `converted/movies/` prefix
-- `api/internal/service/job.go`: upload job `FinalDir` updated to `converted/movies/` prefix
-- `api/internal/handler/player.go`: `buildMovieMediaURL` uses new `/media/converted/movies/{key}/{file}` URL format; `mediaSigningPath` updated to bind token at depth 4 (`/media/converted/movies/{key}/`)
-- `api/internal/handler/subtitles.go`: subtitle directory resolves to `converted/movies/{storageKey}/subtitles`
-- `api/internal/db/migrations/009_update_storage_path_movies_subdir.sql`: backfills existing `media_assets.storage_path`, `media_assets.thumbnail_path`, and `movie_subtitles.storage_path` rows to the new path prefix
-
-### Fixed
-
-- `frontend/src/app/movies/page.tsx`: кнопка "смотреть" теперь корректно открывает плеер в модальном окне через iframe; URL плеера читается из runtime-переменной `PLAYER_URL` вместо build-time `NEXT_PUBLIC_PLAYER_URL`
-
 ### Added
-
+- `api/internal/db/migrations/010_storage_locations.sql`: storage_locations table and movies.storage_location_id FK
+- `api/internal/db/migrations/011_seed_remote_storage_location.sql`: seed remote storage location row
+- `worker/internal/transfer/transfer.go`: TransferWorker — rclone-based post-conversion file transfer
+- `api/internal/repository/storage_location.go`: StorageLocationRepository (api)
+- `worker/internal/repository/storage_location.go`: StorageLocationRepository (worker)
 - `frontend/src/app/api/app-config/route.ts`: server-side Route Handler с `dynamic = 'force-dynamic'`, возвращает `playerUrl` из env для клиентских компонентов без бейка в бандл
 - `CLAUDE.md` — инструкции и правила для AI-ассистентов
 - `REPO_MAP.md` — карта директорий проекта
@@ -48,9 +35,24 @@
 - `docs/admin/admin-overview.md` — Admin UI обзор
 - `docs/roadmap/technical-debt.md` — технический долг и приоритеты
 - `docs/contributing/conventional-commits.md` — стандарт оформления коммитов
-- `docs/decisions/` — система Architecture Decision Records (ADR-001..006)
+- `docs/decisions/` — система Architecture Decision Records (ADR-001..007)
 - `docs/roadmap/roadmap.md` — дорожная карта развития
 - `scripts/new-adr.sh` — скрипт создания нового ADR
+
+### Changed
+
+- `worker/internal/repository/movie.go`: storage_key now uses "Title (Year)" format instead of random hex; added unique-constraint collision retry (up to 10 attempts with numeric suffix)
+- `worker/internal/converter/converter.go`: HLS output now written to `media/converted/movies/{storageKey}/` instead of `media/converted/{storageKey}/`; enqueue transfer_queue message after successful HLS conversion
+- `worker/internal/downloader/downloader.go`: `FinalDir` hint in convert message updated to new `converted/movies/` prefix
+- `api/internal/service/job.go`: upload job `FinalDir` updated to `converted/movies/` prefix
+- `api/internal/handler/player.go`: media base URL resolved per-movie from storage_location; falls back to MEDIA_BASE_URL when base_url is empty
+- `api/internal/handler/subtitles.go`: subtitle directory resolves to `converted/movies/{storageKey}/subtitles`
+- `api/internal/db/migrations/009_update_storage_path_movies_subdir.sql`: backfills existing `media_assets.storage_path`, `media_assets.thumbnail_path`, and `movie_subtitles.storage_path` rows to the new path prefix
+- `worker/Dockerfile`: rclone installed
+
+### Fixed
+
+- `frontend/src/app/movies/page.tsx`: кнопка "смотреть" теперь корректно открывает плеер в модальном окне через iframe; URL плеера читается из runtime-переменной `PLAYER_URL` вместо build-time `NEXT_PUBLIC_PLAYER_URL`
 
 ---
 

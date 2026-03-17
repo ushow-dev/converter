@@ -10,6 +10,7 @@
 | `download_queue` | API `/api/admin/jobs` | Worker downloader | Торрент-загрузка |
 | `convert_queue` | API (upload) / Worker (после download) | Worker converter | FFmpeg конвертация |
 | `remote_download_queue` | API `/api/admin/jobs/remote-download` | Worker httpdownloader | HTTP-загрузка |
+| `transfer_queue` | Worker converter (после HLS) | Worker transfer | Перенос HLS на удалённый сервер через rclone |
 
 Механизм: `RPUSH` (producer) + `BLPOP` (consumer, blocking, timeout 5s).
 
@@ -92,6 +93,35 @@
 
 ---
 
+### TransferMessage (transfer_queue)
+
+Сообщение конверсионного воркера после успешной HLS-конвертации. Обрабатывается `TransferWorker`.
+
+```json
+{
+  "schema_version": "string (версия схемы, например \"1\")",
+  "job_id": "string",
+  "correlation_id": "string (для трассировки, обычно совпадает с job_id)",
+  "created_at": "time (RFC3339)",
+  "payload": {
+    "movie_id": "number (int64, ID фильма в таблице movies)",
+    "storage_key": "string (папка фильма, формат \"Title (Year)\")",
+    "local_path": "string (абсолютный путь к HLS-директории, например /media/converted/movies/Title (Year)/)"
+  }
+}
+```
+
+**Действия воркера:**
+1. Запустить `rclone move {local_path} {RCLONE_REMOTE}/storage/movies/{storage_key}/`
+2. `UPDATE movies SET storage_location_id = <remote_location_id> WHERE id = movie_id`
+3. Плеер автоматически начнёт использовать `base_url` из `storage_locations`
+
+**Если `RCLONE_REMOTE` не задан:**
+- Сообщение не отправляется конвертером
+- Файлы остаются в `/media/converted/movies/{storage_key}/`
+
+---
+
 ## Статусы задания (media_jobs.status)
 
 ```
@@ -107,6 +137,7 @@ failed      — завершено с ошибкой
 ```
 download    — воркер скачивает файл (торрент или HTTP)
 convert     — воркер запускает FFmpeg
+transfer    — воркер переносит HLS на удалённый сервер через rclone
 ```
 
 ## Distributed Locking
