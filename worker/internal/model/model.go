@@ -145,3 +145,30 @@ type Subtitle struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
+
+// ─── Storage & Transfer ───────────────────────────────────────────────────────
+
+// StorageLocation mirrors the api model for worker-side reads.
+type StorageLocation struct {
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	BaseURL string `json:"base_url"`
+}
+
+// TransferMessage is the BLPOP envelope for transfer_queue.
+// JSON-compatible with api/internal/model.TransferPayload.
+type TransferMessage struct {
+	SchemaVersion string      `json:"schema_version"`
+	JobID         string      `json:"job_id"`
+	CorrelationID string      `json:"correlation_id"`
+	CreatedAt     time.Time   `json:"created_at"`
+	Payload       TransferJob `json:"payload"`
+}
+
+// TransferJob is the inner payload for a transfer task.
+type TransferJob struct {
+	MovieID    int64  `json:"movie_id"`
+	StorageKey string `json:"storage_key"`
+	LocalPath  string `json:"local_path"`
+}

@@ -44,6 +44,11 @@ type Config struct {
 
 	// Languages to fetch subtitles for, e.g. ["ru","en"]
 	SubtitleLanguages []string
+
+	// rclone transfer settings
+	RcloneRemote       string // name of rclone remote, e.g. "myremote" — empty disables transfer
+	RcloneRemotePath   string // base path on remote, e.g. "/storage"
+	TransferConcurrency int
 }
 
 // Load reads configuration from environment variables.
@@ -63,6 +68,9 @@ func Load() (*Config, error) {
 		TMDBAPIKey:          getEnv("TMDB_API_KEY", ""),
 		OpenSubtitlesAPIKey: getEnv("OPENSUBTITLES_API_KEY", ""),
 		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "en,bn,hi")),
+		RcloneRemote:        getEnv("RCLONE_REMOTE", ""),
+		RcloneRemotePath:    getEnv("RCLONE_REMOTE_PATH", "/storage"),
+		TransferConcurrency: intEnv("TRANSFER_CONCURRENCY", 1),
 	}
 	return cfg, nil
 }

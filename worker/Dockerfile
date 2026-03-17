@@ -17,8 +17,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM alpine:3.20
 
-# ffmpeg for media conversion, curl for healthcheck.
-RUN apk add --no-cache ffmpeg curl
+# ffmpeg for media conversion, curl for healthcheck, rclone for remote uploads, openssh-client for SSH key auth.
+RUN apk add --no-cache ffmpeg curl rclone openssh-client
 
 WORKDIR /app
 COPY --from=builder /worker .

@@ -21,6 +21,7 @@ import (
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
 	"app/worker/internal/subtitles"
+	"app/worker/internal/transfer"
 )
 
 func main() {
@@ -108,8 +109,20 @@ func main() {
 	// ── Pipeline workers ───────────────────────────────────────────────────────
 	dlWorker := downloader.New(redisClient, jobRepo, qbt, cfg.MediaRoot)
 	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo,
-		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads)
+		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads,
+		cfg.RcloneRemote != "")
 	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot)
+
+	// Transfer worker (optional: only when RCLONE_REMOTE is set)
+	const remoteStorageLocID = int64(2) // matches id from migration 011
+	var trWorker *transfer.Worker
+	if cfg.RcloneRemote != "" {
+		trWorker = transfer.New(redisClient, movieRepo,
+			cfg.RcloneRemote, cfg.RcloneRemotePath, remoteStorageLocID)
+		slog.Info("transfer worker enabled", "remote", cfg.RcloneRemote)
+	} else {
+		slog.Info("transfer worker disabled (RCLONE_REMOTE not set)")
+	}
 
 	// ── Health server ──────────────────────────────────────────────────────────
 	go health.Start(cfg.HealthPort, redisClient)
@@ -142,6 +155,16 @@ func main() {
 			defer wg.Done()
 			httpDlWorker.Run(ctx)
 		}()
+	}
+
+	if trWorker != nil {
+		for i := 0; i < cfg.TransferConcurrency; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				trWorker.Run(ctx)
+			}()
+		}
 	}
 
 	slog.Info("worker running",
