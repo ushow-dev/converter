@@ -70,7 +70,7 @@ function JobIcon({ job }: { job: Job }) {
 
 function QueueRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void }) {
   const title = parseTitle(job)
-  const stageName = job.stage === 'download' ? 'Скачивание' : job.stage === 'convert' ? 'Конвертация' : null
+  const stageName = job.stage === 'download' ? 'Скачивание' : job.stage === 'convert' ? 'Конвертация' : job.stage === 'transfer' ? 'Перенос' : null
 
   return (
     <tr className="group border-b border-gray-800 hover:bg-gray-900/60">

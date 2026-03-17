@@ -1,6 +1,6 @@
 export type JobStatus = 'queued' | 'in_progress' | 'completed' | 'failed'
 export type JobStatusFilter = JobStatus | 'active'
-export type JobStage = 'download' | 'convert'
+export type JobStage = 'download' | 'convert' | 'transfer'
 export type ContentType = 'movie'
 export type SourceType = 'torrent' | 'upload'
 export type Priority = 'low' | 'normal' | 'high'

@@ -76,7 +76,12 @@ export default function JobDetailPage({ params }: { params: { jobId: string } })
                     </span>
                   }
                 />
-                <Row label="Stage" value={job.stage ?? '—'} />
+                <Row label="Stage" value={
+                  job.stage === 'download' ? 'Скачивание'
+                  : job.stage === 'convert' ? 'Конвертация'
+                  : job.stage === 'transfer' ? 'Перенос'
+                  : '—'
+                } />
                 <Row label="Content type" value={job.content_type} />
                 <Row
                   label="Progress"
