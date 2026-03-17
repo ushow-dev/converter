@@ -25,7 +25,7 @@ func NewMovieRepository(pool *pgxpool.Pool) *MovieRepository {
 
 // Upsert inserts or updates movie metadata and always returns a stable storage key.
 func (r *MovieRepository) Upsert(
-	ctx context.Context, imdbID, tmdbID, title string, posterURL *string,
+	ctx context.Context, imdbID, tmdbID, title string, year *int, posterURL *string,
 ) (*model.Movie, error) {
 	imdb := nullableText(imdbID)
 	tmdb := nullableText(tmdbID)
@@ -48,10 +48,11 @@ func (r *MovieRepository) Upsert(
 			SET imdb_id    = COALESCE(imdb_id, $2),
 			    tmdb_id    = COALESCE(tmdb_id, $3),
 			    title      = COALESCE(title, $4),
-			    poster_url = COALESCE(poster_url, $5),
+			    year       = COALESCE(year, $5),
+			    poster_url = COALESCE(poster_url, $6),
 			    updated_at = NOW()
 			WHERE id = $1`,
-			existing.ID, imdb, tmdb, ttl, posterURL); err != nil {
+			existing.ID, imdb, tmdb, ttl, year, posterURL); err != nil {
 			return nil, fmt.Errorf("update movie %d: %w", existing.ID, err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -62,10 +63,10 @@ func (r *MovieRepository) Upsert(
 
 	m := &model.Movie{}
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO movies (storage_key, imdb_id, tmdb_id, title, poster_url)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO movies (storage_key, imdb_id, tmdb_id, title, year, poster_url)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, storage_key, imdb_id, tmdb_id, title, year, poster_url, created_at, updated_at`,
-		generateStorageKey(), imdb, tmdb, ttl, posterURL,
+		generateStorageKey(), imdb, tmdb, ttl, year, posterURL,
 	).Scan(&m.ID, &m.StorageKey, &m.IMDbID, &m.TMDBID, &m.Title, &m.Year, &m.PosterURL, &m.CreatedAt, &m.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("insert movie: %w", err)
 	}

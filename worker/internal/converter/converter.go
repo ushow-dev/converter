@@ -155,19 +155,39 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		thumbSrc = ""
 	}
 
-	// ── TMDB backdrop (preferred over ffmpeg frame) ───────────────────────────
+	// ── Fetch TMDB metadata (backdrop + year + poster) ───────────────────────
+	var tmdbMeta *tmdbMetadata
 	if w.tmdbAPIKey != "" && msg.Payload.TMDBID != "" {
-		backdropDest := outputDir + "/thumbnail.jpg"
-		if err := downloadTMDBBackdrop(ctx, w.tmdbAPIKey, msg.Payload.TMDBID, backdropDest); err != nil {
-			log.Warn("TMDB backdrop download failed, keeping ffmpeg thumbnail", "error", err)
+		meta, err := fetchTMDBMetadata(ctx, w.tmdbAPIKey, msg.Payload.TMDBID)
+		if err != nil {
+			log.Warn("TMDB metadata fetch failed", "error", err)
 		} else {
-			log.Info("TMDB backdrop saved", "tmdb_id", msg.Payload.TMDBID)
-			thumbSrc = backdropDest
+			tmdbMeta = meta
+			if meta.BackdropPath != "" {
+				backdropDest := outputDir + "/thumbnail.jpg"
+				if err := downloadImage(ctx, "https://image.tmdb.org/t/p/w1280"+meta.BackdropPath, backdropDest); err != nil {
+					log.Warn("TMDB backdrop download failed, keeping ffmpeg thumbnail", "error", err)
+				} else {
+					log.Info("TMDB backdrop saved", "tmdb_id", msg.Payload.TMDBID)
+					thumbSrc = backdropDest
+				}
+			}
 		}
 	}
 
 	// ── Create movie row and derive final directory ───────────────────────────
-	movie, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, nil)
+	var upsertYear *int
+	var upsertPoster *string
+	if tmdbMeta != nil {
+		if tmdbMeta.Year > 0 {
+			upsertYear = &tmdbMeta.Year
+		}
+		if tmdbMeta.PosterPath != "" {
+			p := "https://image.tmdb.org/t/p/w500" + tmdbMeta.PosterPath
+			upsertPoster = &p
+		}
+	}
+	movie, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, upsertYear, upsertPoster)
 	if err != nil {
 		w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
 		return
@@ -309,15 +329,62 @@ func generateAssetID() string {
 	return fmt.Sprintf("asset_%x", b)
 }
 
-// downloadTMDBBackdrop fetches backdrop_path from TMDB and saves it as a JPEG to destPath.
-// Uses w1280 image size. Returns an error if the movie has no backdrop or the download fails.
-func downloadTMDBBackdrop(ctx context.Context, apiKey, tmdbID, destPath string) error {
+type tmdbMetadata struct {
+	Year         int
+	Title        string
+	BackdropPath string
+	PosterPath   string
+}
+
+// fetchTMDBMetadata fetches movie details from TMDB and returns metadata including
+// year, title, backdrop_path, and poster_path.
+func fetchTMDBMetadata(ctx context.Context, apiKey, tmdbID string) (*tmdbMetadata, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
-	// 1. Fetch movie details to get backdrop_path.
 	detailURL := fmt.Sprintf("https://api.themoviedb.org/3/movie/%s?api_key=%s", tmdbID, apiKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, detailURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("TMDB details returned HTTP %d", resp.StatusCode)
+	}
+
+	var details struct {
+		Title        string `json:"title"`
+		ReleaseDate  string `json:"release_date"`
+		BackdropPath string `json:"backdrop_path"`
+		PosterPath   string `json:"poster_path"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
+		return nil, err
+	}
+
+	meta := &tmdbMetadata{
+		Title:        details.Title,
+		BackdropPath: details.BackdropPath,
+		PosterPath:   details.PosterPath,
+	}
+	if len(details.ReleaseDate) >= 4 {
+		if y, err := strconv.Atoi(details.ReleaseDate[:4]); err == nil {
+			meta.Year = y
+		}
+	}
+	return meta, nil
+}
+
+// downloadImage downloads an image from url and saves it to destPath.
+func downloadImage(ctx context.Context, url, destPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
@@ -327,32 +394,7 @@ func downloadTMDBBackdrop(ctx context.Context, apiKey, tmdbID, destPath string) 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("TMDB details returned HTTP %d", resp.StatusCode)
-	}
-
-	var details struct {
-		BackdropPath string `json:"backdrop_path"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
-		return err
-	}
-	if details.BackdropPath == "" {
-		return fmt.Errorf("no backdrop_path for TMDB ID %s", tmdbID)
-	}
-
-	// 2. Download the backdrop image.
-	imgURL := "https://image.tmdb.org/t/p/w1280" + details.BackdropPath
-	imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
-	if err != nil {
-		return err
-	}
-	imgResp, err := http.DefaultClient.Do(imgReq)
-	if err != nil {
-		return err
-	}
-	defer imgResp.Body.Close()
-	if imgResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("TMDB image download returned HTTP %d", imgResp.StatusCode)
+		return fmt.Errorf("image download returned HTTP %d", resp.StatusCode)
 	}
 
 	f, err := os.Create(destPath)
@@ -361,7 +403,7 @@ func downloadTMDBBackdrop(ctx context.Context, apiKey, tmdbID, destPath string) 
 	}
 	defer f.Close()
 
-	_, err = io.Copy(f, imgResp.Body)
+	_, err = io.Copy(f, resp.Body)
 	return err
 }
 
