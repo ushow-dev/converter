@@ -187,7 +187,7 @@ func (h *PlayerHandler) getMovieByTMDBID(r *http.Request, tmdbID string) (*repos
 }
 
 func buildMovieMediaURL(baseURL, storageKey, fileName string) string {
-	relative := fmt.Sprintf("/media/converted/movies/%s/%s", storageKey, fileName)
+	relative := fmt.Sprintf("/movies/%s/%s", storageKey, fileName)
 	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if trimmed == "" {
 		return relative
@@ -250,17 +250,16 @@ func mediaSigningPath(path string) string {
 	}
 
 	parts := strings.Split(strings.TrimPrefix(normalized, "/"), "/")
-	// For HLS requests under /media/converted/movies/<movie_id>/..., bind token to
-	// the movie directory so nested playlists/segments share one signature.
-	if len(parts) >= 4 &&
-		parts[0] == "media" &&
-		parts[1] == "converted" &&
-		parts[2] == "movies" &&
-		parts[3] != "" &&
+	// For HLS requests under /<content_type>/<storage_key>/..., bind token to
+	// the storage key directory so nested playlists/segments share one signature.
+	// Supported content types: movies, serials, tv.
+	if len(parts) >= 2 &&
+		(parts[0] == "movies" || parts[0] == "serials" || parts[0] == "tv") &&
+		parts[1] != "" &&
 		(parts[len(parts)-1] == "master.m3u8" ||
 			strings.HasSuffix(parts[len(parts)-1], ".m3u8") ||
 			strings.HasSuffix(parts[len(parts)-1], ".ts")) {
-		return "/media/converted/movies/" + parts[3] + "/"
+		return "/" + parts[0] + "/" + parts[1] + "/"
 	}
 
 	return normalized
