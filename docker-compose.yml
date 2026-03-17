@@ -215,8 +215,16 @@ services:
       CONVERT_CONCURRENCY:      ${CONVERT_CONCURRENCY:-1}
       OPENSUBTITLES_API_KEY:    ${OPENSUBTITLES_API_KEY:-}
       SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-en,bn,hi}
+      RCLONE_CONFIG_MYREMOTE_TYPE:     ${RCLONE_CONFIG_MYREMOTE_TYPE:-}
+      RCLONE_CONFIG_MYREMOTE_HOST:     ${RCLONE_CONFIG_MYREMOTE_HOST:-}
+      RCLONE_CONFIG_MYREMOTE_USER:     ${RCLONE_CONFIG_MYREMOTE_USER:-}
+      RCLONE_CONFIG_MYREMOTE_KEY_FILE: ${RCLONE_CONFIG_MYREMOTE_KEY_FILE:-}
+      RCLONE_REMOTE:            ${RCLONE_REMOTE:-}
+      RCLONE_REMOTE_PATH:       ${RCLONE_REMOTE_PATH:-/storage}
+      TRANSFER_CONCURRENCY:     ${TRANSFER_CONCURRENCY:-1}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
+      - ./secrets/mediarw_rclone:/secrets/mediarw_rclone:ro
     networks:
       - app_net
     depends_on:
