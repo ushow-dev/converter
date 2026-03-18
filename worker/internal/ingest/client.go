@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// IncomingItem — fields the worker needs from the API response
+// IncomingItem — fields the worker needs from the scanner API response.
 type IncomingItem struct {
 	ID             int64   `json:"id"`
 	SourcePath     string  `json:"source_path"`
@@ -19,12 +19,14 @@ type IncomingItem struct {
 	TMDBID         *string `json:"tmdb_id,omitempty"`
 }
 
+// Client is an HTTP client for the scanner ingest API.
 type Client struct {
 	baseURL string
 	token   string
 	http    *http.Client
 }
 
+// NewClient creates a Client that talks to the scanner API at baseURL.
 func NewClient(baseURL, token string) *Client {
 	return &Client{
 		baseURL: baseURL,
@@ -33,40 +35,33 @@ func NewClient(baseURL, token string) *Client {
 	}
 }
 
-// Claim claims up to limit items from the API.
+// Claim claims up to 1 item from the scanner API.
 func (c *Client) Claim(ctx context.Context, claimTTLSec int) ([]IncomingItem, error) {
 	body, _ := json.Marshal(map[string]int{"limit": 1, "claim_ttl_sec": claimTTLSec})
 	var resp struct {
 		Items []IncomingItem `json:"items"`
 	}
-	if err := c.post(ctx, "/api/ingest/incoming/claim", body, &resp); err != nil {
+	if err := c.post(ctx, "/api/v1/incoming/claim", body, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Items, nil
 }
 
-// Progress reports progress for an item.
+// Progress reports copying progress for an item.
 func (c *Client) Progress(ctx context.Context, id int64, status string) error {
-	body, _ := json.Marshal(map[string]any{"id": id, "status": status, "progress_percent": 0})
-	return c.post(ctx, "/api/ingest/incoming/progress", body, nil)
+	body, _ := json.Marshal(map[string]string{"status": status})
+	return c.post(ctx, fmt.Sprintf("/api/v1/incoming/%d/progress", id), body, nil)
 }
 
 // Fail reports a failure for an item.
 func (c *Client) Fail(ctx context.Context, id int64, msg string) error {
-	body, _ := json.Marshal(map[string]any{"id": id, "error_message": msg})
-	return c.post(ctx, "/api/ingest/incoming/fail", body, nil)
+	body, _ := json.Marshal(map[string]string{"error_message": msg})
+	return c.post(ctx, fmt.Sprintf("/api/v1/incoming/%d/fail", id), body, nil)
 }
 
-// Complete marks an item as completed and returns the job_id.
-func (c *Client) Complete(ctx context.Context, id int64, localPath string) (string, error) {
-	body, _ := json.Marshal(map[string]any{"id": id, "local_path": localPath})
-	var resp struct {
-		JobID string `json:"job_id"`
-	}
-	if err := c.post(ctx, "/api/ingest/incoming/complete", body, &resp); err != nil {
-		return "", err
-	}
-	return resp.JobID, nil
+// Complete marks an item as completed in the scanner.
+func (c *Client) Complete(ctx context.Context, id int64) error {
+	return c.post(ctx, fmt.Sprintf("/api/v1/incoming/%d/complete", id), []byte("{}"), nil)
 }
 
 func (c *Client) post(ctx context.Context, path string, body []byte, out any) error {
