@@ -158,3 +158,8 @@ func (s *IngestService) Complete(ctx context.Context, req *model.CompleteIncomin
 
 	return &model.CompleteIncomingResponse{JobID: jobID}, nil
 }
+
+// GetByID fetches a single incoming item by ID.
+func (s *IngestService) GetByID(ctx context.Context, id int64) (*model.IncomingItem, error) {
+	return s.repo.GetByID(ctx, id)
+}

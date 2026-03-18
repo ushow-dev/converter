@@ -95,6 +95,7 @@ func New(deps Dependencies) http.Handler {
 		r.Post("/incoming/progress", deps.IngestHandler.Progress)
 		r.Post("/incoming/fail",     deps.IngestHandler.Fail)
 		r.Post("/incoming/complete", deps.IngestHandler.Complete)
+		r.Get("/incoming/{id}",      deps.IngestHandler.GetByID)
 	})
 
 	return r

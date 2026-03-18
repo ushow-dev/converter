@@ -2,9 +2,14 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
 
 	"app/api/internal/model"
+	"app/api/internal/repository"
 	"app/api/internal/service"
 )
 
@@ -104,4 +109,24 @@ func (h *IngestHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, resp)
+}
+
+// GetByID handles GET /api/ingest/incoming/{id}.
+func (h *IngestHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
+	}
+	item, err := h.svc.GetByID(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	respondJSON(w, http.StatusOK, item)
 }
