@@ -27,6 +27,7 @@
 - `worker/internal/config/config.go`: 7 new ingest config fields: `ConverterAPIURL`, `IngestServiceToken`, `IngestConcurrency`, `IngestClaimTTLSec`, `IngestMaxAttempts`, `IngestSourceRemote`, `IngestSourceBasePath`
 - `worker/cmd/worker/main.go`: wire ingest worker goroutines; gated on `INGEST_SERVICE_TOKEN` and `INGEST_SOURCE_REMOTE` being set
 - `.env.example`: document ingest worker environment variables
+- `api/internal/handler/ingest.go`, `api/internal/service/ingest.go`, `api/internal/server/server.go`: add `GET /api/ingest/incoming/{id}` for scanner poll_loop status checks
 - `worker/internal/model/model.go`: `StageTransfer` constant
 - `api/internal/model/model.go`: `JobStageTransfer` constant
 - `worker/internal/repository/job.go`: `SetStageAndProgress` and `SetCompleted` methods for transfer stage tracking

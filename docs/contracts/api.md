@@ -457,6 +457,21 @@ Auth: `X-Service-Token: <INGEST_SERVICE_TOKEN>` required on all endpoints.
 
 ---
 
+### GET /api/ingest/incoming/{id}
+
+Auth: `X-Service-Token`
+
+Returns the current status of an incoming media item. Used by the scanner service to poll processing state.
+
+**Path parameters:**
+- `id` — int64, the item ID returned by `POST /incoming/register`
+
+**Response 200:** Full `IncomingItem` object (same fields as the register response)
+
+**Response 404:** Item not found
+
+---
+
 ## Стандартные ошибки
 
 ```json
