@@ -12,6 +12,7 @@
 ## [Unreleased]
 
 ### Changed
+- `worker/internal/converter/converter.go`: `buildSourceFilename` wraps TMDB ID in brackets — format is now `title_year_[tmdbID].ext`; if no TMDB ID, bracket suffix is omitted
 - `worker/internal/repository/movie.go`: `buildStorageKey` now uses underscores instead of spaces and `Title(Year)` format without space before parenthesis
 
 ### Added

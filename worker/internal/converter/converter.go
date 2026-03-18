@@ -478,11 +478,11 @@ func buildSourceFilename(movie *model.Movie, fallbackTitle, fallbackTMDB, ext st
 	var name string
 	switch {
 	case year > 0 && tmdbID != "":
-		name = fmt.Sprintf("%s_%d_%s", norm, year, tmdbID)
+		name = fmt.Sprintf("%s_%d_[%s]", norm, year, tmdbID)
 	case year > 0:
 		name = fmt.Sprintf("%s_%d", norm, year)
 	case tmdbID != "":
-		name = fmt.Sprintf("%s_%s", norm, tmdbID)
+		name = fmt.Sprintf("%s_[%s]", norm, tmdbID)
 	default:
 		name = norm
 	}
