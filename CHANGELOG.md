@@ -16,6 +16,7 @@
 - `worker/internal/repository/movie.go`: `buildStorageKey` now uses underscores instead of spaces and `Title(Year)` format without space before parenthesis
 
 ### Added
+- `api/internal/service/ingest.go`: add `IngestService` with `Register`, `Claim`, `Progress`, `Fail`, and `Complete` methods; `Complete` creates a deterministic `media_job` (idempotent via `request_id`) and pushes a `ConvertPayload` to `convert_queue`
 - `api/internal/repository/incoming.go`: add `IncomingRepository` with atomic batch claim (expired-lease reset CTE, `FOR UPDATE SKIP LOCKED`), idempotent `Register` upsert, `GetByID`, `Progress`, `Fail` (retry vs. dead-letter), and `Complete` methods
 - `worker/internal/model/model.go`: add `StageTransfer` constant
 - `api/internal/model/model.go`: add `JobStageTransfer` constant
