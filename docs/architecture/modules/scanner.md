@@ -2,7 +2,7 @@
 
 ## Назначение
 
-Автономный Python-сервис на storage-сервере, который автоматически индексирует папку `incoming/`, нормализует имена файлов, определяет дубли, регистрирует фильмы в converter API и перемещает готовые файлы в `library/movies/` после завершения конвертации.
+Автономный Python-сервис на storage-сервере, который автоматически индексирует папку `incoming/`, нормализует имена файлов, определяет дубли, регистрирует файлы в собственной БД и предоставляет HTTP API для IngestWorker. Перемещает готовые файлы в `library/movies/` после завершения копирования.
 
 Код живёт в `scanner/` и разворачивается независимо от основного стека converter.
 
@@ -23,10 +23,10 @@ scanner/
     ├── config.py               # все env vars (frozen dataclass)
     ├── db.py                   # connection pool, авто-миграции
     ├── migrations/
-    │   └── 001_initial.sql     # scanner_incoming_items + scanner_library_movies
+    │   ├── 001_initial.sql     # scanner_incoming_items + scanner_library_movies
+    │   └── 002_add_claim_columns.sql # claimed_at/claim_expires_at для TTL claims
     ├── loops/
     │   ├── scan_loop.py        # сканирует incoming/ каждые 30с
-    │   ├── poll_loop.py        # опрашивает converter API каждые 60с
     │   └── move_worker.py      # os.rename() в library/
     ├── services/
     │   ├── stability.py        # проверка стабильности файла
@@ -34,18 +34,18 @@ scanner/
     │   ├── quality.py          # ffprobe + quality_score
     │   └── duplicates.py       # логика дублей и апгрейдов
     └── api/
-        └── converter_client.py # HTTP клиент к converter API
+        └── server.py           # Flask HTTP API для IngestWorker (/api/v1/incoming/*)
 ```
 
 ### Потоки
 
 | Поток | Интервал | Ответственность |
 |---|---|---|
-| `scan_loop` | 30с | Обход `incoming/`, stability check, metadata pipeline, регистрация в API |
-| `poll_loop` | 60с | Опрос converter API по всем активным items |
+| `scan_loop` | 30с | Обход `incoming/`, stability check, metadata pipeline, регистрация в scanner DB |
+| `api_server` | HTTP (Flask, порт SCANNER_API_PORT) | Принимает claim/progress/complete/fail от IngestWorker |
 | `move_worker` | event-driven | `os.rename()` в `library/` + upsert в scanner_library_movies |
 
-Потоки не делят состояние напрямую: `scan_loop` → `poll_loop` через PostgreSQL, `poll_loop` → `move_worker` через `queue.Queue`.
+Потоки не делят состояние напрямую: `scan_loop` → `api_server` через PostgreSQL, `api_server` → `move_worker` через `queue.Queue`.
 
 ---
 
@@ -78,11 +78,12 @@ claimed → failed            (lease expired)
    - new_score ≥ existing_score + 8 → register (upgrade candidate)
    - Разница < 8 → review_duplicate (переименовать файл)
    - ffprobe провалился + есть existing → review_unknown_quality
-5. POST /api/ingest/incoming/register → api_item_id, status=registered
-6. poll_loop опрашивает GET /api/ingest/incoming/{api_item_id}
-7. При status=completed → move_queue
-8. move_worker: os.rename(incoming/..., library/movies/{normalized_name}/)
-9. UPSERT scanner_library_movies, status=archived
+5. INSERT scanner_incoming_items, status=registered (локально в scanner DB)
+6. IngestWorker вызывает POST /api/v1/incoming/claim → получает item
+7. IngestWorker: progress (copying) → rclone copy → progress (copied) → complete
+8. При status=completed → move_queue
+9. move_worker: os.rename(incoming/..., library/movies/{normalized_name}/)
+10. UPSERT scanner_library_movies, status=archived
 ```
 
 ---
@@ -132,15 +133,16 @@ claimed → failed            (lease expired)
 - `decide_action(existing_score, new_score, ffprobe_ok)` → `"register" | "review_duplicate" | "review_unknown_quality"`
   `UPGRADE_THRESHOLD = 8` — минимальная разница в очках для апгрейда.
 
-### api/converter_client.py
+### api/server.py
 
-```python
-class ConverterClient:
-    def register(source_path, source_filename, content_kind, ...) -> int  # api_item_id
-    def get_status(api_item_id) -> Tuple[str, Optional[str]]  # (status, error_message)
-```
+Flask HTTP API, принимает запросы от IngestWorker:
 
-Использует `requests.Session` с заголовком `X-Service-Token`.
+- `POST /api/v1/incoming/claim` — атомарно забирает доступные items (FOR UPDATE SKIP LOCKED), устанавливает `claimed_at`/`claim_expires_at`
+- `POST /api/v1/incoming/<id>/progress` — обновляет статус (`copying`/`copied`) и прогресс
+- `POST /api/v1/incoming/<id>/complete` — помечает item как `completed`, кладёт в move_queue
+- `POST /api/v1/incoming/<id>/fail` — фиксирует ошибку, сбрасывает в `new` при `attempts < max_attempts`
+
+Все endpoints защищены заголовком `X-Service-Token` (проверяется против `SERVICE_TOKEN`).
 
 ---
 
@@ -164,12 +166,11 @@ class ConverterClient:
 |---|---|---|
 | `INCOMING_DIR` | — | Путь к папке входящих файлов |
 | `LIBRARY_DIR` | — | Путь к медиатеке |
-| `CONVERTER_API_URL` | — | URL converter API |
-| `CONVERTER_SERVICE_TOKEN` | — | Токен авторизации (X-Service-Token) |
+| `SERVICE_TOKEN` | — | Токен авторизации (X-Service-Token), проверяется scanner |
+| `SCANNER_API_PORT` | — | Порт Flask HTTP API сервера |
 | `TMDB_API_KEY` | — | Ключ TMDB API |
 | `DATABASE_URL` | — | DSN PostgreSQL |
 | `SCAN_INTERVAL_SEC` | 30 | Интервал сканирования incoming/ |
-| `POLL_INTERVAL_SEC` | 60 | Интервал опроса converter API |
 | `STABILITY_SEC` | 30 | Время ожидания стабильности файла |
 
 ---
@@ -202,21 +203,7 @@ PYTHONPATH=. python3 -m pytest tests/ -v
 | `tests/test_quality.py` | quality_score для разных resolution/codec/HDR, parse_ffprobe_output |
 | `tests/test_metadata.py` | GuessIt парсинг, normalized_name, TMDB fallback |
 | `tests/test_duplicates.py` | Upgrade проходит (delta≥8), дубль блокируется, unknown_quality |
-| `tests/test_converter_client.py` | register/get_status через mock HTTP |
-
----
-
-## Зависимости от converter API
-
-Scanner требует endpoint `GET /api/ingest/incoming/{id}` (добавлен в Block 1):
-
-```
-GET /api/ingest/incoming/{id}
-Auth: X-Service-Token
-Response: { "id": 1, "status": "completed", "error_message": null }
-```
-
-Все остальные ingest endpoints (`/register`, `/claim`, `/progress`, `/fail`, `/complete`) — существующие.
+| `tests/test_api_server.py` | claim/progress/complete/fail через mock HTTP |
 
 ---
 

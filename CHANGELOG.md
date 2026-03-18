@@ -11,7 +11,27 @@
 
 ## [Unreleased]
 
+### Changed
+- `scanner/scanner/api/server.py`: scanner now exposes Flask HTTP API (`/api/v1/incoming/*`) instead of calling converter API
+- `scanner/scanner/loops/scan_loop.py`: registers items directly to scanner DB (no external API call)
+- `worker/internal/ingest/client.go`: IngestWorker now calls scanner HTTP API instead of converter API
+- `worker/internal/ingest/worker.go`: worker creates media_job and enqueues convert job locally after rclone copy
+- `worker/internal/config/config.go`: renamed `CONVERTER_API_URL` → `SCANNER_API_URL` for ingest worker
+
+### Removed
+- `api/internal/handler/ingest.go`: removed all `/api/ingest/incoming/*` endpoints from converter API
+- `api/internal/service/ingest.go`: removed IngestService from converter API
+- `api/internal/repository/incoming.go`: removed IncomingRepository from converter API
+- `api/internal/model/incoming.go`: removed IncomingItem and related request/response models
+- `scanner/scanner/loops/poll_loop.py`: removed poll loop (scanner no longer polls converter)
+- `scanner/scanner/api/converter_client.py`: removed converter HTTP client from scanner
+
 ### Added
+
+- `api/internal/db/migrations/013_drop_incoming_media_items.sql`: drop incoming_media_items from converter DB
+- `scanner/scanner/migrations/002_add_claim_columns.sql`: add claimed_at/claim_expires_at to scanner_incoming_items
+- `worker/internal/repository/job.go`: `CreateForIngest` method for idempotent job creation by ingest worker
+- `docs/decisions/ADR-009-scanner-as-ingest-api-server.md`: documents ingest architecture inversion
 
 - `api/internal/db/migrations/012_incoming_media_items.sql`: `incoming_media_items` table with status machine (`new → claiming → copying → copied → completed / failed`), lease expiry, quality and duplicate fields
 - `api/internal/model/incoming.go`: `IncomingItem` model, status constants, and 7 request/response types for the ingest API
