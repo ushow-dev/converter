@@ -6,9 +6,9 @@ import sys
 import threading
 
 from scanner import db
-from scanner.api.converter_client import ConverterClient
+from scanner.api import server as api_server
 from scanner.config import load as load_config
-from scanner.loops import move_worker, poll_loop, scan_loop
+from scanner.loops import move_worker, scan_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,15 +20,11 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     cfg = load_config()
     db.init(cfg.database_url)
-    client = ConverterClient(
-        base_url=cfg.converter_api_url,
-        service_token=cfg.converter_service_token,
-    )
     mq: queue.Queue = queue.Queue()
 
     threads = [
-        threading.Thread(target=scan_loop.run, args=(cfg, client), name="scan_loop", daemon=True),
-        threading.Thread(target=poll_loop.run, args=(cfg, client, mq), name="poll_loop", daemon=True),
+        threading.Thread(target=scan_loop.run, args=(cfg,), name="scan_loop", daemon=True),
+        threading.Thread(target=api_server.run, args=(cfg, mq), name="api_server", daemon=True),
         threading.Thread(target=move_worker.run, args=(cfg, mq), name="move_worker", daemon=True),
     ]
 

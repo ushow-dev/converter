@@ -16,6 +16,8 @@ services:
   scanner:
     build: .
     env_file: .env
+    ports:
+      - "${SCANNER_API_PORT:-8080}:8080"
     volumes:
       - ${INCOMING_DIR}:/incoming:ro
       - ${LIBRARY_DIR}:/library
