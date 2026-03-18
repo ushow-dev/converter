@@ -91,6 +91,15 @@
 
 ---
 
+## Реализовано (зафиксировано в CHANGELOG)
+
+### INGEST-BLOCK2: Converter-side ingest API and worker
+**Реализовано:** 2026-03-18
+**Что сделано:** API-driven ingest split — incoming_media_items table, 5 service-token-protected endpoints, IngestService (complete creates media_job + pushes to convert_queue), IngestWorker (rclone claim-copy-complete loop). See ADR-008.
+**Следующий шаг:** INGEST-BLOCK3 — callback from converter to scanner (move file to library after conversion complete).
+
+---
+
 ## Идеи для обсуждения
 
 - Поддержка нескольких языков субтитров в одном запросе

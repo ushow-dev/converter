@@ -122,6 +122,54 @@
 
 ---
 
+## Ingest Worker
+
+The ingest worker polls the API for newly registered incoming files and copies them to local disk before handing off to the conversion pipeline.
+
+**Activation:** Gated on both `INGEST_SERVICE_TOKEN` and `INGEST_SOURCE_REMOTE` being non-empty. If either is unset, the ingest worker goroutines are not started.
+
+**Poll interval:** 10 seconds (`BLPOP`-style, but HTTP-based — not Redis-driven).
+
+**Concurrency:** Controlled by `INGEST_CONCURRENCY` (default: 1). Each goroutine independently claims and processes one item per tick.
+
+### Claim–copy–complete cycle
+
+1. Call `POST /api/ingest/incoming/claim` with `limit=1` and `claim_ttl_sec=INGEST_CLAIM_TTL_SEC`.
+2. If no items returned, sleep and retry.
+3. Call `POST /api/ingest/incoming/progress` → status `copying`.
+4. Run `rclone copy {INGEST_SOURCE_REMOTE}:{INGEST_SOURCE_BASE_PATH}/{source_path} /media/downloads/ingest_{id}/`.
+5. Call `POST /api/ingest/incoming/progress` → status `copied`, progress 100.
+6. Call `POST /api/ingest/incoming/complete` with `local_path=/media/downloads/ingest_{id}/{source_filename}`.
+   - The API creates the `media_job` and pushes `ConvertPayload` to `convert_queue`.
+7. On any error: call `POST /api/ingest/incoming/fail` with the error message.
+
+### Local storage layout
+
+Copied files land in:
+```
+/media/downloads/ingest_{id}/{source_filename}
+```
+
+This path is passed to `complete` as `local_path`. The converter then treats it as a standard convert job.
+
+### Required configuration
+
+| Variable | Purpose |
+|---|---|
+| `INGEST_SERVICE_TOKEN` | Authenticates calls to `/api/ingest/*` |
+| `INGEST_SOURCE_REMOTE` | rclone remote name (e.g. `mynas`) |
+| `INGEST_SOURCE_BASE_PATH` | Base path on the remote (e.g. `incoming`) |
+| `CONVERTER_API_URL` | Base URL of the API service (e.g. `http://api:8000`) |
+| `INGEST_CONCURRENCY` | Number of parallel ingest goroutines (default: 1) |
+| `INGEST_CLAIM_TTL_SEC` | Lease duration in seconds (default: 3600) |
+| `INGEST_MAX_ATTEMPTS` | Max retry attempts before permanent failure (default: 3) |
+
+### Lease expiry recovery
+
+If the ingest worker crashes mid-copy, the item remains in `claiming` status with an expired lease. On the next `claim` call the API resets all expired leases back to `new`, making those items available for re-claim.
+
+---
+
 ## Статусы задания (media_jobs.status)
 
 ```

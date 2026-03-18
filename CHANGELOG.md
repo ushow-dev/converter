@@ -12,77 +12,62 @@
 ## [Unreleased]
 
 ### Added
-- `worker/internal/ingest/client.go`: new HTTP client for the ingest API (`Claim`, `Progress`, `Fail`, `Complete`)
-- `worker/internal/ingest/puller.go`: new rclone-based `Puller` that copies a single source file from a remote to local disk
-- `worker/internal/ingest/worker.go`: new poll-loop worker that claims ingest items from the API, copies them via rclone, then calls complete to create the convert job server-side
-- `worker/internal/config/config.go`: add ingest config fields (`ConverterAPIURL`, `IngestServiceToken`, `IngestConcurrency`, `IngestClaimTTLSec`, `IngestMaxAttempts`, `IngestSourceRemote`, `IngestSourceBasePath`)
+
+- `api/internal/db/migrations/012_incoming_media_items.sql`: `incoming_media_items` table with status machine (`new → claiming → copying → copied → completed / failed`), lease expiry, quality and duplicate fields
+- `api/internal/model/incoming.go`: `IncomingItem` model, status constants, and 7 request/response types for the ingest API
+- `api/internal/auth/service_token.go`: `ServiceTokenMiddleware` — `X-Service-Token` header auth for service-to-service endpoints
+- `api/internal/repository/incoming.go`: `IncomingRepository` — atomic batch claim with `FOR UPDATE SKIP LOCKED` and expired-lease reset in a single CTE; idempotent `Register` upsert; `Fail` with retry-vs-dead-letter logic
+- `api/internal/service/ingest.go`: `IngestService` — `Complete` creates a deterministic `media_job` (idempotent via `request_id`) and pushes `ConvertPayload` to `convert_queue`
+- `api/internal/handler/ingest.go`: `IngestHandler` with 5 service-token-protected endpoints: `Register`, `Claim`, `Progress`, `Fail`, `Complete`
+- `api/internal/server/server.go`: register `/api/ingest/*` route group protected by `ServiceTokenMiddleware`
+- `api/cmd/api/main.go`: wire `IncomingRepository`, `IngestService`, and `IngestHandler` into the dependency graph
+- `worker/internal/ingest/client.go`: HTTP client for the ingest API (`Claim`, `Progress`, `Fail`, `Complete`)
+- `worker/internal/ingest/puller.go`: rclone-based `Puller` that copies a single source file from a remote to local disk
+- `worker/internal/ingest/worker.go`: poll-loop worker — claims items from the API, copies via rclone, calls `complete` to create the convert job server-side
+- `worker/internal/config/config.go`: 7 new ingest config fields: `ConverterAPIURL`, `IngestServiceToken`, `IngestConcurrency`, `IngestClaimTTLSec`, `IngestMaxAttempts`, `IngestSourceRemote`, `IngestSourceBasePath`
 - `worker/cmd/worker/main.go`: wire ingest worker goroutines; gated on `INGEST_SERVICE_TOKEN` and `INGEST_SOURCE_REMOTE` being set
 - `.env.example`: document ingest worker environment variables
-
-### Changed
-- `worker/internal/converter/converter.go`: `buildSourceFilename` wraps TMDB ID in brackets — format is now `title_year_[tmdbID].ext`; if no TMDB ID, bracket suffix is omitted
-- `worker/internal/repository/movie.go`: `buildStorageKey` now uses underscores instead of spaces and `Title(Year)` format without space before parenthesis
-
-### Added
-- `api/internal/handler/ingest.go`: add `IngestHandler` with `Register`, `Claim`, `Progress`, `Fail`, and `Complete` HTTP handlers for the ingest service-to-service API
-- `api/internal/server/server.go`: add `IngestHandler` to `Dependencies` and register `/api/ingest/*` route group protected by `ServiceTokenMiddleware`
-- `api/cmd/api/main.go`: wire `IncomingRepository`, `IngestService`, and `IngestHandler` into the server dependency graph
-- `api/internal/service/ingest.go`: add `IngestService` with `Register`, `Claim`, `Progress`, `Fail`, and `Complete` methods; `Complete` creates a deterministic `media_job` (idempotent via `request_id`) and pushes a `ConvertPayload` to `convert_queue`
-- `api/internal/repository/incoming.go`: add `IncomingRepository` with atomic batch claim (expired-lease reset CTE, `FOR UPDATE SKIP LOCKED`), idempotent `Register` upsert, `GetByID`, `Progress`, `Fail` (retry vs. dead-letter), and `Complete` methods
-- `worker/internal/model/model.go`: add `StageTransfer` constant
-- `api/internal/model/model.go`: add `JobStageTransfer` constant
-- `worker/internal/repository/job.go`: add `SetStageAndProgress` and `SetCompleted` methods for transfer stage tracking
-- `worker/internal/transfer/transfer.go`: rewrite transfer worker with rclone stderr progress parsing and job stage updates
+- `worker/internal/model/model.go`: `StageTransfer` constant
+- `api/internal/model/model.go`: `JobStageTransfer` constant
+- `worker/internal/repository/job.go`: `SetStageAndProgress` and `SetCompleted` methods for transfer stage tracking
+- `worker/internal/transfer/transfer.go`: `TransferWorker` — rclone-based post-conversion file transfer with stderr progress parsing and job stage updates
 - `frontend/src/types/index.ts`: add `'transfer'` to `JobStage` type
 - `frontend/src/app/queue/page.tsx`: show "Перенос" label for transfer stage with progress bar
 - `frontend/src/app/jobs/[jobId]/page.tsx`: show "Перенос" label for transfer stage
-
-### Changed
-- `worker/internal/converter/converter.go`: transition job to `transfer` stage instead of `completed` when transfer is enabled; fix subtitle fetch ordering race with rclone
-- `worker/cmd/worker/main.go`: inject `jobRepo` into transfer worker constructor
-
-### Added
-- `api/internal/db/migrations/010_storage_locations.sql`: storage_locations table and movies.storage_location_id FK
+- `api/internal/db/migrations/010_storage_locations.sql`: `storage_locations` table and `movies.storage_location_id` FK
 - `api/internal/db/migrations/011_seed_remote_storage_location.sql`: seed remote storage location row
-- `worker/internal/transfer/transfer.go`: TransferWorker — rclone-based post-conversion file transfer
-- `api/internal/repository/storage_location.go`: StorageLocationRepository (api)
-- `worker/internal/repository/storage_location.go`: StorageLocationRepository (worker)
-- `frontend/src/app/api/app-config/route.ts`: server-side Route Handler с `dynamic = 'force-dynamic'`, возвращает `playerUrl` из env для клиентских компонентов без бейка в бандл
-- `CLAUDE.md` — инструкции и правила для AI-ассистентов
-- `REPO_MAP.md` — карта директорий проекта
-- `ARCHITECTURE.md` — краткий обзор системной архитектуры
-- `Makefile` — единая точка входа для команд разработки (`make help`)
-- `.githooks/commit-msg` — валидатор формата Conventional Commits
-- `.githooks/pre-commit` — go vet + проверка на секреты
-- `docs/architecture/system-overview.md` — общий обзор системы
-- `docs/architecture/services.md` — описание каждого сервиса
-- `docs/architecture/data-flow.md` — потоки данных между сервисами
-- `docs/architecture/deployment.md` — развёртывание и инфраструктура
-- `docs/contracts/api.md` — HTTP API контракты
-- `docs/contracts/worker.md` — контракты очередей воркера
-- `docs/converter/pipeline.md` — FFmpeg HLS pipeline
-- `docs/player/player-architecture.md` — архитектура плеера
-- `docs/admin/admin-overview.md` — Admin UI обзор
-- `docs/roadmap/technical-debt.md` — технический долг и приоритеты
-- `docs/contributing/conventional-commits.md` — стандарт оформления коммитов
-- `docs/decisions/` — система Architecture Decision Records (ADR-001..007)
-- `docs/roadmap/roadmap.md` — дорожная карта развития
-- `scripts/new-adr.sh` — скрипт создания нового ADR
+- `api/internal/repository/storage_location.go`: `StorageLocationRepository` (api)
+- `worker/internal/repository/storage_location.go`: `StorageLocationRepository` (worker)
+- `frontend/src/app/api/app-config/route.ts`: server-side Route Handler with `dynamic = 'force-dynamic'`, returns `playerUrl` from env for client components without build-time baking
+- `CLAUDE.md`: instructions and rules for AI assistants
+- `REPO_MAP.md`: directory map of the project
+- `ARCHITECTURE.md`: brief system architecture overview
+- `Makefile`: single entry point for dev commands (`make help`)
+- `.githooks/commit-msg`: Conventional Commits format validator
+- `.githooks/pre-commit`: go vet + secrets check
+- `docs/architecture/system-overview.md`, `services.md`, `data-flow.md`, `deployment.md`: architecture documentation
+- `docs/contracts/api.md`: HTTP API contracts
+- `docs/contracts/worker.md`: worker queue contracts
+- `docs/converter/pipeline.md`: FFmpeg HLS pipeline
+- `docs/decisions/ADR-001` through `ADR-008`: Architecture Decision Records
+- `docs/decisions/ADR-008-incoming-scanner-api-driven-ingest-split.md`: ADR for API-driven ingest split between scanner and converter
+- `scripts/new-adr.sh`: script for creating new ADRs
 
 ### Changed
 
-- `worker/internal/repository/movie.go`: storage_key now uses "Title (Year)" format instead of random hex; added unique-constraint collision retry (up to 10 attempts with numeric suffix)
-- `worker/internal/converter/converter.go`: HLS output now written to `media/converted/movies/{storageKey}/` instead of `media/converted/{storageKey}/`; enqueue transfer_queue message after successful HLS conversion
-- `worker/internal/downloader/downloader.go`: `FinalDir` hint in convert message updated to new `converted/movies/` prefix
+- `worker/internal/converter/converter.go`: transition job to `transfer` stage instead of `completed` when transfer is enabled; `buildSourceFilename` wraps TMDB ID in brackets (`title_year_[tmdbID].ext`); omits bracket suffix if no TMDB ID
+- `worker/internal/repository/movie.go`: `buildStorageKey` uses underscores and `Title(Year)` format (no space before parenthesis); unique-constraint collision retry up to 10 attempts with numeric suffix
+- `worker/cmd/worker/main.go`: inject `jobRepo` into transfer worker constructor
+- `worker/internal/downloader/downloader.go`: `FinalDir` hint in convert message updated to `converted/movies/` prefix
 - `api/internal/service/job.go`: upload job `FinalDir` updated to `converted/movies/` prefix
-- `api/internal/handler/player.go`: media base URL resolved per-movie from storage_location; falls back to MEDIA_BASE_URL when base_url is empty
+- `api/internal/handler/player.go`: media base URL resolved per-movie from storage_location; falls back to `MEDIA_BASE_URL` when `base_url` is empty
 - `api/internal/handler/subtitles.go`: subtitle directory resolves to `converted/movies/{storageKey}/subtitles`
-- `api/internal/db/migrations/009_update_storage_path_movies_subdir.sql`: backfills existing `media_assets.storage_path`, `media_assets.thumbnail_path`, and `movie_subtitles.storage_path` rows to the new path prefix
+- `api/internal/db/migrations/009_update_storage_path_movies_subdir.sql`: backfills existing `media_assets.storage_path`, `media_assets.thumbnail_path`, and `movie_subtitles.storage_path` rows to new path prefix
 - `worker/Dockerfile`: rclone installed
 
 ### Fixed
 
-- `frontend/src/app/movies/page.tsx`: кнопка "смотреть" теперь корректно открывает плеер в модальном окне через iframe; URL плеера читается из runtime-переменной `PLAYER_URL` вместо build-time `NEXT_PUBLIC_PLAYER_URL`
+- `frontend/src/app/movies/page.tsx`: "смотреть" button now correctly opens the player in a modal via iframe; player URL read from runtime `PLAYER_URL` variable instead of build-time `NEXT_PUBLIC_PLAYER_URL`
 
 ---
 

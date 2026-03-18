@@ -349,6 +349,114 @@ Header: X-Player-Key: <PLAYER_API_KEY>
 
 ---
 
+## Ingest API (service-to-service)
+
+Auth: `X-Service-Token: <INGEST_SERVICE_TOKEN>` required on all endpoints.
+
+---
+
+### POST /api/ingest/incoming/register
+**Назначение:** Idempotent upsert of an incoming file registered by the scanner.
+
+**Request:**
+```json
+{
+  "source_path": "string (required — path on scanner-side storage)",
+  "source_filename": "string (required — original file name)",
+  "content_kind": "string (optional, default: \"movie\")"
+}
+```
+
+**Response 200:** `IncomingItem`
+```json
+{
+  "id": "number (int64)",
+  "source_path": "string",
+  "source_filename": "string",
+  "content_kind": "string",
+  "status": "string (new|claiming|copying|copied|completed|failed)",
+  "progress_percent": "number",
+  "attempts": "number",
+  "max_attempts": "number",
+  "error_message": "string (null if none)",
+  "created_at": "string (ISO 8601)",
+  "updated_at": "string (ISO 8601)"
+}
+```
+
+---
+
+### POST /api/ingest/incoming/claim
+**Назначение:** Atomically claims up to `limit` new items (FOR UPDATE SKIP LOCKED). Expired leases are reset to `new` first.
+
+**Request:**
+```json
+{
+  "limit": "number (int, items to claim)",
+  "claim_ttl_sec": "number (int, lease duration in seconds)"
+}
+```
+
+**Response 200:**
+```json
+{
+  "items": ["IncomingItem (array, may be empty if nothing available)"]
+}
+```
+
+---
+
+### POST /api/ingest/incoming/progress
+**Назначение:** Updates status to `copying` or `copied` and records current progress.
+
+**Request:**
+```json
+{
+  "id": "number (int64)",
+  "status": "string (\"copying\" or \"copied\")",
+  "progress_percent": "number (0–100)"
+}
+```
+
+**Response 204:** (no content)
+
+---
+
+### POST /api/ingest/incoming/fail
+**Назначение:** Records a processing failure. Resets item to `new` if `attempts < max_attempts`; marks `failed` permanently otherwise.
+
+**Request:**
+```json
+{
+  "id": "number (int64)",
+  "error_message": "string"
+}
+```
+
+**Response 204:** (no content)
+
+---
+
+### POST /api/ingest/incoming/complete
+**Назначение:** Creates a `media_job`, pushes a `ConvertPayload` to `convert_queue`, and marks the item `completed`. Idempotent via `request_id` derived from the item ID.
+
+**Request:**
+```json
+{
+  "id": "number (int64)",
+  "local_path": "string (absolute path to the copied file on the converter host)"
+}
+```
+
+**Response 200:**
+```json
+{
+  "job_id": "string (UUID of the created media_job)"
+}
+```
+
+---
+
 ## Стандартные ошибки
 
 ```json
