@@ -11,6 +11,14 @@
 
 ## [Unreleased]
 
+### Added
+- `worker/internal/ingest/client.go`: new HTTP client for the ingest API (`Claim`, `Progress`, `Fail`, `Complete`)
+- `worker/internal/ingest/puller.go`: new rclone-based `Puller` that copies a single source file from a remote to local disk
+- `worker/internal/ingest/worker.go`: new poll-loop worker that claims ingest items from the API, copies them via rclone, then calls complete to create the convert job server-side
+- `worker/internal/config/config.go`: add ingest config fields (`ConverterAPIURL`, `IngestServiceToken`, `IngestConcurrency`, `IngestClaimTTLSec`, `IngestMaxAttempts`, `IngestSourceRemote`, `IngestSourceBasePath`)
+- `worker/cmd/worker/main.go`: wire ingest worker goroutines; gated on `INGEST_SERVICE_TOKEN` and `INGEST_SOURCE_REMOTE` being set
+- `.env.example`: document ingest worker environment variables
+
 ### Changed
 - `worker/internal/converter/converter.go`: `buildSourceFilename` wraps TMDB ID in brackets — format is now `title_year_[tmdbID].ext`; if no TMDB ID, bracket suffix is omitted
 - `worker/internal/repository/movie.go`: `buildStorageKey` now uses underscores instead of spaces and `Title(Year)` format without space before parenthesis
