@@ -28,6 +28,16 @@
 - `worker/cmd/worker/main.go`: wire ingest worker goroutines; gated on `INGEST_SERVICE_TOKEN` and `INGEST_SOURCE_REMOTE` being set
 - `.env.example`: document ingest worker environment variables
 - `api/internal/handler/ingest.go`, `api/internal/service/ingest.go`, `api/internal/server/server.go`: add `GET /api/ingest/incoming/{id}` for scanner poll_loop status checks
+- `scanner/`: new Python scanner service — scans `incoming/`, GuessIt+TMDB normalization, ffprobe quality scoring, duplicate detection, registers files in converter API, moves to `library/movies/` after conversion
+- `scanner/scanner/services/stability.py`: file stability detection (size unchanged for N seconds)
+- `scanner/scanner/services/quality.py`: deterministic quality score (resolution+HDR+codec+bitrate, max ~100)
+- `scanner/scanner/services/metadata.py`: GuessIt + TMDB + normalized_name generation
+- `scanner/scanner/services/duplicates.py`: duplicate policy (upgrade threshold=8 points)
+- `scanner/scanner/api/converter_client.py`: HTTP client to converter API (register + get_status)
+- `scanner/scanner/loops/scan_loop.py`: scan_loop — walks incoming/, stability check, metadata pipeline, register or review
+- `scanner/scanner/loops/poll_loop.py`: poll_loop — polls converter API every 60s, maps converter→local status
+- `scanner/scanner/loops/move_worker.py`: move_worker — os.rename to library/movies/, upserts scanner_library_movies
+- `scanner/docker-compose.yml`: autonomous deployment on storage server (postgres + scanner)
 - `worker/internal/model/model.go`: `StageTransfer` constant
 - `api/internal/model/model.go`: `JobStageTransfer` constant
 - `worker/internal/repository/job.go`: `SetStageAndProgress` and `SetCompleted` methods for transfer stage tracking
