@@ -16,6 +16,7 @@
 - `worker/internal/repository/movie.go`: `buildStorageKey` now uses underscores instead of spaces and `Title(Year)` format without space before parenthesis
 
 ### Added
+- `api/internal/repository/incoming.go`: add `IncomingRepository` with atomic batch claim (expired-lease reset CTE, `FOR UPDATE SKIP LOCKED`), idempotent `Register` upsert, `GetByID`, `Progress`, `Fail` (retry vs. dead-letter), and `Complete` methods
 - `worker/internal/model/model.go`: add `StageTransfer` constant
 - `api/internal/model/model.go`: add `JobStageTransfer` constant
 - `worker/internal/repository/job.go`: add `SetStageAndProgress` and `SetCompleted` methods for transfer stage tracking
