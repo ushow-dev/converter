@@ -40,7 +40,8 @@ scanner/
     ├── test_stability.py
     ├── test_metadata.py
     ├── test_quality.py
-    └── test_duplicates.py
+    ├── test_duplicates.py
+    └── test_converter_client.py
 ```
 
 ### Потоки
@@ -63,38 +64,51 @@ scanner/
 
 ```sql
 CREATE TABLE scanner_incoming_items (
-    id                      BIGSERIAL PRIMARY KEY,
-    source_path             TEXT NOT NULL UNIQUE,   -- абсолютный путь в incoming/
-    source_filename         TEXT NOT NULL,
-    file_size_bytes         BIGINT,
-    first_seen_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_seen_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    stable_since            TIMESTAMPTZ,            -- когда размер перестал меняться
-    status                  TEXT NOT NULL DEFAULT 'new',
-    -- new | registered | copying | completed | archived
+    id                              BIGSERIAL PRIMARY KEY,
+    source_path                     TEXT NOT NULL UNIQUE,   -- абсолютный путь в incoming/
+    source_filename                 TEXT NOT NULL,
+    file_size_bytes                 BIGINT,
+    first_seen_at                   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    stable_since                    TIMESTAMPTZ,            -- когда размер перестал меняться
+    status                          TEXT NOT NULL DEFAULT 'new',
+    -- new | registered | claimed | copying | copied | completed | archived
     -- | failed | review_duplicate | review_unknown_quality | skipped
-    review_reason           TEXT,                   -- full_duplicate | unknown_quality | move_failed
-    is_upgrade_candidate    BOOLEAN NOT NULL DEFAULT FALSE,
-    quality_score           INTEGER,                -- 0..100, NULL до ffprobe
-    api_item_id             BIGINT,                 -- id в converter incoming_media_items
-    tmdb_id                 TEXT,
-    normalized_name         TEXT,                   -- doctor_bakshi_2023_[881935]
-    title                   TEXT,
-    year                    INTEGER,
-    error_message           TEXT,
-    library_relative_path   TEXT,                   -- заполняется после move
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    review_reason                   TEXT,                   -- full_duplicate | unknown_quality | move_failed
+    is_upgrade_candidate            BOOLEAN NOT NULL DEFAULT FALSE,
+    quality_score                   INTEGER,                -- 0..100, NULL до ffprobe
+    api_item_id                     BIGINT,                 -- id в converter incoming_media_items
+    duplicate_of_library_movie_id   BIGINT,                 -- FK → scanner_library_movies.id (nullable)
+    tmdb_id                         TEXT,
+    normalized_name                 TEXT,                   -- doctor_bakshi_2023_[881935]
+    title                           TEXT,
+    year                            INTEGER,
+    error_message                   TEXT,
+    library_relative_path           TEXT,                   -- заполняется после move
+    created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX ON scanner_incoming_items (status, stable_since);
+CREATE INDEX ON scanner_incoming_items (duplicate_of_library_movie_id, status);
 ```
 
-**Статусы:**
+**Статусы (state flow):**
+```
+new → registered → claimed → copying → copied → completed → archived
+new → review_duplicate
+new → review_unknown_quality
+new → skipped
+copying → failed
+claimed → failed  (lease expired)
+```
+
 - `new` → файл обнаружен, ожидает стабильности
-- `registered` → зарегистрирован в converter API, ожидает обработки
-- `copying` → converter worker копирует файл
-- `completed` → converter завершил, ожидает move
+- `registered` → зарегистрирован в converter API
+- `claimed` → converter worker принял item
+- `copying` → converter worker копирует файл по rclone
+- `copied` → rclone завершён, поставлен в convert_queue
+- `completed` → конвертация завершена, ожидает move в library
 - `archived` → перемещён в library, финальный статус
 - `failed` → ошибка на любом этапе
 - `review_duplicate` → полный дубль, файл переименован
@@ -117,7 +131,7 @@ CREATE TABLE scanner_library_movies (
     imdb_id                 TEXT,
     poster_url              TEXT,
     quality_score           INTEGER NOT NULL,
-    quality_label           TEXT CHECK (quality_label IN ('HD', 'SD')),
+    quality_label           TEXT CHECK (quality_label IS NULL OR quality_label IN ('HD', 'SD')),
     library_relative_path   TEXT NOT NULL,
     file_size_bytes         BIGINT,
     status                  TEXT NOT NULL DEFAULT 'ready',
@@ -195,15 +209,23 @@ quality_score = resolution_score + hdr_score + codec_score + bitrate_score
 
 ### poll_loop
 
+Опрашивает converter API для всех items находящихся в активной обработке (`registered`, `claimed`, `copying`, `copied`).
+
 ```
 каждые POLL_INTERVAL_SEC секунд:
-  1. SELECT все items WHERE status='registered' AND api_item_id IS NOT NULL
+  1. SELECT все items WHERE status IN ('registered','claimed','copying','copied')
+     AND api_item_id IS NOT NULL
   2. Для каждого: GET /api/ingest/incoming/{api_item_id} на converter API
-  3. Если converter статус = 'completed':
-     → UPDATE local status='completed'
-     → положить item_id в move_queue
-  4. Если converter статус = 'failed':
-     → UPDATE local status='failed', error_message
+     Примечание: response содержит только { id, status, error_message } —
+     всё остальное (source_path, normalized_name) берётся из локальной DB
+  3. Маппинг converter статуса → local статус:
+     - converter 'new'|'claimed'  → local 'claimed'
+     - converter 'copying'        → local 'copying'
+     - converter 'copied'         → local 'copied'
+     - converter 'completed'      → local 'completed'
+                                  → положить item_id в move_queue
+     - converter 'failed'         → local 'failed', error_message
+  4. UPDATE scanner_incoming_items SET status=..., updated_at=NOW()
 ```
 
 ### move_worker
@@ -286,8 +308,9 @@ STABILITY_SEC=30
 | `test_metadata.py` | GuessIt парсинг, TMDB fallback без ключа, normalized_name генерация |
 | `test_quality.py` | quality_score расчёт для разных resolution/codec/HDR комбинаций |
 | `test_duplicates.py` | upgrade проходит (delta ≥8), duplicate блокируется, unknown_quality блокируется |
+| `test_converter_client.py` | register/claim-poll/fail через mock HTTP — критический путь API интеграции |
 
-Все unit-тесты — без DB и без внешних HTTP запросов (mock TMDB + mock ffprobe).
+Все unit-тесты — без DB и без внешних HTTP запросов (mock TMDB + mock ffprobe + mock converter API).
 
 ---
 
@@ -295,5 +318,5 @@ STABILITY_SEC=30
 
 - Series/episodes (только `movie` на текущем этапе)
 - Web UI для scanner (управление через DB напрямую или через converter frontend)
-- Retry логика для TMDB rate limiting (достаточно `time.sleep(0.5)` между запросами)
+- Retry логика для TMDB rate limiting — hardcoded `time.sleep(0.5)` между запросами в `metadata.py` (не конфигурируется)
 - Heartbeat endpoint (`POST /api/ingest/incoming/heartbeat`) — не используется при polling модели
