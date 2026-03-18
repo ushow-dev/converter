@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +52,10 @@ type Config struct {
 
 	// App
 	Environment string
+
+	// Ingest
+	IngestServiceToken string
+	IngestMaxAttempts  int
 }
 
 // Load reads environment variables and returns a populated Config.
@@ -75,6 +80,8 @@ func Load() (*Config, error) {
 		Environment:         getEnv("APP_ENV", "development"),
 		OpenSubtitlesAPIKey: getEnv("OPENSUBTITLES_API_KEY", ""),
 		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "en,bn,hi")),
+		IngestServiceToken:  getEnv("INGEST_SERVICE_TOKEN", ""),
+		IngestMaxAttempts:   intEnv("INGEST_MAX_ATTEMPTS", 3),
 	}
 
 	// Resolve admin password: prefer pre-hashed value, fall back to plaintext
@@ -132,4 +139,16 @@ func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
 		panic(fmt.Sprintf("invalid duration for %q: %v", key, err))
 	}
 	return d
+}
+
+func intEnv(key string, defaultVal int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultVal
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		panic(fmt.Sprintf("invalid integer for %q: %v", key, err))
+	}
+	return i
 }
