@@ -26,6 +26,7 @@ type Dependencies struct {
 	PlayerHandler   *handler.PlayerHandler
 	SubtitleHandler *handler.SubtitleHandler
 	BrowseHandler   *handler.BrowseHandler
+	IngestHandler   *handler.IngestHandler
 }
 
 // New builds the chi router with all routes and middleware registered.
@@ -84,6 +85,16 @@ func New(deps Dependencies) http.Handler {
 		r.Get("/movie", deps.PlayerHandler.GetMovie)
 		r.Get("/assets/{assetID}", deps.PlayerHandler.GetAsset)
 		r.Get("/jobs/{jobID}/status", deps.PlayerHandler.GetJobStatus)
+	})
+
+	// ── Ingest API (service-to-service) ──────────────────────────────────────
+	r.Route("/api/ingest", func(r chi.Router) {
+		r.Use(auth.ServiceTokenMiddleware(deps.Cfg.IngestServiceToken))
+		r.Post("/incoming/register", deps.IngestHandler.Register)
+		r.Post("/incoming/claim",    deps.IngestHandler.Claim)
+		r.Post("/incoming/progress", deps.IngestHandler.Progress)
+		r.Post("/incoming/fail",     deps.IngestHandler.Fail)
+		r.Post("/incoming/complete", deps.IngestHandler.Complete)
 	})
 
 	return r

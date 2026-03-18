@@ -94,6 +94,10 @@ func main() {
 	subtitleH := handler.NewSubtitleHandler(movieRepo, subtitleRepo, osClient, cfg.MediaRoot, cfg.SubtitleLanguages)
 	browseH := handler.NewBrowseHandler()
 
+	incomingRepo := repository.NewIncomingRepository(pool)
+	ingestSvc    := service.NewIngestService(incomingRepo, jobRepo, redisClient, cfg.MediaRoot)
+	ingestH      := handler.NewIngestHandler(ingestSvc, cfg.IngestMaxAttempts)
+
 	// ── HTTP server ────────────────────────────────────────────────────────────
 	h := server.New(server.Dependencies{
 		Cfg:             cfg,
@@ -105,6 +109,7 @@ func main() {
 		PlayerHandler:   playerH,
 		SubtitleHandler: subtitleH,
 		BrowseHandler:   browseH,
+		IngestHandler:   ingestH,
 	})
 
 	if err := server.Start(ctx, cfg, h); err != nil {
