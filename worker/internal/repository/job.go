@@ -109,3 +109,18 @@ func (r *JobRepository) Exists(ctx context.Context, jobID string) (bool, error) 
 	}
 	return exists, nil
 }
+
+// CreateForIngest inserts a media_job for an ingest item.
+// Uses ON CONFLICT (request_id) DO NOTHING for idempotency — safe to call twice.
+func (r *JobRepository) CreateForIngest(ctx context.Context, jobID, sourcePath, title, contentKind string) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO media_jobs
+			(job_id, content_type, source_type, source_ref, priority, status, request_id, title)
+		VALUES ($1, $2, 'ingest', $3, 'normal', 'queued', $4, $5)
+		ON CONFLICT (request_id) DO NOTHING`,
+		jobID, contentKind, sourcePath, jobID, title)
+	if err != nil {
+		return fmt.Errorf("create ingest job %s: %w", jobID, err)
+	}
+	return nil
+}
