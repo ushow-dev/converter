@@ -129,7 +129,7 @@ All commits MUST follow Conventional Commits format:
 ```
 
 Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `chore` `ci` `build` `revert`
-Scopes: `api` `worker` `frontend` `docker` `docs` `deps` `auth` `queue` `player` `subtitles` `ffmpeg` `db` `config`
+Scopes: `api` `worker` `frontend` `docker` `docs` `deps` `auth` `queue` `player` `subtitles` `ffmpeg` `db` `config` `scanner`
 
 Rules:
 - Description starts with lowercase letter

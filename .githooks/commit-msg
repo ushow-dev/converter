@@ -16,7 +16,7 @@ fi
 TYPES="feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert"
 
 # Allowed scopes for this project
-SCOPES="api|worker|frontend|docker|docs|deps|auth|queue|player|subtitles|ffmpeg|db|config"
+SCOPES="api|worker|frontend|docker|docs|deps|auth|queue|player|subtitles|ffmpeg|db|config|scanner"
 
 # Pattern: type(scope): description
 # - type required
@@ -32,7 +32,7 @@ if ! echo "$COMMIT_MSG" | head -1 | grep -qE "$PATTERN"; then
   echo "  Ожидается: <type>(<scope>): <описание>"
   echo ""
   echo "  Типы:   feat fix docs style refactor perf test chore ci build revert"
-  echo "  Скоупы: api worker frontend docker docs deps auth queue player subtitles ffmpeg db config"
+  echo "  Скоупы: api worker frontend docker docs deps auth queue player subtitles ffmpeg db config scanner"
   echo ""
   echo "  Примеры:"
   echo "    feat(api): add rate limiting middleware"
