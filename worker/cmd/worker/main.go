@@ -170,9 +170,9 @@ func main() {
 
 	// Ingest worker (optional: only when INGEST_SERVICE_TOKEN and INGEST_SOURCE_REMOTE are set)
 	if cfg.IngestServiceToken != "" && cfg.IngestSourceRemote != "" {
-		ingestClient := ingest.NewClient(cfg.ConverterAPIURL, cfg.IngestServiceToken)
+		ingestClient := ingest.NewClient(cfg.ScannerAPIURL, cfg.IngestServiceToken)
 		ingestPuller := ingest.NewPuller(cfg.IngestSourceRemote, cfg.IngestSourceBasePath)
-		ingestWkr := ingest.New(ingestClient, ingestPuller, cfg.MediaRoot, cfg.IngestClaimTTLSec)
+		ingestWkr := ingest.New(ingestClient, ingestPuller, jobRepo, redisClient, cfg.MediaRoot, cfg.IngestClaimTTLSec)
 		for i := 0; i < cfg.IngestConcurrency; i++ {
 			wg.Add(1)
 			go func() {

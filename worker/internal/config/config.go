@@ -51,7 +51,7 @@ type Config struct {
 	TransferConcurrency int
 
 	// Ingest worker settings
-	ConverterAPIURL      string
+	ScannerAPIURL        string
 	IngestServiceToken   string
 	IngestConcurrency    int
 	IngestClaimTTLSec    int
@@ -80,7 +80,7 @@ func Load() (*Config, error) {
 		RcloneRemote:        getEnv("RCLONE_REMOTE", ""),
 		RcloneRemotePath:    getEnv("RCLONE_REMOTE_PATH", "/storage"),
 		TransferConcurrency: intEnv("TRANSFER_CONCURRENCY", 1),
-		ConverterAPIURL:      getEnv("CONVERTER_API_URL", "http://api:8000"),
+		ScannerAPIURL:        getEnv("SCANNER_API_URL", "http://scanner:8080"),
 		IngestServiceToken:   getEnv("INGEST_SERVICE_TOKEN", ""),
 		IngestConcurrency:    intEnv("INGEST_CONCURRENCY", 3),
 		IngestClaimTTLSec:    intEnv("INGEST_CLAIM_TTL_SEC", 900),
