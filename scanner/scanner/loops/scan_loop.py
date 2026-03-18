@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional
 
 from scanner import db
-from scanner.api.converter_client import ConverterClient
 from scanner.config import Config
 from scanner.services import duplicates, metadata, quality, stability
 
@@ -16,22 +15,22 @@ logger = logging.getLogger(__name__)
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv"}
 
 
-def run(cfg: Config, client: ConverterClient) -> None:
+def run(cfg: Config) -> None:
     """Run scan loop forever. Call from a daemon thread."""
     logger.info("scan_loop started, interval=%ds", cfg.scan_interval_sec)
     while True:
         try:
-            _scan_once(cfg, client)
+            _scan_once(cfg)
         except Exception:
             logger.exception("scan_loop iteration failed")
         time.sleep(cfg.scan_interval_sec)
 
 
-def _scan_once(cfg: Config, client: ConverterClient) -> None:
+def _scan_once(cfg: Config) -> None:
     now = datetime.now(timezone.utc)
     for file_path in _walk_video_files(Path(cfg.incoming_dir)):
         try:
-            _process_file(cfg, client, file_path, now)
+            _process_file(cfg, file_path, now)
         except Exception:
             logger.exception("error processing file %s", file_path)
 
@@ -43,7 +42,7 @@ def _walk_video_files(root: Path):
                 yield Path(dirpath) / fname
 
 
-def _process_file(cfg: Config, client: ConverterClient, file_path: Path, now: datetime) -> None:
+def _process_file(cfg: Config, file_path: Path, now: datetime) -> None:
     try:
         current_size = file_path.stat().st_size
     except OSError:
@@ -92,10 +91,10 @@ def _process_file(cfg: Config, client: ConverterClient, file_path: Path, now: da
     finally:
         db.put_conn(conn)
 
-    _handle_stable_file(cfg, client, file_path, current_size)
+    _handle_stable_file(cfg, file_path, current_size)
 
 
-def _handle_stable_file(cfg: Config, client: ConverterClient, file_path: Path, file_size: int) -> None:
+def _handle_stable_file(cfg: Config, file_path: Path, file_size: int) -> None:
     parsed = metadata.parse_filename(file_path.name)
     title = parsed["title"]
     year = parsed.get("year")
@@ -119,7 +118,6 @@ def _handle_stable_file(cfg: Config, client: ConverterClient, file_path: Path, f
 
     if action == "register":
         _do_register(
-            client=client,
             file_path=file_path,
             normalized_name=normalized_name,
             tmdb_id=tmdb_id,
@@ -155,29 +153,15 @@ def _get_existing_score(normalized_name: str, tmdb_id: Optional[str]) -> Optiona
         db.put_conn(conn)
 
 
-def _do_register(client, file_path, normalized_name, tmdb_id, file_size, quality_score, is_upgrade_candidate):
-    try:
-        api_item_id = client.register(
-            source_path=str(file_path),
-            source_filename=file_path.name,
-            content_kind="movie",
-            normalized_name=normalized_name,
-            tmdb_id=tmdb_id,
-            file_size_bytes=file_size,
-            quality_score=quality_score,
-            is_upgrade_candidate=is_upgrade_candidate,
-        )
-    except Exception as e:
-        logger.error("register failed for %s: %s", file_path, e)
-        return
-
+def _do_register(file_path, normalized_name, tmdb_id, file_size, quality_score, is_upgrade_candidate):
+    """Mark file as registered in scanner DB — ready to be claimed by IngestWorker."""
     conn = db.get_conn()
     try:
         with conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE scanner_incoming_items SET status='registered', api_item_id=%s, normalized_name=%s, tmdb_id=%s, quality_score=%s, is_upgrade_candidate=%s, updated_at=NOW() WHERE source_path=%s AND status='new'",
-                    (api_item_id, normalized_name, tmdb_id, quality_score, is_upgrade_candidate, str(file_path)),
+                    "UPDATE scanner_incoming_items SET status='registered', normalized_name=%s, tmdb_id=%s, quality_score=%s, is_upgrade_candidate=%s, updated_at=NOW() WHERE source_path=%s AND status='new'",
+                    (normalized_name, tmdb_id, quality_score, is_upgrade_candidate, str(file_path)),
                 )
     finally:
         db.put_conn(conn)
