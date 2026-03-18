@@ -17,6 +17,7 @@ import (
 	"app/worker/internal/ffmpeg"
 	"app/worker/internal/health"
 	"app/worker/internal/httpdownloader"
+	"app/worker/internal/ingest"
 	"app/worker/internal/qbittorrent"
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
@@ -165,6 +166,23 @@ func main() {
 				trWorker.Run(ctx)
 			}()
 		}
+	}
+
+	// Ingest worker (optional: only when INGEST_SERVICE_TOKEN and INGEST_SOURCE_REMOTE are set)
+	if cfg.IngestServiceToken != "" && cfg.IngestSourceRemote != "" {
+		ingestClient := ingest.NewClient(cfg.ConverterAPIURL, cfg.IngestServiceToken)
+		ingestPuller := ingest.NewPuller(cfg.IngestSourceRemote, cfg.IngestSourceBasePath)
+		ingestWkr := ingest.New(ingestClient, ingestPuller, cfg.MediaRoot, cfg.IngestClaimTTLSec)
+		for i := 0; i < cfg.IngestConcurrency; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ingestWkr.Run(ctx)
+			}()
+		}
+		slog.Info("ingest worker enabled", "concurrency", cfg.IngestConcurrency)
+	} else {
+		slog.Info("ingest worker disabled (INGEST_SERVICE_TOKEN or INGEST_SOURCE_REMOTE not set)")
 	}
 
 	slog.Info("worker running",
