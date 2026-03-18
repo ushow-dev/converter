@@ -49,6 +49,15 @@ type Config struct {
 	RcloneRemote       string // name of rclone remote, e.g. "myremote" — empty disables transfer
 	RcloneRemotePath   string // base path on remote, e.g. "/storage"
 	TransferConcurrency int
+
+	// Ingest worker settings
+	ConverterAPIURL      string
+	IngestServiceToken   string
+	IngestConcurrency    int
+	IngestClaimTTLSec    int
+	IngestMaxAttempts    int
+	IngestSourceRemote   string
+	IngestSourceBasePath string
 }
 
 // Load reads configuration from environment variables.
@@ -71,6 +80,13 @@ func Load() (*Config, error) {
 		RcloneRemote:        getEnv("RCLONE_REMOTE", ""),
 		RcloneRemotePath:    getEnv("RCLONE_REMOTE_PATH", "/storage"),
 		TransferConcurrency: intEnv("TRANSFER_CONCURRENCY", 1),
+		ConverterAPIURL:      getEnv("CONVERTER_API_URL", "http://api:8000"),
+		IngestServiceToken:   getEnv("INGEST_SERVICE_TOKEN", ""),
+		IngestConcurrency:    intEnv("INGEST_CONCURRENCY", 3),
+		IngestClaimTTLSec:    intEnv("INGEST_CLAIM_TTL_SEC", 900),
+		IngestMaxAttempts:    intEnv("INGEST_MAX_ATTEMPTS", 3),
+		IngestSourceRemote:   getEnv("INGEST_SOURCE_REMOTE", ""),
+		IngestSourceBasePath: getEnv("INGEST_SOURCE_BASE_PATH", "/incoming"),
 	}
 	return cfg, nil
 }
