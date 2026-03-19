@@ -83,6 +83,18 @@ def create_app(cfg: Config, move_queue: queue.Queue) -> FastAPI:
         item_id = _create_download(body.url, body.filename)
         return {"id": item_id}
 
+    @app.get("/api/v1/downloads")
+    def list_downloads(_: AuthDep):
+        items = _list_downloads()
+        return {"items": items}
+
+    @app.post("/api/v1/downloads/{download_id}/retry", status_code=204)
+    def retry_download(download_id: int, _: AuthDep):
+        updated = _retry_download(download_id)
+        if not updated:
+            raise HTTPException(status_code=404, detail="not found or not retryable")
+        return Response(status_code=204)
+
     return app
 
 
@@ -175,6 +187,53 @@ def _get_item_info(item_id: int) -> dict | None:
             if row is None:
                 return None
             return {"source_path": row[0], "normalized_name": row[1]}
+    finally:
+        db.put_conn(conn)
+
+
+def _list_downloads() -> list:
+    conn = db.get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, url, filename, status, error_message, created_at, updated_at
+                FROM scanner_downloads
+                ORDER BY created_at DESC
+                LIMIT 100
+                """,
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "url": r[1],
+                    "filename": r[2],
+                    "status": r[3],
+                    "error_message": r[4],
+                    "created_at": r[5].isoformat() if r[5] else None,
+                    "updated_at": r[6].isoformat() if r[6] else None,
+                }
+                for r in rows
+            ]
+    finally:
+        db.put_conn(conn)
+
+
+def _retry_download(download_id: int) -> bool:
+    conn = db.get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE scanner_downloads
+                    SET status = 'queued', error_message = NULL, updated_at = NOW()
+                    WHERE id = %s AND status = 'failed'
+                    """,
+                    (download_id,),
+                )
+                return cur.rowcount > 0
     finally:
         db.put_conn(conn)
 

@@ -93,6 +93,7 @@ func main() {
 	)
 	subtitleH := handler.NewSubtitleHandler(movieRepo, subtitleRepo, osClient, cfg.MediaRoot, cfg.SubtitleLanguages)
 	browseH := handler.NewBrowseHandler()
+	scannerH := handler.NewScannerHandler(cfg.ScannerAPIURL, cfg.IngestServiceToken)
 
 	// ── HTTP server ────────────────────────────────────────────────────────────
 	h := server.New(server.Dependencies{
@@ -105,6 +106,7 @@ func main() {
 		PlayerHandler:   playerH,
 		SubtitleHandler: subtitleH,
 		BrowseHandler:   browseH,
+		ScannerHandler:  scannerH,
 	})
 
 	if err := server.Start(ctx, cfg, h); err != nil {

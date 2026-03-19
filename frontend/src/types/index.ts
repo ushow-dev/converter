@@ -139,6 +139,22 @@ export interface PlayerMovieResponse {
   meta: { version: string }
 }
 
+export type ScannerDownloadStatus = 'queued' | 'downloading' | 'done' | 'failed'
+
+export interface ScannerDownload {
+  id: number
+  url: string
+  filename: string
+  status: ScannerDownloadStatus
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ScannerDownloadsResponse {
+  items: ScannerDownload[]
+}
+
 export type DownloadItemState = 'idle' | 'submitting' | 'queued' | 'downloading' | 'error' | 'duplicate'
 
 export interface DownloadItem {

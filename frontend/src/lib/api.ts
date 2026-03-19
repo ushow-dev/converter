@@ -321,6 +321,22 @@ export async function createRemoteDownloadJob(
   )
 }
 
+export async function getScannerDownloads(): Promise<import('@/types').ScannerDownloadsResponse> {
+  return apiFetch<import('@/types').ScannerDownloadsResponse>('/api/admin/scanner/downloads')
+}
+
+export async function retryScannerDownload(id: number): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`/api/admin/scanner/downloads/${id}/retry`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
+}
+
 export async function searchSubtitles(movieId: number): Promise<SubtitlesResponse & { found: number }> {
   return apiFetch<SubtitlesResponse & { found: number }>(
     `/api/admin/movies/${movieId}/subtitles/search`,

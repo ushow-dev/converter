@@ -15,7 +15,14 @@
 - `scanner/scanner/migrations/003_downloads_table.sql`: `scanner_downloads` table for tracking remote download tasks
 - `scanner/scanner/loops/download_worker.py`: background thread that downloads queued URLs to `/incoming/` using `urllib.request`
 - `scanner/scanner/api/server.py`: `POST /api/v1/downloads` endpoint — accepts URL + filename, creates download task in `scanner_downloads`
+- `scanner/scanner/api/server.py`: `GET /api/v1/downloads` endpoint — returns last 100 download tasks ordered by created_at DESC
+- `scanner/scanner/api/server.py`: `POST /api/v1/downloads/{id}/retry` endpoint — resets failed download back to queued
 - `scanner/scanner/main.py`: added `download_worker` daemon thread
+- `api/internal/handler/scanner.go`: `ScannerHandler` that proxies scanner download list and retry endpoints
+- `api/internal/server/server.go`: `GET /api/admin/scanner/downloads` and `POST /api/admin/scanner/downloads/{id}/retry` routes
+- `frontend/src/types/index.ts`: `ScannerDownload`, `ScannerDownloadStatus`, `ScannerDownloadsResponse` types
+- `frontend/src/lib/api.ts`: `getScannerDownloads()` and `retryScannerDownload()` functions
+- `frontend/src/app/queue/page.tsx`: scanner downloads section with status badges and retry button for failed items
 
 ### Changed
 - `api/internal/service/job.go`: `CreateRemoteDownloadJob` forwards download to scanner API when `SCANNER_API_URL` is set, instead of enqueuing to `remote_download_queue`; added `scannerAPIURL` and `serviceToken` fields to `JobService` and updated `NewJobService` signature
