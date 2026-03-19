@@ -118,7 +118,7 @@ func (w *Worker) processItem(ctx context.Context, item IncomingItem) {
 	if item.TMDBID != nil {
 		tmdbID = *item.TMDBID
 	}
-	outputPath := filepath.Join(w.mediaRoot, "converted", "movies")
+	outputPath := filepath.Join(w.mediaRoot, "temp", jobID)
 
 	msg := model.ConvertMessage{
 		SchemaVersion: "1",
