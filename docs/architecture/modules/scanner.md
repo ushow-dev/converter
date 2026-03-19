@@ -34,7 +34,7 @@ scanner/
     │   ├── quality.py          # ffprobe + quality_score
     │   └── duplicates.py       # логика дублей и апгрейдов
     └── api/
-        └── server.py           # Flask HTTP API для IngestWorker (/api/v1/incoming/*)
+        └── server.py           # FastAPI HTTP API для IngestWorker (/api/v1/incoming/*)
 ```
 
 ### Потоки
@@ -42,7 +42,7 @@ scanner/
 | Поток | Интервал | Ответственность |
 |---|---|---|
 | `scan_loop` | 30с | Обход `incoming/`, stability check, metadata pipeline, регистрация в scanner DB |
-| `api_server` | HTTP (Flask, порт SCANNER_API_PORT) | Принимает claim/progress/complete/fail от IngestWorker |
+| `api_server` | HTTP (FastAPI + Uvicorn, порт SCANNER_API_PORT) | Принимает claim/progress/complete/fail от IngestWorker |
 | `move_worker` | event-driven | `os.rename()` в `library/` + upsert в scanner_library_movies |
 
 Потоки не делят состояние напрямую: `scan_loop` → `api_server` через PostgreSQL, `api_server` → `move_worker` через `queue.Queue`.
@@ -135,7 +135,7 @@ claimed → failed            (lease expired)
 
 ### api/server.py
 
-Flask HTTP API, принимает запросы от IngestWorker:
+FastAPI HTTP API, принимает запросы от IngestWorker:
 
 - `POST /api/v1/incoming/claim` — атомарно забирает доступные items (FOR UPDATE SKIP LOCKED), устанавливает `claimed_at`/`claim_expires_at`
 - `POST /api/v1/incoming/<id>/progress` — обновляет статус (`copying`/`copied`) и прогресс
@@ -167,7 +167,7 @@ Flask HTTP API, принимает запросы от IngestWorker:
 | `INCOMING_DIR` | — | Путь к папке входящих файлов |
 | `LIBRARY_DIR` | — | Путь к медиатеке |
 | `SERVICE_TOKEN` | — | Токен авторизации (X-Service-Token), проверяется scanner |
-| `SCANNER_API_PORT` | — | Порт Flask HTTP API сервера |
+| `SCANNER_API_PORT` | — | Порт FastAPI HTTP сервера |
 | `TMDB_API_KEY` | — | Ключ TMDB API |
 | `DATABASE_URL` | — | DSN PostgreSQL |
 | `SCAN_INTERVAL_SEC` | 30 | Интервал сканирования incoming/ |
@@ -203,7 +203,7 @@ PYTHONPATH=. python3 -m pytest tests/ -v
 | `tests/test_quality.py` | quality_score для разных resolution/codec/HDR, parse_ffprobe_output |
 | `tests/test_metadata.py` | GuessIt парсинг, normalized_name, TMDB fallback |
 | `tests/test_duplicates.py` | Upgrade проходит (delta≥8), дубль блокируется, unknown_quality |
-| `tests/test_api_server.py` | claim/progress/complete/fail через mock HTTP |
+| `tests/test_scanner_api.py` | claim/progress/complete/fail через FastAPI TestClient |
 
 ---
 

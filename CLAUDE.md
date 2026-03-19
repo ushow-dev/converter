@@ -216,6 +216,10 @@ Update `docs/roadmap/roadmap.md`:
 | New directory created | `REPO_MAP.md` |
 | Auth scheme changed | ADR + `docs/architecture/services.md` |
 | DB migration added | `docs/architecture/services.md` (schema section) |
+| Scanner API changed | `docs/scanner/api.md` |
+| Scanner DB schema changed | `docs/scanner/database.md` |
+| Scanner architecture changed | `docs/scanner/README.md` + `docs/architecture/modules/scanner.md` |
+| Scanner config changed | `docs/scanner/README.md` (Configuration section) |
 
 ---
 
