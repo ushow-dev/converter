@@ -1,7 +1,7 @@
 # scanner/scanner/loops/move_worker.py
 import logging
-import os
 import queue
+import shutil
 from pathlib import Path
 
 from scanner import db
@@ -42,7 +42,7 @@ def _handle_move(cfg: Config, task: dict) -> None:
 
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
-        os.rename(source_path, target_path)
+        shutil.move(str(source_path), target_path)
     except OSError as e:
         logger.error("move failed %s → %s: %s", source_path, target_path, e)
         _mark_failed(item_id, "move_failed")

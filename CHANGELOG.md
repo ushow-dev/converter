@@ -11,6 +11,38 @@
 
 ## [Unreleased]
 
+### Added
+- `scanner/scanner/migrations/003_downloads_table.sql`: `scanner_downloads` table for tracking remote download tasks
+- `scanner/scanner/loops/download_worker.py`: background thread that downloads queued URLs to `/incoming/` using `urllib.request`
+- `scanner/scanner/api/server.py`: `POST /api/v1/downloads` endpoint — accepts URL + filename, creates download task in `scanner_downloads`
+- `scanner/scanner/main.py`: added `download_worker` daemon thread
+
+### Changed
+- `api/internal/service/job.go`: `CreateRemoteDownloadJob` forwards download to scanner API when `SCANNER_API_URL` is set, instead of enqueuing to `remote_download_queue`; added `scannerAPIURL` and `serviceToken` fields to `JobService` and updated `NewJobService` signature
+- `api/internal/config/config.go`: added `ScannerAPIURL` and `IngestServiceToken` fields, read from `SCANNER_API_URL` and `INGEST_SERVICE_TOKEN` env vars
+- `api/cmd/api/main.go`: pass `cfg.ScannerAPIURL` and `cfg.IngestServiceToken` to `NewJobService`
+- `docker-compose.yml`: added `SCANNER_API_URL` and `INGEST_SERVICE_TOKEN` to `api` service environment; replaced `curl` with `wget` in frontend healthcheck (Next.js image has no curl)
+- `frontend/src/app/upload/page.tsx`: handle absent `job_id` in remote download response — show "Скачивается…" state when scanner handles the download directly
+- `frontend/src/types/index.ts`: added `'downloading'` to `DownloadItemState` union type
+- `scanner/scanner/api/server.py`: `_claim_items` CTE now resets expired `claimed` items back to `registered` before selecting new candidates — prevents items from getting stuck after TTL expiry
+- `scanner/scanner/loops/scan_loop.py`: `_scan_once` calls `_retry_failed_items()` each iteration — items with `status='failed'` and no `review_reason` are reset to `registered` after 30 min cooldown
+- `.env.example`: increased `INGEST_CLAIM_TTL_SEC` default from 900 (15 min) to 7200 (2 hours) to cover large file rclone copies
+
+### Changed
+- `docker-compose.yml`: prowlarr, qbittorrent, flaresolverr moved to `profiles: [torrent]` — не стартуют при обычном `docker compose up`; для запуска: `docker compose --profile torrent up -d`
+- `worker/internal/converter/converter.go`: source file is now deleted after conversion instead of being preserved in the final HLS directory — original is kept on scanner server in `/library`; removed `buildSourceFilename` and `normalizeFilenameSegment` helpers
+
+### Fixed
+- `scanner/scanner/loops/move_worker.py`: replaced `os.rename()` with `shutil.move()` and changed `/incoming` mount from `:ro` to `:rw` — `os.rename()` fails with `EXDEV` (errno 18) across different bind mounts; `shutil.move()` on the same physical disk (`/mnt/storage`) uses atomic rename; `:rw` required so scanner can delete source after move
+- `scanner/docker-compose.yml`: changed `/incoming` mount from `:ro` to `:rw` — scanner needs write access to move processed files out of incoming
+- `scanner/docker-compose.yml`: split `INCOMING_DIR`/`LIBRARY_DIR` into separate host (`INCOMING_HOST_DIR`/`LIBRARY_HOST_DIR`) and container vars — previously the same var was used for both docker-compose bind-mount source and the in-process path, causing the mount to point at the wrong host directory
+- `docker-compose.yml`: added `RCLONE_CONFIG_SCANREMOTE_*` and all `INGEST_*` env vars to worker service; added `./secrets/scanner_rclone` mount — ingest worker was disabled because env vars were not passed into container
+
+### Added
+- `docker-compose.yml`: worker now mounts `./secrets/scanner_rclone:/secrets/scanner_rclone:ro` for SFTP access to scanner server
+- `.env.example`: document `RCLONE_CONFIG_SCANREMOTE_*` vars for scanner SFTP remote
+- `scanner/.env.example`: document `INCOMING_HOST_DIR`/`LIBRARY_HOST_DIR` (host paths) separate from `INCOMING_DIR`/`LIBRARY_DIR` (container paths)
+
 ### Changed
 - `scanner/scanner/api/server.py`: replaced Flask with FastAPI + Uvicorn; identical HTTP contracts preserved
 - `scanner/pyproject.toml`: replaced `flask>=3.0` with `fastapi>=0.110`, `uvicorn[standard]>=0.29`; added `httpx>=0.27` to dev deps

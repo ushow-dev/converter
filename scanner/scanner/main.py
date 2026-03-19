@@ -8,7 +8,7 @@ import threading
 from scanner import db
 from scanner.api import server as api_server
 from scanner.config import load as load_config
-from scanner.loops import move_worker, scan_loop
+from scanner.loops import download_worker, move_worker, scan_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +26,7 @@ def main() -> None:
         threading.Thread(target=scan_loop.run, args=(cfg,), name="scan_loop", daemon=True),
         threading.Thread(target=api_server.run, args=(cfg, mq), name="api_server", daemon=True),
         threading.Thread(target=move_worker.run, args=(cfg, mq), name="move_worker", daemon=True),
+        threading.Thread(target=download_worker.run, args=(cfg,), name="download_worker", daemon=True),
     ]
 
     for t in threads:

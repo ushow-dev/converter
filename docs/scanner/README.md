@@ -8,20 +8,22 @@
 
 ## Архитектура
 
-Один долгоживущий Python-процесс с тремя daemon-потоками. Общее состояние — PostgreSQL. Коммуникация между потоками — через БД и `queue.Queue`.
+Один долгоживущий Python-процесс с четырьмя daemon-потоками. Общее состояние — PostgreSQL. Коммуникация между потоками — через БД и `queue.Queue`.
 
 ```
                        ┌─────────────────────────────────────────┐
                        │           Scanner Process               │
                        │                                         │
   incoming/ ──────────▶│  scan_loop          api_server          │◀── IngestWorker (Go)
-                       │  (каждые 30с)       (FastAPI :8080)     │
+                       │  (каждые 30с)       (FastAPI :8080)     │◀── Converter API (Go)
                        │      │                   │              │
                        │      ▼                   ▼              │
-                       │  PostgreSQL ◀──────── move_queue        │
-                       │                           │             │
+  HTTP URLs ──────────▶│  download_worker    PostgreSQL ◀─── move_queue
+                       │  (каждые 10с)             │             │
+                       │      │                    │             │
+                       │      ▼                    ▼             │
   library/ ◀───────────│               move_worker              │
-                       │               (os.rename)               │
+                       │               (shutil.move)             │
                        └─────────────────────────────────────────┘
 ```
 
@@ -30,12 +32,15 @@
 | Поток | Режим | Ответственность |
 |---|---|---|
 | `scan_loop` | polling, 30с | Обход `incoming/`, stability check, metadata pipeline, дубликаты, регистрация в DB |
-| `api_server` | event-driven (FastAPI + Uvicorn, порт `SCANNER_API_PORT`) | HTTP API для IngestWorker: claim / progress / complete / fail |
-| `move_worker` | event-driven (queue.Queue) | `os.rename()` из `incoming/` в `library/movies/`, upsert в `scanner_library_movies` |
+| `api_server` | event-driven (FastAPI + Uvicorn, порт `SCANNER_API_PORT`) | HTTP API для IngestWorker: claim / progress / complete / fail; для Converter API: POST /downloads |
+| `move_worker` | event-driven (queue.Queue) | `shutil.move()` из `incoming/` в `library/movies/`, upsert в `scanner_library_movies` |
+| `download_worker` | polling, 10с | Берёт queued-записи из `scanner_downloads`, скачивает файлы в `incoming/` через `urllib.request` |
 
 Взаимодействие:
 - `scan_loop` → `api_server`: через таблицу `scanner_incoming_items` (статус `registered`)
 - `api_server` → `move_worker`: через `queue.Queue` при вызове `/complete`
+- `api_server` → `download_worker`: через таблицу `scanner_downloads` (INSERT при `/api/v1/downloads`)
+- `download_worker` → `scan_loop`: через файловую систему (сохраняет файл в `incoming/`)
 
 ---
 
@@ -48,14 +53,16 @@ scanner/
 ├── Dockerfile
 ├── pyproject.toml
 └── scanner/
-    ├── main.py                 # точка входа, запускает 3 потока + signal handling
+    ├── main.py                 # точка входа, запускает 4 потока + signal handling
     ├── config.py               # frozen dataclass, все env vars
     ├── db.py                   # ThreadedConnectionPool, авто-миграции
     ├── migrations/
     │   ├── 001_initial.sql     # scanner_incoming_items + scanner_library_movies
-    │   └── 002_add_claim_columns.sql  # claimed_at / claim_expires_at (TTL claim)
+    │   ├── 002_add_claim_columns.sql  # claimed_at / claim_expires_at (TTL claim)
+    │   └── 003_downloads_table.sql    # scanner_downloads (очередь скачивания)
     ├── loops/
     │   ├── scan_loop.py        # сканирует incoming/ каждые SCAN_INTERVAL_SEC
+    │   └── download_worker.py  # скачивает queued URLs в incoming/ каждые 10с
     │   └── move_worker.py      # os.rename → library/movies/{normalized_name}/
     ├── services/
     │   ├── stability.py        # проверка стабильности файла (размер не меняется)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -52,16 +53,26 @@ type CreateJobRequest struct {
 
 // JobService handles media job lifecycle.
 type JobService struct {
-	jobs       *repository.JobRepository
-	movieRepo  *repository.MovieRepository
-	queue      *queue.Client
-	mediaRoot  string
-	tmdbAPIKey string
+	jobs          *repository.JobRepository
+	movieRepo     *repository.MovieRepository
+	queue         *queue.Client
+	mediaRoot     string
+	tmdbAPIKey    string
+	scannerAPIURL string
+	serviceToken  string
 }
 
 // NewJobService creates a JobService.
-func NewJobService(jobs *repository.JobRepository, movieRepo *repository.MovieRepository, q *queue.Client, mediaRoot, tmdbAPIKey string) *JobService {
-	return &JobService{jobs: jobs, movieRepo: movieRepo, queue: q, mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey}
+func NewJobService(jobs *repository.JobRepository, movieRepo *repository.MovieRepository, q *queue.Client, mediaRoot, tmdbAPIKey, scannerAPIURL, serviceToken string) *JobService {
+	return &JobService{
+		jobs:          jobs,
+		movieRepo:     movieRepo,
+		queue:         q,
+		mediaRoot:     mediaRoot,
+		tmdbAPIKey:    tmdbAPIKey,
+		scannerAPIURL: scannerAPIURL,
+		serviceToken:  serviceToken,
+	}
 }
 
 // checkDuplicate looks up a movie by tmdbID or imdbID (in that order).
@@ -342,8 +353,26 @@ func (s *JobService) CreateRemoteDownloadJob(
 		safe = "video.mkv"
 	}
 
-	jobID := generateJobID()
 	now := time.Now().UTC()
+
+	// If scanner API is configured, forward download to scanner instead of enqueuing locally.
+	if s.scannerAPIURL != "" {
+		if err := s.forwardToScanner(ctx, req.SourceURL, safe); err != nil {
+			return nil, tmdbID, fmt.Errorf("forward to scanner: %w", err)
+		}
+		// Return a synthetic job with empty JobID — no converter job created.
+		synthetic := &model.Job{
+			Status:    model.JobStatusQueued,
+			Title:     &title,
+			CreatedAt: now,
+		}
+		if tmdbID != "" {
+			synthetic.TMDBID = &tmdbID
+		}
+		return synthetic, tmdbID, nil
+	}
+
+	jobID := generateJobID()
 
 	job := &model.Job{
 		JobID:         jobID,
@@ -394,6 +423,26 @@ func (s *JobService) CreateRemoteDownloadJob(
 	}
 
 	return created, tmdbID, nil
+}
+
+// forwardToScanner sends a download request to the scanner API.
+func (s *JobService) forwardToScanner(ctx context.Context, url, filename string) error {
+	body, _ := json.Marshal(map[string]string{"url": url, "filename": filename})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.scannerAPIURL+"/api/v1/downloads", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Service-Token", s.serviceToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("scanner returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // parseTitleYear extracts a title and 4-digit year from a filename stem like

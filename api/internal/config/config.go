@@ -50,6 +50,10 @@ type Config struct {
 	OpenSubtitlesAPIKey string
 	SubtitleLanguages   []string // ISO 639-1 codes, e.g. ["ru","en"]
 
+	// Scanner
+	ScannerAPIURL      string
+	IngestServiceToken string
+
 	// App
 	Environment string
 
@@ -77,6 +81,8 @@ func Load() (*Config, error) {
 		Environment:         getEnv("APP_ENV", "development"),
 		OpenSubtitlesAPIKey: getEnv("OPENSUBTITLES_API_KEY", ""),
 		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "en,bn,hi")),
+		ScannerAPIURL:       getEnv("SCANNER_API_URL", ""),
+		IngestServiceToken:  getEnv("INGEST_SERVICE_TOKEN", ""),
 	}
 
 	// Resolve admin password: prefer pre-hashed value, fall back to plaintext

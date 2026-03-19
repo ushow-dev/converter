@@ -71,6 +71,7 @@ services:
 
   # ── FlareSolverr (Cloudflare bypass for Prowlarr) ─────────────
   flaresolverr:
+    profiles: [torrent]
     image: ghcr.io/flaresolverr/flaresolverr:latest
     restart: unless-stopped
     environment:
@@ -93,6 +94,7 @@ services:
 
   # ── Indexer backend ───────────────────────────────────────────
   prowlarr:
+    profiles: [torrent]
     image: lscr.io/linuxserver/prowlarr:latest
     restart: unless-stopped
     environment:
@@ -119,6 +121,7 @@ services:
 
   # ── Download backend ──────────────────────────────────────────
   qbittorrent:
+    profiles: [torrent]
     image: lscr.io/linuxserver/qbittorrent:latest
     restart: unless-stopped
     environment:
@@ -173,6 +176,8 @@ services:
       TMDB_API_KEY:             ${TMDB_API_KEY:-}
       OPENSUBTITLES_API_KEY:    ${OPENSUBTITLES_API_KEY:-}
       SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-en,bn,hi}
+      SCANNER_API_URL:          ${SCANNER_API_URL:-}
+      INGEST_SERVICE_TOKEN:     ${INGEST_SERVICE_TOKEN:-}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
     networks:
@@ -182,8 +187,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      prowlarr:
-        condition: service_started   # API is resilient to prowlarr being temporarily unready
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:${API_PORT:-8000}/health/ready || exit 1"]
       interval: 15s
@@ -222,9 +225,21 @@ services:
       RCLONE_REMOTE:            ${RCLONE_REMOTE:-}
       RCLONE_REMOTE_PATH:       ${RCLONE_REMOTE_PATH:-/storage}
       TRANSFER_CONCURRENCY:     ${TRANSFER_CONCURRENCY:-1}
+      RCLONE_CONFIG_SCANREMOTE_TYPE:     ${RCLONE_CONFIG_SCANREMOTE_TYPE:-}
+      RCLONE_CONFIG_SCANREMOTE_HOST:     ${RCLONE_CONFIG_SCANREMOTE_HOST:-}
+      RCLONE_CONFIG_SCANREMOTE_USER:     ${RCLONE_CONFIG_SCANREMOTE_USER:-}
+      RCLONE_CONFIG_SCANREMOTE_KEY_FILE: ${RCLONE_CONFIG_SCANREMOTE_KEY_FILE:-}
+      INGEST_SERVICE_TOKEN:     ${INGEST_SERVICE_TOKEN:-}
+      INGEST_CONCURRENCY:       ${INGEST_CONCURRENCY:-1}
+      INGEST_CLAIM_TTL_SEC:     ${INGEST_CLAIM_TTL_SEC:-900}
+      INGEST_MAX_ATTEMPTS:      ${INGEST_MAX_ATTEMPTS:-3}
+      INGEST_SOURCE_REMOTE:     ${INGEST_SOURCE_REMOTE:-}
+      INGEST_SOURCE_BASE_PATH:  ${INGEST_SOURCE_BASE_PATH:-}
+      SCANNER_API_URL:          ${SCANNER_API_URL:-}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
       - ./secrets/mediarw_rclone:/secrets/mediarw_rclone:ro
+      - ./secrets/scanner_rclone:/secrets/scanner_rclone:ro
     networks:
       - app_net
     depends_on:
@@ -234,8 +249,6 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
-      qbittorrent:
-        condition: service_started   # worker handles qBit unavailability gracefully per-job
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:${WORKER_HEALTH_PORT:-8001}/health || exit 1"]
       interval: 15s
@@ -269,7 +282,7 @@ services:
       api:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 3

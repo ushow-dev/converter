@@ -119,12 +119,42 @@ ON CONFLICT (normalized_name) DO UPDATE SET
 
 ---
 
+---
+
+### scanner_downloads
+
+Очередь задач скачивания файлов напрямую в `incoming/`. Создаётся через `POST /api/v1/downloads` (вызывается converter API). Обрабатывается `download_worker`.
+
+```sql
+CREATE TABLE IF NOT EXISTS scanner_downloads (
+    id              SERIAL PRIMARY KEY,
+    url             TEXT NOT NULL,
+    filename        TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'queued', -- queued, downloading, done, failed
+    error_message   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+**Статусы:**
+
+| Статус | Описание |
+|---|---|
+| `queued` | Задача создана, ожидает обработки |
+| `downloading` | `download_worker` скачивает файл |
+| `done` | Файл успешно сохранён в `incoming/` |
+| `failed` | Ошибка скачивания, `error_message` заполнен |
+
+---
+
 ## Миграции
 
 | Файл | Описание |
 |---|---|
 | `001_initial.sql` | Создаёт `scanner_incoming_items` и `scanner_library_movies` с базовыми индексами |
 | `002_add_claim_columns.sql` | Добавляет `claimed_at`, `claim_expires_at` и `idx_incoming_claim_expires` |
+| `003_downloads_table.sql` | Создаёт `scanner_downloads` для очереди скачивания файлов в `incoming/` |
 
 Применяются автоматически при старте через `db.init(database_url)`. Порядок определяется числовым префиксом файла.
 

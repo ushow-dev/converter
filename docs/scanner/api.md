@@ -146,6 +146,41 @@ X-Service-Token: <SERVICE_TOKEN>
 
 ---
 
+### POST /api/v1/downloads
+
+Создаёт задачу скачивания файла напрямую в `incoming/`. Вызывается converter API когда `SCANNER_API_URL` задан — вместо того, чтобы скачивать файл на converter и затем передавать через SFTP.
+
+**Request body:**
+```json
+{
+  "url": "http://example.com/movies/Film.Name.2024.1080p.mkv",
+  "filename": "Film.Name.2024.1080p.mkv"
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `url` | string | HTTP(S) URL файла для скачивания |
+| `filename` | string | Имя файла, под которым сохранить в `incoming/` |
+
+**Response 201:**
+```json
+{
+  "id": 7
+}
+```
+
+**Побочный эффект:**
+- Запись в `scanner_downloads` со `status='queued'`
+- `download_worker` подхватывает запись и скачивает файл в `{INCOMING_DIR}/{filename}`
+- После скачивания `scan_loop` обнаруживает файл и регистрирует его как входящий
+
+**Ошибки:**
+- `400` — `url` или `filename` пустые
+- `401` — неверный токен
+
+---
+
 ## Типичный flow (IngestWorker)
 
 ```

@@ -27,6 +27,7 @@ def run(cfg: Config) -> None:
 
 
 def _scan_once(cfg: Config) -> None:
+    _retry_failed_items()
     now = datetime.now(timezone.utc)
     for file_path in _walk_video_files(Path(cfg.incoming_dir)):
         try:
@@ -162,6 +163,25 @@ def _do_register(file_path, normalized_name, tmdb_id, file_size, quality_score, 
                 cur.execute(
                     "UPDATE scanner_incoming_items SET status='registered', normalized_name=%s, tmdb_id=%s, quality_score=%s, is_upgrade_candidate=%s, updated_at=NOW() WHERE source_path=%s AND status='new'",
                     (normalized_name, tmdb_id, quality_score, is_upgrade_candidate, str(file_path)),
+                )
+    finally:
+        db.put_conn(conn)
+
+
+def _retry_failed_items() -> None:
+    """Reset ingest-failed items (no review_reason) back to registered after 30 min cooldown."""
+    conn = db.get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE scanner_incoming_items
+                    SET status = 'registered', updated_at = NOW()
+                    WHERE status = 'failed'
+                      AND review_reason IS NULL
+                      AND updated_at < NOW() - interval '30 minutes'
+                    """
                 )
     finally:
         db.put_conn(conn)

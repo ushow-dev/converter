@@ -139,7 +139,7 @@ export interface PlayerMovieResponse {
   meta: { version: string }
 }
 
-export type DownloadItemState = 'idle' | 'submitting' | 'queued' | 'error' | 'duplicate'
+export type DownloadItemState = 'idle' | 'submitting' | 'queued' | 'downloading' | 'error' | 'duplicate'
 
 export interface DownloadItem {
   movie: RemoteMovie

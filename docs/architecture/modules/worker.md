@@ -146,5 +146,9 @@ transfer_queue → TransferWorker → rclone move → remote:/storage/movies/<Ti
 | `INGEST_SERVICE_TOKEN` | — | X-Service-Token для scanner API (если не задан — ingest отключён) |
 | `INGEST_CLAIM_TTL_SEC` | `900` | TTL lease на ingest item (15 мин) |
 | `INGEST_MAX_ATTEMPTS` | `3` | Макс. попыток до permanent failure |
-| `INGEST_SOURCE_REMOTE` | — | rclone remote для копирования с storage-сервера |
-| `INGEST_SOURCE_BASE_PATH` | `/incoming` | Базовый путь на storage-сервере |
+| `INGEST_SOURCE_REMOTE` | `scanremote` | rclone remote для SFTP-доступа к серверу сканера |
+| `INGEST_SOURCE_BASE_PATH` | `/incoming` | Путь на сервере сканера (symlink → `/mnt/storage/incoming`) |
+| `RCLONE_CONFIG_SCANREMOTE_TYPE` | `sftp` | Тип rclone remote для сервера сканера |
+| `RCLONE_CONFIG_SCANREMOTE_HOST` | — | IP/hostname сервера сканера |
+| `RCLONE_CONFIG_SCANREMOTE_USER` | `root` | SSH-пользователь на сервере сканера |
+| `RCLONE_CONFIG_SCANREMOTE_KEY_FILE` | `/secrets/scanner_rclone` | Путь к SSH-ключу внутри контейнера |

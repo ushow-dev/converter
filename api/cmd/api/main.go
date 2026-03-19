@@ -69,7 +69,7 @@ func main() {
 
 	// ── Services ───────────────────────────────────────────────────────────────
 	searchSvc := service.NewSearchService(prowlarr, searchRepo)
-	jobSvc := service.NewJobService(jobRepo, movieRepo, redisClient, cfg.MediaRoot, cfg.TMDBAPIKey)
+	jobSvc := service.NewJobService(jobRepo, movieRepo, redisClient, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.ScannerAPIURL, cfg.IngestServiceToken)
 
 	// ── OpenSubtitles client (optional) ────────────────────────────────────────
 	osClient := subtitles.NewClient(cfg.OpenSubtitlesAPIKey)

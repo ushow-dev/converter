@@ -19,8 +19,8 @@ services:
     ports:
       - "${SCANNER_API_PORT:-8080}:8080"
     volumes:
-      - ${INCOMING_DIR}:/incoming:ro
-      - ${LIBRARY_DIR}:/library
+      - ${INCOMING_HOST_DIR}:/incoming
+      - ${LIBRARY_HOST_DIR}:/library
     depends_on:
       postgres:
         condition: service_healthy

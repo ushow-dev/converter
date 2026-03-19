@@ -28,6 +28,11 @@ class FailRequest(BaseModel):
     error_message: str = ""
 
 
+class DownloadRequest(BaseModel):
+    url: str
+    filename: str
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 def create_app(cfg: Config, move_queue: queue.Queue) -> FastAPI:
@@ -71,6 +76,13 @@ def create_app(cfg: Config, move_queue: queue.Queue) -> FastAPI:
         _update_status_with_error(item_id, "failed", body.error_message)
         return Response(status_code=204)
 
+    @app.post("/api/v1/downloads", status_code=201)
+    def create_download(_: AuthDep, body: DownloadRequest):
+        if not body.url or not body.filename:
+            raise HTTPException(status_code=400, detail="url and filename are required")
+        item_id = _create_download(body.url, body.filename)
+        return {"id": item_id}
+
     return app
 
 
@@ -83,7 +95,16 @@ def _claim_items(limit: int, ttl_sec: int) -> list:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    WITH candidates AS (
+                    WITH expired AS (
+                        UPDATE scanner_incoming_items
+                        SET status = 'registered',
+                            claimed_at = NULL,
+                            claim_expires_at = NULL,
+                            updated_at = NOW()
+                        WHERE status = 'claimed' AND claim_expires_at < NOW()
+                        RETURNING id
+                    ),
+                    candidates AS (
                         SELECT id FROM scanner_incoming_items
                         WHERE status = 'registered'
                         ORDER BY created_at
@@ -154,6 +175,20 @@ def _get_item_info(item_id: int) -> dict | None:
             if row is None:
                 return None
             return {"source_path": row[0], "normalized_name": row[1]}
+    finally:
+        db.put_conn(conn)
+
+
+def _create_download(url: str, filename: str) -> int:
+    conn = db.get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO scanner_downloads (url, filename) VALUES (%s, %s) RETURNING id",
+                    (url, filename),
+                )
+                return cur.fetchone()[0]
     finally:
         db.put_conn(conn)
 

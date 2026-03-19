@@ -275,6 +275,8 @@ func (h *JobsHandler) RemoteDownload(w http.ResponseWriter, r *http.Request) {
 	if job.Title != nil {
 		title = *job.Title
 	}
+	// job.JobID may be empty when the download was forwarded to the scanner API
+	// (no converter job was created). The frontend handles empty job_id gracefully.
 	respondJSON(w, http.StatusAccepted, map[string]any{
 		"job_id":     job.JobID,
 		"status":     string(job.Status),
