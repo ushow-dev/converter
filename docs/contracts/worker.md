@@ -124,49 +124,50 @@
 
 ## Ingest Worker
 
-The ingest worker polls the API for newly registered incoming files and copies them to local disk before handing off to the conversion pipeline.
+IngestWorker обращается к **scanner API** (отдельный Python-сервис на storage-сервере), забирает зарегистрированные файлы и копирует их на converter-сервер для дальнейшей обработки.
 
-**Activation:** Gated on both `INGEST_SERVICE_TOKEN` and `INGEST_SOURCE_REMOTE` being non-empty. If either is unset, the ingest worker goroutines are not started.
+**Activation:** Активируется только если оба параметра `INGEST_SERVICE_TOKEN` и `INGEST_SOURCE_REMOTE` непустые. При отсутствии любого из них горутины ingest не запускаются.
 
-**Poll interval:** 10 seconds (`BLPOP`-style, but HTTP-based — not Redis-driven).
+**Poll interval:** ~10 секунд (HTTP polling, не Redis-driven).
 
-**Concurrency:** Controlled by `INGEST_CONCURRENCY` (default: 1). Each goroutine independently claims and processes one item per tick.
+**Concurrency:** `INGEST_CONCURRENCY` (default: **3**). Каждая горутина независимо claim'ит и обрабатывает один item за тик.
 
 ### Claim–copy–complete cycle
 
-1. Call `POST /api/ingest/incoming/claim` with `limit=1` and `claim_ttl_sec=INGEST_CLAIM_TTL_SEC`.
-2. If no items returned, sleep and retry.
-3. Call `POST /api/ingest/incoming/progress` → status `copying`.
-4. Run `rclone copy {INGEST_SOURCE_REMOTE}:{INGEST_SOURCE_BASE_PATH}/{source_path} /media/downloads/ingest_{id}/`.
-5. Call `POST /api/ingest/incoming/progress` → status `copied`, progress 100.
-6. Call `POST /api/ingest/incoming/complete` with `local_path=/media/downloads/ingest_{id}/{source_filename}`.
-   - The API creates the `media_job` and pushes `ConvertPayload` to `convert_queue`.
-7. On any error: call `POST /api/ingest/incoming/fail` with the error message.
+1. `POST /api/v1/incoming/claim` → scanner API, `limit=1`, `claim_ttl_sec=INGEST_CLAIM_TTL_SEC`
+2. Если items пустой — sleep и retry.
+3. `POST /api/v1/incoming/{id}/progress` → `{"status": "copying"}`
+4. `rclone copy {INGEST_SOURCE_REMOTE}:{INGEST_SOURCE_BASE_PATH}/{source_path} /media/downloads/ingest_{id}/`
+5. `POST /api/v1/incoming/{id}/progress` → `{"status": "copied"}`
+6. Создать `media_job` локально в converter DB (idempotent через `ON CONFLICT (request_id) DO NOTHING`)
+7. `RPUSH convert_queue {ConvertPayload}` — поставить в очередь конвертации
+8. `POST /api/v1/incoming/{id}/complete` → уведомить scanner об успехе
+9. При любой ошибке: `POST /api/v1/incoming/{id}/fail` → `{"error_message": "..."}`
+
+**Важно:** converter-воркер сам создаёт media_job и push'ит convert_queue (шаги 6–7), а не scanner и не converter API. Scanner только перемещает файл в library/ после вызова `/complete`.
 
 ### Local storage layout
 
-Copied files land in:
+Скопированные файлы попадают в:
 ```
 /media/downloads/ingest_{id}/{source_filename}
 ```
 
-This path is passed to `complete` as `local_path`. The converter then treats it as a standard convert job.
-
 ### Required configuration
 
-| Variable | Purpose |
-|---|---|
-| `INGEST_SERVICE_TOKEN` | Authenticates calls to `/api/ingest/*` |
-| `INGEST_SOURCE_REMOTE` | rclone remote name (e.g. `mynas`) |
-| `INGEST_SOURCE_BASE_PATH` | Base path on the remote (e.g. `incoming`) |
-| `CONVERTER_API_URL` | Base URL of the API service (e.g. `http://api:8000`) |
-| `INGEST_CONCURRENCY` | Number of parallel ingest goroutines (default: 1) |
-| `INGEST_CLAIM_TTL_SEC` | Lease duration in seconds (default: 3600) |
-| `INGEST_MAX_ATTEMPTS` | Max retry attempts before permanent failure (default: 3) |
+| Variable | Default | Purpose |
+|---|---|---|
+| `INGEST_SERVICE_TOKEN` | — | X-Service-Token для scanner API |
+| `INGEST_SOURCE_REMOTE` | — | Имя rclone remote (напр. `mynas`) |
+| `INGEST_SOURCE_BASE_PATH` | `/incoming` | Базовый путь на remote |
+| `SCANNER_API_URL` | `http://scanner:8080` | URL scanner HTTP API |
+| `INGEST_CONCURRENCY` | `3` | Параллельных горутин |
+| `INGEST_CLAIM_TTL_SEC` | `900` | TTL lease в секундах (15 мин) |
+| `INGEST_MAX_ATTEMPTS` | `3` | Макс. попыток до permanent failure |
 
 ### Lease expiry recovery
 
-If the ingest worker crashes mid-copy, the item remains in `claiming` status with an expired lease. On the next `claim` call the API resets all expired leases back to `new`, making those items available for re-claim.
+При падении воркера в mid-copy item остаётся в статусе `claimed` с истёкшим `claim_expires_at`. При следующем `/claim` scanner возвращает только items со статусом `registered` — истёкшие leases должны сбрасываться через отдельный background job (в текущей реализации не автоматизировано).
 
 ---
 

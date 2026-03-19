@@ -71,9 +71,11 @@ GET    /health/ready
 ### Горутины при старте
 ```
 main.go
-  ├── for i in DOWNLOAD_CONCURRENCY: go downloadWorker()
-  ├── for i in CONVERT_CONCURRENCY: go convertWorker()
+  ├── for i in DOWNLOAD_CONCURRENCY:      go downloadWorker()
+  ├── for i in CONVERT_CONCURRENCY:       go convertWorker()
   ├── for i in HTTP_DOWNLOAD_CONCURRENCY: go httpDownloadWorker()
+  ├── for i in TRANSFER_CONCURRENCY:      go transferWorker()   # только если RCLONE_REMOTE задан
+  ├── for i in INGEST_CONCURRENCY:        go ingestWorker()     # только если INGEST_SERVICE_TOKEN + INGEST_SOURCE_REMOTE заданы
   └── go healthServer(:8001)
 ```
 
@@ -82,7 +84,9 @@ main.go
 |---|---|
 | `DOWNLOAD_CONCURRENCY` | 2 |
 | `CONVERT_CONCURRENCY` | 1 |
-| HTTP_DOWNLOAD_CONCURRENCY | 3 |
+| `HTTP_DOWNLOAD_CONCURRENCY` | 3 |
+| `TRANSFER_CONCURRENCY` | 1 |
+| `INGEST_CONCURRENCY` | 3 |
 | FFmpeg thread limit | 0 (auto) |
 
 ---
@@ -126,6 +130,9 @@ main.go
 | `movie_subtitles` | Субтитры на язык |
 | `search_results` | Кэш Prowlarr релизов |
 | `job_events` | Аудит-лог (JSONB) |
+| `storage_locations` | Хранилища файлов (local/remote); плеер выбирает base_url по `storage_location_id` |
+
+Миграции: `api/internal/db/migrations/` (001–013), применяются автоматически при старте API.
 
 ---
 

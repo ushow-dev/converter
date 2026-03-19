@@ -104,12 +104,12 @@ transfer_queue → TransferWorker → rclone move → remote:/storage/movies/<Ti
 
 **`DownloadPayload`** (`api/internal/model/`, `worker/internal/model/`):
 ```json
-{ "job_id": 1, "source_ref": "...", "title": "...", "tmdb_id": "...", "request_id": "..." }
+{ "job_id": "job_abc123", "source_ref": "...", "title": "...", "tmdb_id": "...", "request_id": "..." }
 ```
 
 **`ConvertPayload`** (`api/internal/model/`, `worker/internal/model/`):
 ```json
-{ "job_id": 1, "input_path": "/media/downloads/1/...", "title": "...", "tmdb_id": "...", "request_id": "..." }
+{ "job_id": "job_abc123", "source_path": "/media/downloads/job_abc123/...", "title": "...", "tmdb_id": "...", "movie_storage_key": "Title (Year)" }
 ```
 
 Форматы payload в `api/` и `worker/` должны оставаться синхронизированными — см. [contracts/worker.md](../../contracts/worker.md).
@@ -128,15 +128,23 @@ transfer_queue → TransferWorker → rclone move → remote:/storage/movies/<Ti
 
 ## Конфигурация
 
-| Переменная | Описание |
-|---|---|
-| `DOWNLOAD_CONCURRENCY` | Параллельные загрузки (default: 1) |
-| `CONVERT_CONCURRENCY` | Параллельные конвертации (default: 1) |
-| `TMDB_API_KEY` | Для метаданных и постеров |
-| `OPENSUBTITLES_API_KEY` | Для авто-субтитров |
-| `RCLONE_REMOTE` | Имя rclone remote для переноса (`myserver:`); если не задан — перенос отключён |
-| `SCANNER_API_URL` | URL scanner HTTP API для IngestWorker |
-| `INGEST_SERVICE_TOKEN` | Токен для обращений к scanner `/api/v1/incoming/*` |
-| `INGEST_CLAIM_TTL_SEC` | TTL lease на ingest item (default: 3600) |
-| `MEDIA_ROOT` | Корень media-тома (`/media`) |
-| `SFTP_HOST`, `SFTP_USER`, `SFTP_KEY_PATH` | SFTP-доступ к storage-серверу для rclone copy |
+| Переменная | Default | Описание |
+|---|---|---|
+| `DOWNLOAD_CONCURRENCY` | `2` | Параллельные загрузки торрентов |
+| `CONVERT_CONCURRENCY` | `1` | Параллельные FFmpeg конвертации |
+| `HTTP_DOWNLOAD_CONCURRENCY` | `3` | Параллельные HTTP-загрузки |
+| `TRANSFER_CONCURRENCY` | `1` | Параллельных rclone transfer операций |
+| `INGEST_CONCURRENCY` | `3` | Параллельных ingest горутин |
+| `FFMPEG_THREADS` | `0` (auto) | Потоков FFmpeg на задание |
+| `MEDIA_ROOT` | `/media` | Корень media-тома |
+| `TMDB_API_KEY` | — | Для метаданных и постеров |
+| `OPENSUBTITLES_API_KEY` | — | Для авто-субтитров (если не задан — отключено) |
+| `SUBTITLE_LANGUAGES` | `en,bn,hi` | Языки субтитров через запятую |
+| `RCLONE_REMOTE` | — | Имя rclone remote для переноса; если не задан — перенос отключён |
+| `RCLONE_REMOTE_PATH` | `/storage` | Базовый путь на remote |
+| `SCANNER_API_URL` | `http://scanner:8080` | URL scanner HTTP API для IngestWorker |
+| `INGEST_SERVICE_TOKEN` | — | X-Service-Token для scanner API (если не задан — ingest отключён) |
+| `INGEST_CLAIM_TTL_SEC` | `900` | TTL lease на ingest item (15 мин) |
+| `INGEST_MAX_ATTEMPTS` | `3` | Макс. попыток до permanent failure |
+| `INGEST_SOURCE_REMOTE` | — | rclone remote для копирования с storage-сервера |
+| `INGEST_SOURCE_BASE_PATH` | `/incoming` | Базовый путь на storage-сервере |

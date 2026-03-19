@@ -10,6 +10,7 @@
 converter/                  ← корень проекта
 ├── api/                    # Go API-сервис (HTTP, порт 8000)
 ├── worker/                 # Go воркер (фоновая обработка)
+├── scanner/                # Python scanner-сервис (storage-сервер, порт 8080)
 ├── frontend/               # Next.js Admin UI (порт 3000)
 ├── docs/                   # Вся документация
 ├── media/                  # Медиа-хранилище (bind mount)
@@ -67,7 +68,7 @@ api/
     ├── subtitles/                  # Клиент OpenSubtitles + конвертация SRT→VTT
     └── db/
         ├── postgres.go             # Пул соединений pgxpool + авто-миграции
-        └── migrations/             # SQL миграции (001–008)
+        └── migrations/             # SQL миграции (001–013)
 ```
 
 ---
@@ -87,6 +88,11 @@ worker/
     ├── downloader/                 # Потребитель download_queue (торренты)
     ├── httpdownloader/             # Потребитель remote_download_queue (HTTP)
     ├── converter/                  # Потребитель convert_queue (FFmpeg HLS)
+    ├── transfer/                   # Потребитель transfer_queue (rclone move на remote)
+    ├── ingest/                     # IngestWorker: claim → rclone copy → convert
+    │   ├── worker.go               # Poll loop + processItem
+    │   ├── client.go               # HTTP клиент к scanner API
+    │   └── puller.go               # rclone copy с storage-сервера
     ├── ffmpeg/                     # Обёртка FFmpeg (профили, thumbnail)
     ├── qbittorrent/                # API-клиент qBittorrent
     ├── subtitles/                  # Авто-получение субтитров
@@ -125,19 +131,56 @@ frontend/
 
 ---
 
+## `scanner/` — Scanner Service (Python)
+
+```
+scanner/
+├── docker-compose.yml              # postgres:16-alpine + scanner (python:3.12-slim + ffmpeg)
+├── .env.example
+├── Dockerfile
+├── pyproject.toml                  # fastapi, uvicorn, psycopg2-binary, guessit, requests
+└── scanner/
+    ├── main.py                     # Точка входа, 3 daemon-потока
+    ├── config.py                   # frozen dataclass, env vars
+    ├── db.py                       # ThreadedConnectionPool, авто-миграции
+    ├── migrations/                 # SQL миграции scanner DB (001–002)
+    ├── loops/
+    │   ├── scan_loop.py            # Сканирует incoming/ каждые SCAN_INTERVAL_SEC
+    │   └── move_worker.py          # os.rename → library/movies/, upsert library
+    ├── services/
+    │   ├── stability.py            # Проверка стабильности файла
+    │   ├── metadata.py             # GuessIt + TMDB lookup + normalized_name
+    │   ├── quality.py              # ffprobe → quality_score (0..100)
+    │   └── duplicates.py           # register / review_duplicate / review_unknown_quality
+    └── api/
+        └── server.py               # FastAPI HTTP API (claim/progress/complete/fail)
+```
+
+Документация: `docs/scanner/`
+
+---
+
 ## `docs/` — Документация
 
 ```
 docs/
 ├── architecture/
-│   ├── system-overview.md          # Общий обзор системы
-│   ├── services.md                 # Описание каждого сервиса
+│   ├── 00-system-overview.md       # Общий обзор системы
+│   ├── services.md                 # Описание каждого сервиса и горутин
 │   ├── data-flow.md                # Потоки данных между сервисами
 │   ├── deployment.md               # Развёртывание и инфраструктура
+│   ├── database-schema.md          # Схема PostgreSQL (converter DB)
 │   └── modules/                    # Детальные модули архитектуры
+│       ├── core-api.md
+│       ├── worker.md
+│       └── scanner.md
 ├── contracts/
-│   ├── api.md                      # HTTP API контракты
-│   └── worker.md                   # Контракты очереди воркера
+│   ├── api.md                      # HTTP API контракты (converter API)
+│   └── worker.md                   # Контракты очередей воркера + ingest
+├── scanner/
+│   ├── README.md                   # Обзор scanner: архитектура, lifecycle, конфигурация
+│   ├── api.md                      # Scanner HTTP API контракты
+│   └── database.md                 # Scanner DB схема (scanner_incoming_items, scanner_library_movies)
 ├── converter/
 │   ├── pipeline.md                 # FFmpeg HLS pipeline
 │   └── ffmpeg.md                   # FFmpeg конфигурация и профили
@@ -153,7 +196,10 @@ docs/
 │   ├── ADR-003-cursor-pagination.md
 │   ├── ADR-004-md5-url-signing.md
 │   ├── ADR-005-hls-multiresolution.md
-│   └── ADR-006-dual-auth-schemes.md
+│   ├── ADR-006-dual-auth-schemes.md
+│   ├── ADR-007-remote-storage-rclone.md
+│   ├── ADR-008-incoming-scanner-api-driven-ingest-split.md
+│   └── ADR-009-scanner-as-ingest-api-server.md
 ├── roadmap/
 │   ├── roadmap.md                  # Дорожная карта (планируемые задачи)
 │   └── technical-debt.md           # Технический долг и приоритеты
@@ -167,9 +213,9 @@ docs/
 
 ```
 media/                              # Bind mount с хоста (MEDIA_PATH в .env)
-├── downloads/{jobID}/              # Сырые файлы (торрент / HTTP)
+├── downloads/{jobID}/              # Сырые файлы (торрент / HTTP / ingest)
 ├── temp/{jobID}/                   # Временное рабочее пространство FFmpeg
-└── converted/{movieStorageKey}/    # Готовый HLS-контент
+└── converted/movies/{storageKey}/  # Готовый HLS-контент (storageKey = "Title (Year)")
     ├── master.m3u8                 # Мастер-плейлист
     ├── 360/                        # HLS сегменты 360p
     ├── 480/                        # HLS сегменты 480p

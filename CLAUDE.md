@@ -92,7 +92,7 @@ The root of this repository is `/converter/`. All code, docs, and config live he
 | Business logic | `api/internal/service/` |
 | Queue message structs | `api/internal/model/` |
 | FFmpeg profiles | `worker/internal/ffmpeg/` |
-| DB schema | `api/db/migrations/` |
+| DB schema | `api/internal/db/migrations/` |
 | Docker config | `docker-compose.yml` |
 | Architecture docs | `docs/architecture/` |
 | API contracts | `docs/contracts/` |
@@ -210,16 +210,19 @@ Update `docs/roadmap/roadmap.md`:
 
 | What changed | Also update |
 |---|---|
-| API endpoint added/changed | `docs/contracts/api.md` |
+| API endpoint added/changed | `docs/contracts/api.md` + `docs/architecture/services.md` (route list) |
 | Queue payload changed | `docs/contracts/worker.md` |
 | FFmpeg pipeline changed | `docs/converter/pipeline.md` |
 | New directory created | `REPO_MAP.md` |
 | Auth scheme changed | ADR + `docs/architecture/services.md` |
-| DB migration added | `docs/architecture/services.md` (schema section) |
+| DB migration added | `docs/architecture/database-schema.md` + `docs/architecture/services.md` (tables section) + `REPO_MAP.md` (migration count) |
+| Worker goroutine added/removed | `docs/architecture/services.md` (горутины section) + `docs/architecture/modules/worker.md` |
+| Worker config var added/changed | `docs/architecture/modules/worker.md` (Конфигурация) + `docs/contracts/worker.md` |
 | Scanner API changed | `docs/scanner/api.md` |
 | Scanner DB schema changed | `docs/scanner/database.md` |
 | Scanner architecture changed | `docs/scanner/README.md` + `docs/architecture/modules/scanner.md` |
 | Scanner config changed | `docs/scanner/README.md` (Configuration section) |
+| Media storage layout changed | `REPO_MAP.md` (media section) + `CLAUDE.md` (Media storage layout) + `docs/architecture/database-schema.md` |
 
 ---
 
