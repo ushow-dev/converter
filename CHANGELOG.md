@@ -11,6 +11,12 @@
 
 ## [Unreleased]
 
+### Changed
+- `api/internal/service/job.go`: remote downloads always use converter worker's `remote_download_queue`; scanner forwarding, `forwardToScanner`, and `isPrivateURL` removed — scanner is for ingest flow only
+- `api/cmd/api/main.go`: `NewJobService` no longer receives `scannerAPIURL`/`serviceToken`
+- `frontend/src/types/index.ts`: removed `'downloading'` from `DownloadItemState`
+- `frontend/src/app/upload/page.tsx`: removed `downloading` transient state; download response always includes `job_id`
+
 ### Fixed
 - `api/internal/service/job.go`: private/local IP URLs (10.x, 172.16-31.x, 192.168.x, 127.x) are now downloaded via converter worker's `remote_download_queue` instead of scanner server — scanner has no LAN access to these addresses
 - `scanner/scanner/loops/download_worker.py`: switched from `urllib.request.urlretrieve` to `requests` with SOCKS5/HTTP proxy support; proxy_url fetched from DB per download

@@ -193,8 +193,8 @@ export default function UploadPage() {
         const resp = await createRemoteDownloadJob(movie.video_file!.url, movie.video_file!.name, buildProxyConfig())
         setDownloadItems((prev) => new Map(prev).set(movie.url, {
           movie,
-          state: resp.job_id ? 'queued' : 'downloading',
-          jobId: resp.job_id || undefined,
+          state: 'queued',
+          jobId: resp.job_id,
         }))
       } catch (err: unknown) {
         const fetchErr = err as { code?: string; data?: Record<string, unknown> }
@@ -219,7 +219,7 @@ export default function UploadPage() {
 
   const selectableMovies = remoteMovies.filter((m) => m.video_file)
   const allChecked = selectableMovies.length > 0 && selected.size === selectableMovies.length
-  const queuedCount = Array.from(downloadItems.values()).filter((d) => d.state === 'queued' || d.state === 'downloading').length
+  const queuedCount = Array.from(downloadItems.values()).filter((d) => d.state === 'queued').length
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -593,10 +593,7 @@ export default function UploadPage() {
                                   ✓ В очереди →
                                 </a>
                               )}
-                              {dlItem?.state === 'downloading' && (
-                                <span className="text-xs text-blue-400">Скачивается…</span>
-                              )}
-                              {dlItem?.state === 'duplicate' && (
+{dlItem?.state === 'duplicate' && (
                                 <a
                                   href="/movies"
                                   onClick={(e) => e.stopPropagation()}

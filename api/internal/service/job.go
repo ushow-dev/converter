@@ -1,10 +1,8 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
-	"net"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,25 +52,21 @@ type CreateJobRequest struct {
 
 // JobService handles media job lifecycle.
 type JobService struct {
-	jobs          *repository.JobRepository
-	movieRepo     *repository.MovieRepository
-	queue         *queue.Client
-	mediaRoot     string
-	tmdbAPIKey    string
-	scannerAPIURL string
-	serviceToken  string
+	jobs       *repository.JobRepository
+	movieRepo  *repository.MovieRepository
+	queue      *queue.Client
+	mediaRoot  string
+	tmdbAPIKey string
 }
 
 // NewJobService creates a JobService.
-func NewJobService(jobs *repository.JobRepository, movieRepo *repository.MovieRepository, q *queue.Client, mediaRoot, tmdbAPIKey, scannerAPIURL, serviceToken string) *JobService {
+func NewJobService(jobs *repository.JobRepository, movieRepo *repository.MovieRepository, q *queue.Client, mediaRoot, tmdbAPIKey string) *JobService {
 	return &JobService{
-		jobs:          jobs,
-		movieRepo:     movieRepo,
-		queue:         q,
-		mediaRoot:     mediaRoot,
-		tmdbAPIKey:    tmdbAPIKey,
-		scannerAPIURL: scannerAPIURL,
-		serviceToken:  serviceToken,
+		jobs:       jobs,
+		movieRepo:  movieRepo,
+		queue:      q,
+		mediaRoot:  mediaRoot,
+		tmdbAPIKey: tmdbAPIKey,
 	}
 }
 
@@ -356,24 +350,6 @@ func (s *JobService) CreateRemoteDownloadJob(
 
 	now := time.Now().UTC()
 
-	// Forward to scanner server only for public URLs.
-	// Private/local IPs are unreachable from the scanner server — use the
-	// converter worker's remote_download_queue instead (it has LAN access).
-	if s.scannerAPIURL != "" && !isPrivateURL(req.SourceURL) {
-		if err := s.forwardToScanner(ctx, req.SourceURL, safe, req.ProxyConfig); err != nil {
-			return nil, tmdbID, fmt.Errorf("forward to scanner: %w", err)
-		}
-		synthetic := &model.Job{
-			Status:    model.JobStatusQueued,
-			Title:     &title,
-			CreatedAt: now,
-		}
-		if tmdbID != "" {
-			synthetic.TMDBID = &tmdbID
-		}
-		return synthetic, tmdbID, nil
-	}
-
 	jobID := generateJobID()
 
 	job := &model.Job{
@@ -425,65 +401,6 @@ func (s *JobService) CreateRemoteDownloadJob(
 	}
 
 	return created, tmdbID, nil
-}
-
-// isPrivateURL returns true if the URL's host is a private/loopback IP address.
-// Such URLs are only reachable from within the local network (converter worker),
-// not from the external scanner server.
-func isPrivateURL(rawURL string) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	host := u.Hostname()
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return host == "localhost"
-	}
-	for _, cidr := range []string{
-		"10.0.0.0/8",
-		"172.16.0.0/12",
-		"192.168.0.0/16",
-		"127.0.0.0/8",
-		"169.254.0.0/16",
-	} {
-		_, network, _ := net.ParseCIDR(cidr)
-		if network.Contains(ip) {
-			return true
-		}
-	}
-	return false
-}
-
-// forwardToScanner sends a download request (with optional proxy) to the scanner API.
-func (s *JobService) forwardToScanner(ctx context.Context, sourceURL, filename string, proxyCfg *model.ProxyConfig) error {
-	payload := map[string]any{"url": sourceURL, "filename": filename}
-	if proxyCfg != nil && proxyCfg.Enabled {
-		payload["proxy_config"] = map[string]any{
-			"enabled":  proxyCfg.Enabled,
-			"host":     proxyCfg.Host,
-			"port":     proxyCfg.Port,
-			"type":     proxyCfg.Type,
-			"username": proxyCfg.Username,
-			"password": proxyCfg.Password,
-		}
-	}
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.scannerAPIURL+"/api/v1/downloads", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Service-Token", s.serviceToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("scanner returned HTTP %d", resp.StatusCode)
-	}
-	return nil
 }
 
 // parseTitleYear extracts a title and 4-digit year from a filename stem like
