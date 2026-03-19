@@ -40,6 +40,17 @@
 
 ## Среднесрочные задачи (1-2 месяца)
 
+### SCANNER-001: Отдельная админка для scanner сервера
+**Приоритет:** средний
+**Что:** отдельный интерфейс для управления scanner сервером:
+  - список файлов в /incoming/ и их статусы (registered, claimed, completed, failed)
+  - список загрузок `scanner_downloads` с возможностью retry
+  - статистика очереди
+**Почему:** сейчас scanner частично виден в /queue конвертер-админки; нужен полноценный интерфейс, отдельный от конвертера
+**Затрагивает:** новые endpoints в `scanner/scanner/api/server.py`, новые страницы во frontend или отдельный сервис
+**Требует ADR:** да — решить, отдельный фронтенд vs новый раздел в существующем
+**Связан с планом:** `docs/superpowers/plans/2026-03-20-remove-scanner-download-integration.md`
+
 ### DEV-002: GitHub Actions CI
 **Что:** пайплайн с `go build`, `go vet`, `npm run build` при каждом PR
 **Затрагивает:** `.github/workflows/ci.yml`
