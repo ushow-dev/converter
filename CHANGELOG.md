@@ -12,6 +12,8 @@
 ## [Unreleased]
 
 ### Changed
+- `scanner/scanner/api/server.py`: replaced Flask with FastAPI + Uvicorn; identical HTTP contracts preserved
+- `scanner/pyproject.toml`: replaced `flask>=3.0` with `fastapi>=0.110`, `uvicorn[standard]>=0.29`; added `httpx>=0.27` to dev deps
 - `scanner/scanner/api/server.py`: scanner now exposes Flask HTTP API (`/api/v1/incoming/*`) instead of calling converter API
 - `scanner/scanner/loops/scan_loop.py`: registers items directly to scanner DB (no external API call)
 - `worker/internal/ingest/client.go`: IngestWorker now calls scanner HTTP API instead of converter API
