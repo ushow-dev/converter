@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"net"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -355,8 +356,10 @@ func (s *JobService) CreateRemoteDownloadJob(
 
 	now := time.Now().UTC()
 
-	// If scanner API is configured, forward download to scanner server.
-	if s.scannerAPIURL != "" {
+	// Forward to scanner server only for public URLs.
+	// Private/local IPs are unreachable from the scanner server — use the
+	// converter worker's remote_download_queue instead (it has LAN access).
+	if s.scannerAPIURL != "" && !isPrivateURL(req.SourceURL) {
 		if err := s.forwardToScanner(ctx, req.SourceURL, safe, req.ProxyConfig); err != nil {
 			return nil, tmdbID, fmt.Errorf("forward to scanner: %w", err)
 		}
@@ -422,6 +425,34 @@ func (s *JobService) CreateRemoteDownloadJob(
 	}
 
 	return created, tmdbID, nil
+}
+
+// isPrivateURL returns true if the URL's host is a private/loopback IP address.
+// Such URLs are only reachable from within the local network (converter worker),
+// not from the external scanner server.
+func isPrivateURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return host == "localhost"
+	}
+	for _, cidr := range []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+	} {
+		_, network, _ := net.ParseCIDR(cidr)
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // forwardToScanner sends a download request (with optional proxy) to the scanner API.

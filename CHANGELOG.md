@@ -12,6 +12,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `api/internal/service/job.go`: private/local IP URLs (10.x, 172.16-31.x, 192.168.x, 127.x) are now downloaded via converter worker's `remote_download_queue` instead of scanner server — scanner has no LAN access to these addresses
 - `scanner/scanner/loops/download_worker.py`: switched from `urllib.request.urlretrieve` to `requests` with SOCKS5/HTTP proxy support; proxy_url fetched from DB per download
 
 ### Changed
