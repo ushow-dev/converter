@@ -355,12 +355,11 @@ func (s *JobService) CreateRemoteDownloadJob(
 
 	now := time.Now().UTC()
 
-	// If scanner API is configured, forward download to scanner instead of enqueuing locally.
+	// If scanner API is configured, forward download to scanner server.
 	if s.scannerAPIURL != "" {
-		if err := s.forwardToScanner(ctx, req.SourceURL, safe); err != nil {
+		if err := s.forwardToScanner(ctx, req.SourceURL, safe, req.ProxyConfig); err != nil {
 			return nil, tmdbID, fmt.Errorf("forward to scanner: %w", err)
 		}
-		// Return a synthetic job with empty JobID — no converter job created.
 		synthetic := &model.Job{
 			Status:    model.JobStatusQueued,
 			Title:     &title,
@@ -425,9 +424,20 @@ func (s *JobService) CreateRemoteDownloadJob(
 	return created, tmdbID, nil
 }
 
-// forwardToScanner sends a download request to the scanner API.
-func (s *JobService) forwardToScanner(ctx context.Context, url, filename string) error {
-	body, _ := json.Marshal(map[string]string{"url": url, "filename": filename})
+// forwardToScanner sends a download request (with optional proxy) to the scanner API.
+func (s *JobService) forwardToScanner(ctx context.Context, sourceURL, filename string, proxyCfg *model.ProxyConfig) error {
+	payload := map[string]any{"url": sourceURL, "filename": filename}
+	if proxyCfg != nil && proxyCfg.Enabled {
+		payload["proxy_config"] = map[string]any{
+			"enabled":  proxyCfg.Enabled,
+			"host":     proxyCfg.Host,
+			"port":     proxyCfg.Port,
+			"type":     proxyCfg.Type,
+			"username": proxyCfg.Username,
+			"password": proxyCfg.Password,
+		}
+	}
+	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.scannerAPIURL+"/api/v1/downloads", bytes.NewReader(body))
 	if err != nil {
 		return err

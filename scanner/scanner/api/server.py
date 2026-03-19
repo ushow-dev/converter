@@ -28,9 +28,19 @@ class FailRequest(BaseModel):
     error_message: str = ""
 
 
+class ProxyConfig(BaseModel):
+    enabled: bool = False
+    host: str = ""
+    port: int = 0
+    type: str = "HTTP"   # "HTTP" or "SOCKS5"
+    username: str = ""
+    password: str = ""
+
+
 class DownloadRequest(BaseModel):
     url: str
     filename: str
+    proxy_config: ProxyConfig | None = None
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
@@ -80,7 +90,8 @@ def create_app(cfg: Config, move_queue: queue.Queue) -> FastAPI:
     def create_download(_: AuthDep, body: DownloadRequest):
         if not body.url or not body.filename:
             raise HTTPException(status_code=400, detail="url and filename are required")
-        item_id = _create_download(body.url, body.filename)
+        proxy_url = _proxy_config_to_url(body.proxy_config)
+        item_id = _create_download(body.url, body.filename, proxy_url)
         return {"id": item_id}
 
     @app.get("/api/v1/downloads")
@@ -191,13 +202,22 @@ def _get_item_info(item_id: int) -> dict | None:
         db.put_conn(conn)
 
 
+def _proxy_config_to_url(cfg: "ProxyConfig | None") -> str | None:
+    if cfg is None or not cfg.enabled or not cfg.host:
+        return None
+    scheme = "socks5" if cfg.type.upper() == "SOCKS5" else "http"
+    if cfg.username:
+        return f"{scheme}://{cfg.username}:{cfg.password}@{cfg.host}:{cfg.port}"
+    return f"{scheme}://{cfg.host}:{cfg.port}"
+
+
 def _list_downloads() -> list:
     conn = db.get_conn()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, url, filename, status, error_message, created_at, updated_at
+                SELECT id, url, filename, status, error_message, proxy_url, created_at, updated_at
                 FROM scanner_downloads
                 ORDER BY created_at DESC
                 LIMIT 100
@@ -211,8 +231,8 @@ def _list_downloads() -> list:
                     "filename": r[2],
                     "status": r[3],
                     "error_message": r[4],
-                    "created_at": r[5].isoformat() if r[5] else None,
-                    "updated_at": r[6].isoformat() if r[6] else None,
+                    "created_at": r[6].isoformat() if r[6] else None,
+                    "updated_at": r[7].isoformat() if r[7] else None,
                 }
                 for r in rows
             ]
@@ -238,14 +258,14 @@ def _retry_download(download_id: int) -> bool:
         db.put_conn(conn)
 
 
-def _create_download(url: str, filename: str) -> int:
+def _create_download(url: str, filename: str, proxy_url: str | None = None) -> int:
     conn = db.get_conn()
     try:
         with conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO scanner_downloads (url, filename) VALUES (%s, %s) RETURNING id",
-                    (url, filename),
+                    "INSERT INTO scanner_downloads (url, filename, proxy_url) VALUES (%s, %s, %s) RETURNING id",
+                    (url, filename, proxy_url),
                 )
                 return cur.fetchone()[0]
     finally:

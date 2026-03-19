@@ -11,6 +11,15 @@
 
 ## [Unreleased]
 
+### Fixed
+- `scanner/scanner/loops/download_worker.py`: switched from `urllib.request.urlretrieve` to `requests` with SOCKS5/HTTP proxy support; proxy_url fetched from DB per download
+
+### Changed
+- `scanner/scanner/api/server.py`: `POST /api/v1/downloads` now accepts optional `proxy_config` and stores it as `proxy_url` in DB
+- `scanner/scanner/migrations/004_downloads_proxy.sql`: added `proxy_url` column to `scanner_downloads`
+- `scanner/pyproject.toml`: added `requests[socks]` for SOCKS5 proxy support
+- `api/internal/service/job.go`: `forwardToScanner` now passes `proxy_config` to scanner API when proxy is enabled
+
 ### Added
 - `scanner/scanner/migrations/003_downloads_table.sql`: `scanner_downloads` table for tracking remote download tasks
 - `scanner/scanner/loops/download_worker.py`: background thread that downloads queued URLs to `/incoming/` using `urllib.request`

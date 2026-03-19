@@ -9,7 +9,7 @@ requires-python = ">=3.12"
 dependencies = [
     "psycopg2-binary>=2.9",
     "guessit>=3.8",
-    "requests>=2.31",
+    "requests[socks]>=2.31",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
 ]
