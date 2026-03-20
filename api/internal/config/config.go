@@ -54,6 +54,10 @@ type Config struct {
 	ScannerAPIURL      string
 	IngestServiceToken string
 
+	// Storage server rclone remote (for subtitle sync after upload/search)
+	StorageRemote     string // rclone remote name, e.g. "storage"; empty disables sync
+	StorageRemotePath string // base path on remote, e.g. "/storage"
+
 	// App
 	Environment string
 
@@ -83,6 +87,8 @@ func Load() (*Config, error) {
 		SubtitleLanguages:   parseCSV(getEnv("SUBTITLE_LANGUAGES", "en,bn,hi")),
 		ScannerAPIURL:       getEnv("SCANNER_API_URL", ""),
 		IngestServiceToken:  getEnv("INGEST_SERVICE_TOKEN", ""),
+		StorageRemote:       getEnv("STORAGE_REMOTE", ""),
+		StorageRemotePath:   getEnv("STORAGE_REMOTE_PATH", "/storage"),
 	}
 
 	// Resolve admin password: prefer pre-hashed value, fall back to plaintext

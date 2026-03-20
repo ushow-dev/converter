@@ -24,8 +24,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM alpine:3.20
 
-# curl is required by the docker-compose healthcheck.
-RUN apk add --no-cache curl
+# curl: healthcheck; rclone: subtitle sync to storage server
+RUN apk add --no-cache curl rclone
 
 WORKDIR /app
 COPY --from=builder /api .

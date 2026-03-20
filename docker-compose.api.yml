@@ -86,8 +86,16 @@ services:
       SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-en,bn,hi}
       SCANNER_API_URL:          ${SCANNER_API_URL:-}
       INGEST_SERVICE_TOKEN:     ${INGEST_SERVICE_TOKEN:-}
+      # Storage server rclone remote for subtitle sync
+      STORAGE_REMOTE:           ${STORAGE_REMOTE:-}
+      STORAGE_REMOTE_PATH:      ${STORAGE_REMOTE_PATH:-/storage}
+      RCLONE_CONFIG_STORAGE_TYPE:     ${RCLONE_CONFIG_STORAGE_TYPE:-sftp}
+      RCLONE_CONFIG_STORAGE_HOST:     ${RCLONE_CONFIG_STORAGE_HOST:-}
+      RCLONE_CONFIG_STORAGE_USER:     ${RCLONE_CONFIG_STORAGE_USER:-}
+      RCLONE_CONFIG_STORAGE_KEY_FILE: ${RCLONE_CONFIG_STORAGE_KEY_FILE:-}
     volumes:
       - ${MEDIA_PATH:-./media}:/media
+      - ./secrets:/secrets:ro
     networks:
       - app_net
     depends_on:

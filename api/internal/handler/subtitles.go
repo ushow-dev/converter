@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,11 +23,13 @@ import (
 
 // SubtitleHandler handles /api/admin/movies/{movieId}/subtitles endpoints.
 type SubtitleHandler struct {
-	movieRepo    *repository.MovieRepository
-	subtitleRepo *repository.SubtitleRepository
-	osClient     *subtitles.Client // nil if API key not configured
-	mediaRoot    string
-	languages    []string
+	movieRepo         *repository.MovieRepository
+	subtitleRepo      *repository.SubtitleRepository
+	osClient          *subtitles.Client // nil if API key not configured
+	mediaRoot         string
+	languages         []string
+	storageRemote     string // rclone remote for storage server; empty disables sync
+	storageRemotePath string // base path on remote, e.g. "/storage"
 }
 
 // NewSubtitleHandler creates a SubtitleHandler.
@@ -34,13 +39,17 @@ func NewSubtitleHandler(
 	osClient *subtitles.Client,
 	mediaRoot string,
 	languages []string,
+	storageRemote string,
+	storageRemotePath string,
 ) *SubtitleHandler {
 	return &SubtitleHandler{
-		movieRepo:    movieRepo,
-		subtitleRepo: subtitleRepo,
-		osClient:     osClient,
-		mediaRoot:    mediaRoot,
-		languages:    languages,
+		movieRepo:         movieRepo,
+		subtitleRepo:      subtitleRepo,
+		osClient:          osClient,
+		mediaRoot:         mediaRoot,
+		languages:         languages,
+		storageRemote:     storageRemote,
+		storageRemotePath: storageRemotePath,
 	}
 }
 
@@ -128,6 +137,8 @@ func (h *SubtitleHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "IO_ERROR", "failed to write subtitle file", false, cid)
 		return
 	}
+
+	h.syncSubtitlesToStorage(r.Context(), movie.StorageKey, subtitleDir)
 
 	sub := &model.Subtitle{
 		MovieID:     movieID,
@@ -217,6 +228,8 @@ func (h *SubtitleHandler) Search(w http.ResponseWriter, r *http.Request) {
 		_ = h.subtitleRepo.Upsert(r.Context(), sub)
 	}
 
+	h.syncSubtitlesToStorage(r.Context(), movie.StorageKey, subtitleDir)
+
 	subs, _ := h.subtitleRepo.ListByMovieID(r.Context(), movieID)
 	if subs == nil {
 		subs = []*model.Subtitle{}
@@ -225,6 +238,23 @@ func (h *SubtitleHandler) Search(w http.ResponseWriter, r *http.Request) {
 		"items": subs,
 		"found": len(results),
 	})
+}
+
+// syncSubtitlesToStorage copies the subtitles directory to the storage server via rclone.
+// Best-effort: errors are logged but do not affect the HTTP response.
+func (h *SubtitleHandler) syncSubtitlesToStorage(ctx context.Context, storageKey, subtitleDir string) {
+	if h.storageRemote == "" {
+		return
+	}
+	dest := fmt.Sprintf("%s:%s/movies/%s/subtitles/", h.storageRemote, h.storageRemotePath, storageKey)
+	cmd := exec.CommandContext(ctx, "rclone", "copy", subtitleDir+"/", dest)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		slog.Warn("subtitle sync to storage failed", "storage_key", storageKey, "error", err)
+	} else {
+		slog.Info("subtitles synced to storage", "storage_key", storageKey, "dest", dest)
+	}
 }
 
 func parseMovieID(r *http.Request) (int64, error) {

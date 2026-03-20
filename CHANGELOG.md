@@ -28,6 +28,10 @@
 ### Changed
 - `worker/internal/converter/converter.go`: `Worker` расширен полями `scannerClient`, `ingestSourceRemote`, `archiveDestPath`; `New()` принимает три новых параметра
 - `worker/cmd/worker/main.go`: инициализация `scannerClientForArchive` и передача в `converter.New()`; archive включается автоматически когда заданы `INGEST_SERVICE_TOKEN`, `SCANNER_API_URL`, `INGEST_SOURCE_REMOTE`
+- `api/internal/handler/subtitles.go`: субтитры синхронизируются на storage-сервер через rclone после каждого Upload и Search; добавлены поля `storageRemote`, `storageRemotePath` и метод `syncSubtitlesToStorage()`
+- `api/internal/config/config.go`: добавлены поля `StorageRemote`, `StorageRemotePath` (переменные `STORAGE_REMOTE`, `STORAGE_REMOTE_PATH`)
+- `api/Dockerfile`: добавлен `rclone` в runtime Alpine image для синхронизации субтитров на storage-сервер
+- `docker-compose.api.yml`: добавлены переменные окружения для rclone (`STORAGE_REMOTE`, `STORAGE_REMOTE_PATH`, `RCLONE_CONFIG_STORAGE_*`) и volume `./secrets:/secrets:ro`
 - `docs/scanner/api.md`: добавлена документация нового endpoint `POST /api/v1/library/archive`
 
 - `docs/architecture/target-production-architecture.md`: целевая продакшн-архитектура — многосерверная схема с CDN Edge в Азии для раздачи HLS в Бангладеш; описывает роли серверов, потоки данных, pull-caching, этапы перехода

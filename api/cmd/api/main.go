@@ -91,7 +91,7 @@ func main() {
 		cfg.MediaSigningKey,
 		cfg.MediaSigningTTL,
 	)
-	subtitleH := handler.NewSubtitleHandler(movieRepo, subtitleRepo, osClient, cfg.MediaRoot, cfg.SubtitleLanguages)
+	subtitleH := handler.NewSubtitleHandler(movieRepo, subtitleRepo, osClient, cfg.MediaRoot, cfg.SubtitleLanguages, cfg.StorageRemote, cfg.StorageRemotePath)
 	browseH := handler.NewBrowseHandler()
 	scannerH := handler.NewScannerHandler(cfg.ScannerAPIURL, cfg.IngestServiceToken)
 
