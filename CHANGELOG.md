@@ -11,6 +11,17 @@
 
 ## [Unreleased]
 
+### Added
+- `docs/architecture/target-production-architecture.md`: целевая продакшн-архитектура — многосерверная схема с CDN Edge в Азии для раздачи HLS в Бангладеш; описывает роли серверов, потоки данных, pull-caching, этапы перехода
+- `docker-compose.api.yml`: compose-файл для API-сервера (postgres, redis, api, frontend) — без worker и torrent-сервисов
+- `docker-compose.worker.yml`: compose-файл для сервера конвертации (worker, qbittorrent, prowlarr, flaresolverr) — подключается к внешним postgres и redis на API-сервере
+- `.env.api.example`: переменные окружения для API-сервера
+- `.env.worker.example`: переменные окружения для worker-сервера
+
+### Removed
+- `frontend/src/app/upload/page.tsx`: удалена вкладка «Локальная загрузка» — в разделённой архитектуре (API-сервер и Worker на разных машинах) файл загружается на диск API-сервера, но Worker не имеет к нему доступа; остался только «Удалённый каталог»
+- `frontend/src/lib/api.ts`: удалены `uploadMovie`, `tmdbLookup`, `getUploadEndpoint`, `UPLOAD_PATH` — больше не используются
+
 ### Changed
 - `api/internal/service/job.go`: remote downloads always use converter worker's `remote_download_queue`; scanner forwarding, `forwardToScanner`, and `isPrivateURL` removed — scanner is for ingest flow only
 - `api/cmd/api/main.go`: `NewJobService` no longer receives `scannerAPIURL`/`serviceToken`

@@ -17,28 +17,6 @@ import type {
 // ── Token storage ────────────────────────────────────────────────────────────
 
 const TOKEN_KEY = 'admin_token'
-const UPLOAD_PATH = '/api/admin/jobs/upload'
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '')
-}
-
-function getUploadEndpoint(): string {
-  const configuredOrigin = process.env.NEXT_PUBLIC_UPLOAD_ORIGIN?.trim()
-  if (configuredOrigin) {
-    return `${trimTrailingSlash(configuredOrigin)}${UPLOAD_PATH}`
-  }
-
-  if (typeof window !== 'undefined') {
-    const { protocol, hostname } = window.location
-    if (hostname.startsWith('admin.')) {
-      const baseDomain = hostname.slice('admin.'.length)
-      return `${protocol}//upload.${baseDomain}${UPLOAD_PATH}`
-    }
-  }
-
-  return UPLOAD_PATH
-}
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null
@@ -188,62 +166,6 @@ export function movieThumbnailSrc(movieId: number): string {
   return `/api/admin/movies/${movieId}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`
 }
 
-
-export async function tmdbLookup(tmdbId: string): Promise<{
-  title: string
-  imdb_id: string
-  poster_url: string
-  overview: string
-  release_date: string
-}> {
-  return apiFetch(`/api/admin/movies/tmdb/${encodeURIComponent(tmdbId)}`)
-}
-
-export async function uploadMovie(
-  file: File,
-  params: { title: string; imdb_id: string; tmdb_id: string },
-  onProgress?: (percent: number) => void,
-): Promise<CreateJobResponse> {
-  return new Promise((resolve, reject) => {
-    const token = getToken()
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('title', params.title)
-    formData.append('imdb_id', params.imdb_id)
-    formData.append('tmdb_id', params.tmdb_id)
-    formData.append('request_id', crypto.randomUUID())
-
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', getUploadEndpoint())
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) {
-        onProgress(Math.round((e.loaded / e.total) * 100))
-      }
-    }
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText) as CreateJobResponse)
-        } catch {
-          reject(new Error('Invalid response from server'))
-        }
-      } else {
-        try {
-          const body = JSON.parse(xhr.responseText)
-          reject(new Error(body?.error?.message ?? `HTTP ${xhr.status}`))
-        } catch {
-          reject(new Error(`HTTP ${xhr.status}`))
-        }
-      }
-    }
-
-    xhr.onerror = () => reject(new Error('Network error during upload'))
-    xhr.send(formData)
-  })
-}
 
 export async function updateMovieIDs(movieId: number, imdbId: string, tmdbId: string, title: string): Promise<void> {
   const token = getToken()

@@ -13,6 +13,8 @@
 - `modules/torrent-client.md` — архитектура интеграции с torrent-клиентом.
 - `modules/deployment-compose.md` — deployment-архитектура на Docker Compose.
 
+- `target-production-architecture.md` — целевая продакшн-архитектура с CDN Edge для раздачи контента в Бангладеш.
+
 ## Единый шаблон модулей
 
 Все модульные документы следуют шаблону из `modules/_module-template.md`:

@@ -1,0 +1,185 @@
+# ─────────────────────────────────────────────────────────────────
+# Worker Server — Docker Compose
+# Сервисы для сервера конвертации: worker, qBittorrent, Prowlarr.
+# API, Admin UI и БД запускаются отдельно (docker-compose.api.yml).
+#
+# Использование:
+#   docker compose -f docker-compose.worker.yml up -d
+#   # С торрент-клиентами:
+#   docker compose -f docker-compose.worker.yml --profile torrent up -d
+#
+# Требует подключения к API-серверу:
+#   DATABASE_URL — PostgreSQL на API-сервере
+#   REDIS_URL    — Redis на API-сервере
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Media directory init ───────────────────────────────────────
+  media-init:
+    image: alpine:3.20
+    volumes:
+      - ${MEDIA_PATH:-./media}:/media
+    command: >
+      sh -c "mkdir -p /media/downloads /media/converted /media/temp &&
+             chmod -R 777 /media &&
+             echo 'media dirs ready'"
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"
+
+  # ── FlareSolverr (Cloudflare bypass для Prowlarr) ──────────────
+  flaresolverr:
+    profiles: [torrent]
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+      TZ: ${TZ}
+    networks:
+      - app_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8191/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Indexer backend ───────────────────────────────────────────
+  prowlarr:
+    profiles: [torrent]
+    image: lscr.io/linuxserver/prowlarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ:   ${TZ}
+    volumes:
+      - prowlarr_data:/config
+    networks:
+      - app_net
+    ports:
+      - "9696:9696"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9696/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Download backend ──────────────────────────────────────────
+  qbittorrent:
+    profiles: [torrent]
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    environment:
+      PUID:       ${PUID}
+      PGID:       ${PGID}
+      TZ:         ${TZ}
+      WEBUI_PORT: ${QBITTORRENT_WEBUI_PORT:-8080}
+    volumes:
+      - torrent_data:/config
+      - ${MEDIA_PATH:-./media}:/media
+    networks:
+      - app_net
+    ports:
+      - "${QBITTORRENT_WEBUI_PORT:-8080}:${QBITTORRENT_WEBUI_PORT:-8080}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:${QBITTORRENT_WEBUI_PORT:-8080}/api/v2/app/version || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Worker ────────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./worker
+    image: ${WORKER_IMAGE:-app/worker}:${APP_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      # Внешние подключения — API-сервер
+      DATABASE_URL:           ${DATABASE_URL}
+      REDIS_URL:              ${REDIS_URL}
+      # Торрент-клиент (локально на этом же сервере)
+      QBITTORRENT_BASE_URL:   "http://qbittorrent:${QBITTORRENT_WEBUI_PORT:-8080}"
+      QBITTORRENT_USER:       ${QBITTORRENT_USER}
+      QBITTORRENT_PASSWORD:   ${QBITTORRENT_PASSWORD}
+      WORKER_HEALTH_PORT:       ${WORKER_HEALTH_PORT:-8001}
+      MEDIA_ROOT:               /media
+      TMDB_API_KEY:             ${TMDB_API_KEY:-}
+      DOWNLOAD_CONCURRENCY:     ${DOWNLOAD_CONCURRENCY:-2}
+      CONVERT_CONCURRENCY:      ${CONVERT_CONCURRENCY:-1}
+      FFMPEG_THREADS:           ${FFMPEG_THREADS:-0}
+      OPENSUBTITLES_API_KEY:    ${OPENSUBTITLES_API_KEY:-}
+      SUBTITLE_LANGUAGES:       ${SUBTITLE_LANGUAGES:-en,bn,hi}
+      # rclone: transfer на origin storage (45.x)
+      RCLONE_CONFIG_MYREMOTE_TYPE:     ${RCLONE_CONFIG_MYREMOTE_TYPE:-}
+      RCLONE_CONFIG_MYREMOTE_HOST:     ${RCLONE_CONFIG_MYREMOTE_HOST:-}
+      RCLONE_CONFIG_MYREMOTE_USER:     ${RCLONE_CONFIG_MYREMOTE_USER:-}
+      RCLONE_CONFIG_MYREMOTE_KEY_FILE: ${RCLONE_CONFIG_MYREMOTE_KEY_FILE:-}
+      RCLONE_REMOTE:            ${RCLONE_REMOTE:-}
+      RCLONE_REMOTE_PATH:       ${RCLONE_REMOTE_PATH:-/storage}
+      TRANSFER_CONCURRENCY:     ${TRANSFER_CONCURRENCY:-1}
+      # rclone: ingest с scanner-сервера
+      RCLONE_CONFIG_SCANREMOTE_TYPE:     ${RCLONE_CONFIG_SCANREMOTE_TYPE:-}
+      RCLONE_CONFIG_SCANREMOTE_HOST:     ${RCLONE_CONFIG_SCANREMOTE_HOST:-}
+      RCLONE_CONFIG_SCANREMOTE_USER:     ${RCLONE_CONFIG_SCANREMOTE_USER:-}
+      RCLONE_CONFIG_SCANREMOTE_KEY_FILE: ${RCLONE_CONFIG_SCANREMOTE_KEY_FILE:-}
+      INGEST_SERVICE_TOKEN:     ${INGEST_SERVICE_TOKEN:-}
+      INGEST_CONCURRENCY:       ${INGEST_CONCURRENCY:-1}
+      INGEST_CLAIM_TTL_SEC:     ${INGEST_CLAIM_TTL_SEC:-7200}
+      INGEST_MAX_ATTEMPTS:      ${INGEST_MAX_ATTEMPTS:-3}
+      INGEST_SOURCE_REMOTE:     ${INGEST_SOURCE_REMOTE:-}
+      INGEST_SOURCE_BASE_PATH:  ${INGEST_SOURCE_BASE_PATH:-}
+      SCANNER_API_URL:          ${SCANNER_API_URL:-}
+    volumes:
+      - ${MEDIA_PATH:-./media}:/media
+      - ./secrets/mediarw_rclone:/secrets/mediarw_rclone:ro
+      - ./secrets/scanner_rclone:/secrets/scanner_rclone:ro
+    networks:
+      - app_net
+    depends_on:
+      media-init:
+        condition: service_completed_successfully
+    ports:
+      - "${WORKER_HEALTH_PORT:-8001}:${WORKER_HEALTH_PORT:-8001}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:${WORKER_HEALTH_PORT:-8001}/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+# ─────────────────────────────────────────────────────────────────
+networks:
+  app_net:
+    driver: bridge
+
+# ─────────────────────────────────────────────────────────────────
+volumes:
+  prowlarr_data:
+  torrent_data:
