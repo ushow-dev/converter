@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -62,8 +63,8 @@ func (r *MovieRepository) Upsert(
 		return existing, nil
 	}
 
-	// Try "Title (Year)", then "Title (Year) 2", "Title (Year) 3", etc.
-	baseKey := buildStorageKey(title, year)
+	// Try normalized key, then with suffix on collision.
+	baseKey := buildStorageKey(title, year, tmdb)
 	var m *model.Movie
 	for attempt := 1; attempt <= 10; attempt++ {
 		key := baseKey
@@ -139,30 +140,34 @@ func fetchMovieBy(ctx context.Context, tx pgx.Tx, field, value string) (*model.M
 	return m, nil
 }
 
-// buildStorageKey builds a human-readable, filesystem-safe folder name.
-// Format: "Title(Year)" or "Title" if year is unknown, "untitled_<hex>" if title is empty.
-// Spaces are replaced with underscores for clean remote paths.
-func buildStorageKey(title string, year *int) string {
-	sanitized := strings.Map(func(r rune) rune {
-		// Drop chars invalid in folder names across Linux/macOS/rclone remotes
-		switch r {
-		case '/', '\\', ':', '*', '?', '"', '<', '>', '|', 0:
-			return -1
+// buildStorageKey builds a filesystem-safe folder name in scanner-compatible format.
+// Format: {slug}_{year}_[{tmdb_id}] matching Python scanner's build_normalized_name.
+// slug = lowercase title, only letters and digits, spaces collapsed to underscores.
+func buildStorageKey(title string, year *int, tmdbID *string) string {
+	var sb strings.Builder
+	for _, r := range strings.ToLower(title) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ' {
+			sb.WriteRune(r)
 		}
-		return r
-	}, strings.TrimSpace(title))
-	sanitized = strings.Join(strings.Fields(sanitized), "_") // collapse whitespace into underscores
+	}
+	slug := strings.TrimSpace(sb.String())
+	slug = strings.Join(strings.Fields(slug), "_")
 
-	if sanitized == "" {
+	if slug == "" {
 		b := make([]byte, 4)
 		_, _ = rand.Read(b)
 		return fmt.Sprintf("untitled_%x", b)
 	}
 
+	parts := []string{slug}
 	if year != nil && *year > 0 {
-		return fmt.Sprintf("%s(%d)", sanitized, *year)
+		parts = append(parts, fmt.Sprintf("%d", *year))
 	}
-	return sanitized
+	key := strings.Join(parts, "_")
+	if tmdbID != nil && *tmdbID != "" {
+		key += fmt.Sprintf("_[%s]", *tmdbID)
+	}
+	return key
 }
 
 // UpdateStorageLocation updates the storage location for a movie.

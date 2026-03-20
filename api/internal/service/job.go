@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"app/api/internal/model"
 	"app/api/internal/queue"
@@ -25,6 +26,32 @@ var (
 	unsafeChars = regexp.MustCompile(`[^a-zA-Z0-9._\-]`)
 	titleYearRe = regexp.MustCompile(`^(.+?)\s*\((\d{4})\)`)
 )
+
+// buildNormalizedName produces a filesystem-safe name matching the scanner format.
+// Format: {slug}_{year}_[{tmdb_id}]
+// slug = lowercase title, only letters and digits, spaces collapsed to underscores.
+func buildNormalizedName(title, year, tmdbID string) string {
+	var sb strings.Builder
+	for _, r := range strings.ToLower(title) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ' {
+			sb.WriteRune(r)
+		}
+	}
+	slug := strings.TrimSpace(sb.String())
+	slug = strings.Join(strings.Fields(slug), "_")
+	if slug == "" {
+		return title
+	}
+	parts := []string{slug}
+	if year != "" {
+		parts = append(parts, year)
+	}
+	name := strings.Join(parts, "_")
+	if tmdbID != "" {
+		name += fmt.Sprintf("_[%s]", tmdbID)
+	}
+	return name
+}
 
 // DuplicateError is returned when a movie with the given TMDB/IMDb ID already
 // exists in the database with a completed (ready) asset.
@@ -348,6 +375,9 @@ func (s *JobService) CreateRemoteDownloadJob(
 		safe = "video.mkv"
 	}
 
+	// Normalized name: scanner-compatible format {slug}_{year}_[{tmdb_id}]
+	normalizedName := buildNormalizedName(title, year, tmdbID)
+
 	now := time.Now().UTC()
 
 	jobID := generateJobID()
@@ -357,7 +387,7 @@ func (s *JobService) CreateRemoteDownloadJob(
 		ContentType:   "movie",
 		SourceType:    model.SourceTypeHTTP,
 		SourceRef:     req.SourceURL,
-		Title:         &title,
+		Title:         &normalizedName,
 		Priority:      model.JobPriorityNormal,
 		Status:        model.JobStatusQueued,
 		CorrelationID: &req.CorrelationID,
@@ -390,7 +420,7 @@ func (s *JobService) CreateRemoteDownloadJob(
 			SourceURL:   req.SourceURL,
 			Filename:    safe,
 			TMDBID:      tmdbID,
-			Title:       title,
+			Title:       normalizedName,
 			TargetDir:   fmt.Sprintf("%s/downloads/%s", s.mediaRoot, created.JobID),
 			ProxyConfig: req.ProxyConfig,
 		},

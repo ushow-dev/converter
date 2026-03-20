@@ -28,6 +28,10 @@
 - `.env.api.example`: переменные окружения для API-сервера
 - `.env.worker.example`: переменные окружения для worker-сервера
 
+### Changed
+- `api/internal/service/job.go`: remote download jobs now store title in scanner-compatible normalized format `{slug}_{year}_[{tmdb_id}]` — matches incoming (scanner) job naming
+- `worker/internal/repository/movie.go`: `buildStorageKey` rewritten to use scanner format instead of `Title(Year)` — storage directories now use lowercase slugs with underscores
+
 ### Removed
 - `frontend/src/app/upload/page.tsx`: удалена вкладка «Локальная загрузка» — в разделённой архитектуре (API-сервер и Worker на разных машинах) файл загружается на диск API-сервера, но Worker не имеет к нему доступа; остался только «Удалённый каталог»
 - `frontend/src/lib/api.ts`: удалены `uploadMovie`, `tmdbLookup`, `getUploadEndpoint`, `UPLOAD_PATH` — больше не используются
