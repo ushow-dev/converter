@@ -24,7 +24,7 @@ function Thumbnail({ movie }: { movie: Movie }) {
     return (
       <div className="relative h-16 w-11 shrink-0 overflow-hidden rounded bg-gray-800">
         <img
-          src={movieThumbnailSrc(movie.id)}
+          src={movieThumbnailSrc(movie)}
           alt=""
           className="h-full w-full object-cover"
           onError={e => {

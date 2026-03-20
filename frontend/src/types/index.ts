@@ -70,6 +70,7 @@ export interface Movie {
   title?: string
   year?: number
   poster_url?: string
+  thumbnail_url?: string
   has_thumbnail: boolean
   job_id?: string
   created_at: string

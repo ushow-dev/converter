@@ -80,7 +80,7 @@ func main() {
 	authH := handler.NewAuthHandler(cfg)
 	searchH := handler.NewSearchHandler(searchSvc)
 	jobsH := handler.NewJobsHandler(jobSvc, assetRepo)
-	moviesH := handler.NewMoviesHandler(cfg.TMDBAPIKey, movieRepo)
+	moviesH := handler.NewMoviesHandler(cfg.TMDBAPIKey, movieRepo, cfg.MediaBaseURL)
 	playerH := handler.NewPlayerHandler(
 		jobSvc,
 		assetRepo,

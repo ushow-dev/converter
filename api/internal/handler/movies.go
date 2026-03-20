@@ -19,13 +19,14 @@ import (
 
 // MoviesHandler handles /api/admin/movies endpoints.
 type MoviesHandler struct {
-	tmdbAPIKey string
-	movieRepo  *repository.MovieRepository
+	tmdbAPIKey   string
+	movieRepo    *repository.MovieRepository
+	mediaBaseURL string
 }
 
 // NewMoviesHandler creates a MoviesHandler.
-func NewMoviesHandler(tmdbAPIKey string, movieRepo *repository.MovieRepository) *MoviesHandler {
-	return &MoviesHandler{tmdbAPIKey: tmdbAPIKey, movieRepo: movieRepo}
+func NewMoviesHandler(tmdbAPIKey string, movieRepo *repository.MovieRepository, mediaBaseURL string) *MoviesHandler {
+	return &MoviesHandler{tmdbAPIKey: tmdbAPIKey, movieRepo: movieRepo, mediaBaseURL: mediaBaseURL}
 }
 
 type tmdbMovieResponse struct {
@@ -229,6 +230,15 @@ func (h *MoviesHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	if movies == nil {
 		movies = []*model.Movie{}
+	}
+
+	if h.mediaBaseURL != "" {
+		for _, m := range movies {
+			if m.HasThumbnail {
+				u := buildMovieMediaURL(h.mediaBaseURL, m.StorageKey, "thumbnail.jpg")
+				m.ThumbnailURL = &u
+			}
+		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

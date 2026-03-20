@@ -161,9 +161,10 @@ export async function getMovies(limit = 100, cursor?: string): Promise<MoviesRes
   return apiFetch<MoviesResponse>(moviesUrl(limit, cursor))
 }
 
-export function movieThumbnailSrc(movieId: number): string {
+export function movieThumbnailSrc(movie: { id: number; thumbnail_url?: string }): string {
+  if (movie.thumbnail_url) return movie.thumbnail_url
   const token = getToken()
-  return `/api/admin/movies/${movieId}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`
+  return `/api/admin/movies/${movie.id}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`
 }
 
 

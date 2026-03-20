@@ -84,6 +84,7 @@ type Movie struct {
 	Title             *string   `json:"title,omitempty"`
 	Year              *int      `json:"year,omitempty"`
 	PosterURL         *string   `json:"poster_url,omitempty"`
+	ThumbnailURL      *string   `json:"thumbnail_url,omitempty"`
 	HasThumbnail      bool      `json:"has_thumbnail"`
 	JobID             *string   `json:"job_id,omitempty"` // from media_assets, used for delete
 	StorageLocationID *int64    `json:"storage_location_id,omitempty"`
