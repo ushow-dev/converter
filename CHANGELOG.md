@@ -11,6 +11,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- `worker/internal/repository/movie.go`: storage key больше не корёжится при двойной нормализации — если `ConvertJob.StorageKey` задан, используется напрямую без вызова `buildStorageKey`
+- `worker/internal/model/model.go`, `api/internal/model/model.go`: добавлено поле `StorageKey` в `ConvertJob` и `RemoteDownloadJob`
+- `api/internal/service/job.go`: `CreateRemoteDownloadJob` теперь передаёт `StorageKey = normalizedName` в очередь
+- `worker/internal/httpdownloader/downloader.go`: `StorageKey` пробрасывается из `RemoteDownloadMessage` в `ConvertMessage`
+- `worker/internal/ingest/worker.go`: ingest worker ставит `StorageKey = normalized_name` из scanner
+
 ### Added
 - `scanner/scanner/api/server.py`: новый endpoint `POST /api/v1/library/archive` — upsert в `scanner_library_movies` (`status=ready`); idempotent по `normalized_name`; парсит `quality_score`/`quality_label` из имени файла
 - `worker/internal/ingest/client.go`: метод `Archive()` и тип `ArchiveRequest` для вызова нового scanner API endpoint
