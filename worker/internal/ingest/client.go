@@ -64,15 +64,17 @@ func (c *Client) Complete(ctx context.Context, id int64) error {
 	return c.post(ctx, fmt.Sprintf("/api/v1/incoming/%d/complete", id), []byte("{}"), nil)
 }
 
-// ArchiveRequest holds fields for registering an archived (externally converted) file.
+// ArchiveRequest holds fields for upserting a converted original into scanner_library_movies.
 type ArchiveRequest struct {
-	SourcePath     string `json:"source_path"`
-	SourceFilename string `json:"source_filename"`
-	NormalizedName string `json:"normalized_name,omitempty"`
-	TMDBID         string `json:"tmdb_id,omitempty"`
-	Title          string `json:"title,omitempty"`
-	Year           int    `json:"year,omitempty"`
-	FileSizeBytes  int64  `json:"file_size_bytes,omitempty"`
+	NormalizedName      string `json:"normalized_name"`
+	LibraryRelativePath string `json:"library_relative_path"`
+	Title               string `json:"title"`
+	TMDBID              string `json:"tmdb_id,omitempty"`
+	IMDbID              string `json:"imdb_id,omitempty"`
+	Year                int    `json:"year,omitempty"`
+	QualityScore        int    `json:"quality_score,omitempty"`
+	QualityLabel        string `json:"quality_label,omitempty"`
+	FileSizeBytes       int64  `json:"file_size_bytes,omitempty"`
 }
 
 // Archive registers an externally converted file in the scanner DB with status=archived.

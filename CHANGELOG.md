@@ -12,12 +12,13 @@
 ## [Unreleased]
 
 ### Added
-- `scanner/scanner/api/server.py`: новый endpoint `POST /api/v1/library/archive` — регистрирует оригинальный файл, скопированный converter'ом на scanner-сервер, в `scanner_incoming_items` со статусом `archived` (idempotent по `source_path`)
+- `scanner/scanner/api/server.py`: новый endpoint `POST /api/v1/library/archive` — upsert в `scanner_library_movies` (`status=ready`); idempotent по `normalized_name`; парсит `quality_score`/`quality_label` из имени файла
 - `worker/internal/ingest/client.go`: метод `Archive()` и тип `ArchiveRequest` для вызова нового scanner API endpoint
-- `worker/internal/converter/converter.go`: после успешной конвертации non-ingest задания оригинальный файл копируется на scanner-сервер через rclone, регистрируется в scanner DB, и только затем удаляется локально; при ошибке — просто удаляется локально
+- `worker/internal/converter/converter.go`: после успешной конвертации non-ingest задания оригинальный файл копируется на scanner-сервер в `{ARCHIVE_DEST_PATH}/{storageKey}/` через rclone, регистрируется в `scanner_library_movies`, затем удаляется локально; при ошибке — просто удаляется локально
+- `worker/internal/config/config.go`: новая переменная `ARCHIVE_DEST_PATH` (default `/library/movies`)
 
 ### Changed
-- `worker/internal/converter/converter.go`: `Worker` расширен полями `scannerClient`, `ingestSourceRemote`, `ingestSourceBasePath`; `New()` принимает три новых параметра
+- `worker/internal/converter/converter.go`: `Worker` расширен полями `scannerClient`, `ingestSourceRemote`, `archiveDestPath`; `New()` принимает три новых параметра
 - `worker/cmd/worker/main.go`: инициализация `scannerClientForArchive` и передача в `converter.New()`; archive включается автоматически когда заданы `INGEST_SERVICE_TOKEN`, `SCANNER_API_URL`, `INGEST_SOURCE_REMOTE`
 - `docs/scanner/api.md`: добавлена документация нового endpoint `POST /api/v1/library/archive`
 

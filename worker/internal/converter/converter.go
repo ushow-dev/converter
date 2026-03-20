@@ -38,9 +38,9 @@ type Worker struct {
 	transferEnabled bool // true if remote transfer is configured
 	// Archive-to-scanner: copy original file to scanner server after conversion.
 	// Enabled only for non-ingest jobs when scannerClient and ingestSourceRemote are set.
-	scannerClient        *ingest.Client // nil if archive disabled
-	ingestSourceRemote   string         // rclone remote name for scanner SFTP
-	ingestSourceBasePath string         // base path on scanner, e.g. /incoming
+	scannerClient      *ingest.Client // nil if archive disabled
+	ingestSourceRemote string         // rclone remote name for scanner SFTP
+	archiveDestPath    string         // destination path on scanner, e.g. /library/movies
 }
 
 // New creates a convert Worker.
@@ -57,16 +57,16 @@ func New(
 	transferEnabled bool,
 	scannerClient *ingest.Client,
 	ingestSourceRemote string,
-	ingestSourceBasePath string,
+	archiveDestPath string,
 ) *Worker {
 	return &Worker{
 		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
 		subtitleFetcher: subtitleFetcher, subtitleRepo: subtitleRepo,
 		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey, ffmpegThreads: ffmpegThreads,
-		transferEnabled:      transferEnabled,
-		scannerClient:        scannerClient,
-		ingestSourceRemote:   ingestSourceRemote,
-		ingestSourceBasePath: ingestSourceBasePath,
+		transferEnabled:    transferEnabled,
+		scannerClient:      scannerClient,
+		ingestSourceRemote: ingestSourceRemote,
+		archiveDestPath:    archiveDestPath,
 	}
 }
 
@@ -215,7 +215,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	if src := msg.Payload.InputPath; src != "" {
 		isIngestJob := strings.HasPrefix(msg.JobID, "ingest-")
 		if !isIngestJob && w.scannerClient != nil && w.ingestSourceRemote != "" {
-			if err := w.archiveToScanner(ctx, log, src, movie, msg.Payload.TMDBID, tmdbMeta); err != nil {
+			if err := w.archiveToScanner(ctx, log, src, movie, msg.Payload.TMDBID, msg.Payload.IMDbID, tmdbMeta); err != nil {
 				log.Warn("archive to scanner failed, deleting locally instead", "error", err)
 				if err2 := os.Remove(src); err2 != nil && !os.IsNotExist(err2) {
 					log.Warn("could not delete source file", "src", src, "error", err2)
@@ -342,14 +342,15 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 }
 
-// archiveToScanner copies the source file to the scanner server via rclone and
-// registers it in the scanner DB as an archived item. Deletes the local copy on success.
+// archiveToScanner copies the source file to scanner server's library via rclone and
+// upserts it into scanner_library_movies. Deletes the local copy on success.
 func (w *Worker) archiveToScanner(
 	ctx context.Context,
 	log *slog.Logger,
 	src string,
 	movie *model.Movie,
 	tmdbID string,
+	imdbID string,
 	tmdbMeta *tmdbMetadata,
 ) error {
 	filename := filepath.Base(src)
@@ -360,13 +361,13 @@ func (w *Worker) archiveToScanner(
 		fileSizeBytes = info.Size()
 	}
 
-	// Remote destination: {remote}:{basePath}/{storageKey}/
-	remoteDir := fmt.Sprintf("%s:%s/%s", w.ingestSourceRemote, w.ingestSourceBasePath, movie.StorageKey)
+	// Remote destination: {remote}:{archiveDestPath}/{storageKey}/
+	remoteDir := fmt.Sprintf("%s:%s/%s", w.ingestSourceRemote, w.archiveDestPath, movie.StorageKey)
 	args := []string{"copy", src, remoteDir, "--progress", "--stats-one-line", "--stats=5s"}
 	cmd := exec.CommandContext(ctx, "rclone", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	log.Info("rclone archive to scanner", "src", src, "dest", remoteDir)
+	log.Info("rclone archive to scanner library", "src", src, "dest", remoteDir)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("rclone copy to scanner: %w", err)
 	}
@@ -378,30 +379,61 @@ func (w *Worker) archiveToScanner(
 		log.Info("source file archived and deleted locally", "src", src)
 	}
 
-	// Register in scanner DB (best-effort: failure does not abort the job).
-	sourcePath := fmt.Sprintf("%s/%s/%s", w.ingestSourceBasePath, movie.StorageKey, filename)
-	archReq := ingest.ArchiveRequest{
-		SourcePath:     sourcePath,
-		SourceFilename: filename,
-		NormalizedName: movie.StorageKey,
-		TMDBID:         tmdbID,
-		FileSizeBytes:  fileSizeBytes,
+	// Build archive request for scanner_library_movies.
+	relPath := fmt.Sprintf("%s/%s", movie.StorageKey, filename)
+	title := movie.StorageKey // fallback
+	if movie.Title != nil && *movie.Title != "" {
+		title = *movie.Title
+	} else if tmdbMeta != nil && tmdbMeta.Title != "" {
+		title = tmdbMeta.Title
 	}
-	if movie.Title != nil {
-		archReq.Title = *movie.Title
-	}
+	year := 0
 	if movie.Year != nil {
-		archReq.Year = *movie.Year
+		year = *movie.Year
+	} else if tmdbMeta != nil {
+		year = tmdbMeta.Year
 	}
-	if tmdbMeta != nil && tmdbMeta.Year > 0 && archReq.Year == 0 {
-		archReq.Year = tmdbMeta.Year
+	qualScore, qualLabel := parseQuality(filename)
+
+	archReq := ingest.ArchiveRequest{
+		NormalizedName:      movie.StorageKey,
+		LibraryRelativePath: relPath,
+		Title:               title,
+		TMDBID:              tmdbID,
+		IMDbID:              imdbID,
+		Year:                year,
+		QualityScore:        qualScore,
+		QualityLabel:        qualLabel,
+		FileSizeBytes:       fileSizeBytes,
 	}
+
+	// Register in scanner DB (best-effort: failure does not abort the job).
 	if _, err := w.scannerClient.Archive(ctx, archReq); err != nil {
-		log.Warn("scanner archive registration failed (file is on scanner)", "error", err)
+		log.Warn("scanner library registration failed (file is on scanner)", "error", err)
 	} else {
-		log.Info("scanner archive registered", "source_path", sourcePath)
+		log.Info("scanner library movie registered", "normalized_name", movie.StorageKey)
 	}
 	return nil
+}
+
+// parseQuality extracts a numeric quality score and label from a filename.
+// Looks for common resolution markers: 2160p/4K → 2160, 1080p → 1080, 720p → 720, etc.
+func parseQuality(filename string) (score int, label string) {
+	lower := strings.ToLower(filename)
+	switch {
+	case strings.Contains(lower, "2160p") || strings.Contains(lower, "4k") || strings.Contains(lower, "uhd"):
+		return 2160, "HD"
+	case strings.Contains(lower, "1080p") || strings.Contains(lower, "1080i"):
+		return 1080, "HD"
+	case strings.Contains(lower, "720p") || strings.Contains(lower, "720i"):
+		return 720, "HD"
+	case strings.Contains(lower, "480p"):
+		return 480, "SD"
+	case strings.Contains(lower, "360p"):
+		return 360, "SD"
+	default:
+		return 0, ""
+	}
 }
 
 // failJob marks the job as permanently failed.

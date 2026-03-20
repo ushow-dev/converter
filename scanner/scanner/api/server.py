@@ -44,13 +44,14 @@ class DownloadRequest(BaseModel):
 
 
 class ArchiveRequest(BaseModel):
-    source_path: str        # full path on scanner, e.g. /incoming/film_2021_[123]/film.mkv
-    source_filename: str    # filename only
-    normalized_name: str | None = None
+    normalized_name: str            # slug_year_[tmdb_id] — deduplication key
+    library_relative_path: str      # relative to ARCHIVE_DEST_PATH, e.g. film_2021_[123]/film.mkv
+    title: str
     tmdb_id: str | None = None
     imdb_id: str | None = None
-    title: str | None = None
     year: int | None = None
+    quality_score: int = 0          # e.g. 1080, 720, 2160; 0 = unknown
+    quality_label: str | None = None  # "HD" | "SD" | None
     file_size_bytes: int | None = None
 
 
@@ -99,9 +100,10 @@ def create_app(cfg: Config, move_queue: queue.Queue) -> FastAPI:
 
     @app.post("/api/v1/library/archive", status_code=201)
     def archive_item(_: AuthDep, body: ArchiveRequest):
-        item_id = _create_archived_item(
-            body.source_path, body.source_filename, body.normalized_name,
-            body.tmdb_id, body.title, body.year, body.file_size_bytes,
+        item_id = _upsert_library_movie(
+            body.normalized_name, body.library_relative_path, body.title,
+            body.tmdb_id, body.imdb_id, body.year,
+            body.quality_score, body.quality_label, body.file_size_bytes,
         )
         return {"id": item_id}
 
@@ -277,13 +279,15 @@ def _retry_download(download_id: int) -> bool:
         db.put_conn(conn)
 
 
-def _create_archived_item(
-    source_path: str,
-    source_filename: str,
-    normalized_name: str | None,
+def _upsert_library_movie(
+    normalized_name: str,
+    library_relative_path: str,
+    title: str,
     tmdb_id: str | None,
-    title: str | None,
+    imdb_id: str | None,
     year: int | None,
+    quality_score: int,
+    quality_label: str | None,
     file_size_bytes: int | None,
 ) -> int:
     conn = db.get_conn()
@@ -292,27 +296,31 @@ def _create_archived_item(
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO scanner_incoming_items
-                        (source_path, source_filename, status, normalized_name,
-                         tmdb_id, title, year, file_size_bytes)
-                    VALUES (%s, %s, 'archived', %s, %s, %s, %s, %s)
-                    ON CONFLICT (source_path) DO UPDATE SET
-                        status           = 'archived',
-                        normalized_name  = COALESCE(EXCLUDED.normalized_name,
-                                                    scanner_incoming_items.normalized_name),
-                        tmdb_id          = COALESCE(EXCLUDED.tmdb_id,
-                                                    scanner_incoming_items.tmdb_id),
-                        title            = COALESCE(EXCLUDED.title,
-                                                    scanner_incoming_items.title),
-                        year             = COALESCE(EXCLUDED.year,
-                                                    scanner_incoming_items.year),
-                        file_size_bytes  = COALESCE(EXCLUDED.file_size_bytes,
-                                                    scanner_incoming_items.file_size_bytes),
-                        updated_at       = NOW()
+                    INSERT INTO scanner_library_movies
+                        (normalized_name, library_relative_path, title,
+                         tmdb_id, imdb_id, year,
+                         quality_score, quality_label, file_size_bytes, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'ready')
+                    ON CONFLICT (normalized_name) DO UPDATE SET
+                        library_relative_path = EXCLUDED.library_relative_path,
+                        title                 = EXCLUDED.title,
+                        tmdb_id               = COALESCE(EXCLUDED.tmdb_id,
+                                                         scanner_library_movies.tmdb_id),
+                        imdb_id               = COALESCE(EXCLUDED.imdb_id,
+                                                         scanner_library_movies.imdb_id),
+                        year                  = COALESCE(EXCLUDED.year,
+                                                         scanner_library_movies.year),
+                        quality_score         = EXCLUDED.quality_score,
+                        quality_label         = EXCLUDED.quality_label,
+                        file_size_bytes       = COALESCE(EXCLUDED.file_size_bytes,
+                                                         scanner_library_movies.file_size_bytes),
+                        status                = 'ready',
+                        updated_at            = NOW()
                     RETURNING id
                     """,
-                    (source_path, source_filename, normalized_name,
-                     tmdb_id, title, year, file_size_bytes),
+                    (normalized_name, library_relative_path, title,
+                     tmdb_id, imdb_id, year,
+                     quality_score, quality_label, file_size_bytes),
                 )
                 return cur.fetchone()[0]
     finally:

@@ -155,24 +155,28 @@ X-Service-Token: <SERVICE_TOKEN>
 **Request body:**
 ```json
 {
-  "source_path": "/incoming/film_2021_[123]/film.mkv",
-  "source_filename": "film.mkv",
   "normalized_name": "film_2021_[123]",
-  "tmdb_id": "123",
+  "library_relative_path": "film_2021_[123]/Film.2021.1080p.mkv",
   "title": "Film",
+  "tmdb_id": "123",
+  "imdb_id": "tt1234567",
   "year": 2021,
+  "quality_score": 1080,
+  "quality_label": "HD",
   "file_size_bytes": 4294967296
 }
 ```
 
 | Поле | Тип | Обязательное | Описание |
 |---|---|---|---|
-| `source_path` | string | да | Полный путь файла на scanner-сервере |
-| `source_filename` | string | да | Имя файла |
-| `normalized_name` | string | нет | Нормализованное имя (`slug_year_[tmdb_id]`) |
+| `normalized_name` | string | да | Нормализованное имя — ключ дедупликации (`slug_year_[tmdb_id]`) |
+| `library_relative_path` | string | да | Путь относительно `ARCHIVE_DEST_PATH`, e.g. `film_2021_[123]/file.mkv` |
+| `title` | string | да | Название фильма |
 | `tmdb_id` | string | нет | TMDB ID |
-| `title` | string | нет | Название фильма |
+| `imdb_id` | string | нет | IMDb ID |
 | `year` | int | нет | Год выхода |
+| `quality_score` | int | нет | Числовой балл качества (2160, 1080, 720, 480…); 0 = неизвестно |
+| `quality_label` | string | нет | `"HD"` или `"SD"` |
 | `file_size_bytes` | int | нет | Размер файла в байтах |
 
 **Response 201:**
@@ -181,8 +185,8 @@ X-Service-Token: <SERVICE_TOKEN>
 ```
 
 **Побочный эффект:**
-- INSERT … ON CONFLICT (source_path) DO UPDATE в `scanner_incoming_items` со `status='archived'`
-- При повторном вызове с тем же `source_path` — обновляет метаданные (идемпотентно)
+- UPSERT в `scanner_library_movies` со `status='ready'`; конфликт по `normalized_name` → обновляет все поля
+- При повторном вызове с тем же `normalized_name` — идемпотентно обновляет запись
 
 **Ошибки:**
 - `401` — неверный токен

@@ -125,7 +125,7 @@ func main() {
 	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo,
 		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads,
 		cfg.RcloneRemote != "", scannerClientForArchive,
-		cfg.IngestSourceRemote, cfg.IngestSourceBasePath)
+		cfg.IngestSourceRemote, cfg.ArchiveDestPath)
 	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot)
 
 	// Transfer worker (optional: only when RCLONE_REMOTE is set)

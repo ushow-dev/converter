@@ -58,6 +58,10 @@ type Config struct {
 	IngestMaxAttempts    int
 	IngestSourceRemote   string
 	IngestSourceBasePath string
+
+	// Archive-to-scanner: destination path on scanner server for converted originals.
+	// Defaults to /library/movies. Uses IngestSourceRemote for SFTP transport.
+	ArchiveDestPath string
 }
 
 // Load reads configuration from environment variables.
@@ -87,6 +91,7 @@ func Load() (*Config, error) {
 		IngestMaxAttempts:    intEnv("INGEST_MAX_ATTEMPTS", 3),
 		IngestSourceRemote:   getEnv("INGEST_SOURCE_REMOTE", ""),
 		IngestSourceBasePath: getEnv("INGEST_SOURCE_BASE_PATH", "/incoming"),
+		ArchiveDestPath:      getEnv("ARCHIVE_DEST_PATH", "/library/movies"),
 	}
 	return cfg, nil
 }
