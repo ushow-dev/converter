@@ -353,7 +353,9 @@ func (w *Worker) archiveToScanner(
 	imdbID string,
 	tmdbMeta *tmdbMetadata,
 ) error {
-	filename := filepath.Base(src)
+	// Normalize filename: {storageKey}{ext} (e.g. fanboy_2021_[801808].mp4)
+	ext := filepath.Ext(filepath.Base(src))
+	normalizedFilename := movie.StorageKey + ext
 
 	// Get file size before any operations.
 	var fileSizeBytes int64
@@ -361,13 +363,13 @@ func (w *Worker) archiveToScanner(
 		fileSizeBytes = info.Size()
 	}
 
-	// Remote destination: {remote}:{archiveDestPath}/{storageKey}/
-	remoteDir := fmt.Sprintf("%s:%s/%s", w.ingestSourceRemote, w.archiveDestPath, movie.StorageKey)
-	args := []string{"copy", src, remoteDir, "--progress", "--stats-one-line", "--stats=5s"}
+	// Remote destination: {remote}:{archiveDestPath}/{storageKey}/{normalizedFilename}
+	remotePath := fmt.Sprintf("%s:%s/%s/%s", w.ingestSourceRemote, w.archiveDestPath, movie.StorageKey, normalizedFilename)
+	args := []string{"copyto", src, remotePath, "--progress", "--stats-one-line", "--stats=5s"}
 	cmd := exec.CommandContext(ctx, "rclone", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	log.Info("rclone archive to scanner library", "src", src, "dest", remoteDir)
+	log.Info("rclone archive to scanner library", "src", src, "dest", remotePath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("rclone copy to scanner: %w", err)
 	}
@@ -380,7 +382,7 @@ func (w *Worker) archiveToScanner(
 	}
 
 	// Build archive request for scanner_library_movies.
-	relPath := fmt.Sprintf("%s/%s", movie.StorageKey, filename)
+	relPath := fmt.Sprintf("%s/%s", movie.StorageKey, normalizedFilename)
 	title := movie.StorageKey // fallback
 	if movie.Title != nil && *movie.Title != "" {
 		title = *movie.Title
@@ -393,7 +395,7 @@ func (w *Worker) archiveToScanner(
 	} else if tmdbMeta != nil {
 		year = tmdbMeta.Year
 	}
-	qualScore, qualLabel := parseQuality(filename)
+	qualScore, qualLabel := parseQuality(filepath.Base(src))
 
 	archReq := ingest.ArchiveRequest{
 		NormalizedName:      movie.StorageKey,
