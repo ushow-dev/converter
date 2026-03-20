@@ -226,10 +226,12 @@ export async function uploadSubtitle(
 export async function browseRemoteUrl(
   url: string,
   proxy?: import('@/types').ProxyConfig,
-): Promise<import('@/types').RemoteMovie[]> {
-  return apiFetch<import('@/types').RemoteMovie[]>(
+  offset = 0,
+  limit = 100,
+): Promise<import('@/types').BrowseResponse> {
+  return apiFetch<import('@/types').BrowseResponse>(
     '/api/admin/remote-browse',
-    { method: 'POST', body: JSON.stringify({ url, proxy_config: proxy ?? null }) },
+    { method: 'POST', body: JSON.stringify({ url, proxy_config: proxy ?? null, offset, limit }) },
   )
 }
 

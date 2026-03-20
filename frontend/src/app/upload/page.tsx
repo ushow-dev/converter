@@ -14,6 +14,9 @@ export default function UploadPage() {
   const [browsing, setBrowsing] = useState(false)
   const [browseError, setBrowseError] = useState('')
   const [remoteMovies, setRemoteMovies] = useState<RemoteMovie[]>([])
+  const [browseTotal, setBrowseTotal] = useState(0)
+  const [browseOffset, setBrowseOffset] = useState(0)
+  const [browseHasMore, setBrowseHasMore] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [downloadItems, setDownloadItems] = useState<Map<string, DownloadItem>>(new Map())
   const [downloading, setDownloading] = useState(false)
@@ -63,14 +66,36 @@ export default function UploadPage() {
     setBrowsing(true)
     setBrowseError('')
     setRemoteMovies([])
+    setBrowseTotal(0)
+    setBrowseOffset(0)
+    setBrowseHasMore(false)
     setSelected(new Set())
     setDownloadItems(new Map())
     try {
-      const movies = await browseRemoteUrl(remoteUrl.trim(), buildProxyConfig())
-      const sorted = [...movies].sort((a, b) => a.name.localeCompare(b.name))
-      setRemoteMovies(sorted)
+      const resp = await browseRemoteUrl(remoteUrl.trim(), buildProxyConfig(), 0)
+      setRemoteMovies(resp.items)
+      setBrowseTotal(resp.total)
+      setBrowseOffset(resp.items.length)
+      setBrowseHasMore(resp.has_more)
     } catch (err: unknown) {
       setBrowseError(err instanceof Error ? err.message : 'Ошибка обзора')
+    } finally {
+      setBrowsing(false)
+    }
+  }
+
+  async function handleLoadMore() {
+    if (browsing || !browseHasMore) return
+    setBrowsing(true)
+    setBrowseError('')
+    try {
+      const resp = await browseRemoteUrl(remoteUrl.trim(), buildProxyConfig(), browseOffset)
+      setRemoteMovies((prev) => [...prev, ...resp.items])
+      setBrowseTotal(resp.total)
+      setBrowseOffset((prev) => prev + resp.items.length)
+      setBrowseHasMore(resp.has_more)
+    } catch (err: unknown) {
+      setBrowseError(err instanceof Error ? err.message : 'Ошибка загрузки')
     } finally {
       setBrowsing(false)
     }
@@ -248,7 +273,10 @@ export default function UploadPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-400">
-                  Найдено: <span className="text-white font-medium">{remoteMovies.length}</span>
+                  Показано: <span className="text-white font-medium">{remoteMovies.length}</span>
+                  {browseTotal > remoteMovies.length && (
+                    <span className="text-gray-500"> из {browseTotal}</span>
+                  )}
                   {selected.size > 0 && (
                     <span className="ml-2 text-indigo-400">({selected.size} выбрано)</span>
                   )}
@@ -369,6 +397,18 @@ export default function UploadPage() {
                   </tbody>
                 </table>
               </div>
+
+              {browseHasMore && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={browsing}
+                    className="px-6 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded text-sm font-medium"
+                  >
+                    {browsing ? 'Загрузка…' : `Загрузить ещё (осталось ${browseTotal - browseOffset})`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

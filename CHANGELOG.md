@@ -12,6 +12,10 @@
 ## [Unreleased]
 
 ### Fixed
+- `api/internal/handler/browse.go`: browse корневой папки с большим количеством поддиректорий больше не вызывает 500/таймаут — реализована пагинация (offset/limit, по 100 за раз), результаты сортируются, добавлен 25-секундный таймаут на страницу
+- `frontend/src/app/upload/page.tsx`: кнопка «Загрузить ещё (осталось N)» для догрузки следующей страницы директорий; счётчик «Показано X из Y»
+- `frontend/src/lib/api.ts`: `browseRemoteUrl` принимает `offset`/`limit`, возвращает `BrowseResponse` вместо `RemoteMovie[]`
+- `frontend/src/types/index.ts`: новый тип `BrowseResponse` (`items`, `total`, `has_more`)
 - `worker/internal/transfer/transfer.go`: после `rclone move` локальная директория не удалялась — `rclone` перемещает файлы но оставляет пустые поддиректории (`720/`, `480/`, `360/`); исправлено `os.Remove` → `os.RemoveAll`
 - `worker/internal/repository/movie.go`: storage key больше не корёжится при двойной нормализации — если `ConvertJob.StorageKey` задан, используется напрямую без вызова `buildStorageKey`
 - `worker/internal/model/model.go`, `api/internal/model/model.go`: добавлено поле `StorageKey` в `ConvertJob` и `RemoteDownloadJob`

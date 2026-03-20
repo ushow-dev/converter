@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +17,12 @@ import (
 	"app/api/internal/auth"
 	"app/api/internal/model"
 	"golang.org/x/net/proxy"
+)
+
+const (
+	browseLimitDefault = 100
+	browseLimitMax     = 100
+	browseOpTimeout    = 25 * time.Second // safety timeout per page
 )
 
 // RemoteFile describes a single file found in a remote directory listing.
@@ -57,6 +65,19 @@ var (
 	}
 )
 
+// dirEntry is one subdirectory found in a remote listing.
+type dirEntry struct {
+	Name string
+	URL  string
+}
+
+// BrowseResponse is the JSON envelope returned by Browse.
+type BrowseResponse struct {
+	Items   []RemoteMovie `json:"items"`
+	Total   int           `json:"total"`
+	HasMore bool          `json:"has_more"`
+}
+
 // BrowseHandler handles remote directory listing requests.
 type BrowseHandler struct{}
 
@@ -76,6 +97,8 @@ func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		URL         string             `json:"url"`
 		ProxyConfig *model.ProxyConfig `json:"proxy_config"`
+		Offset      int                `json:"offset"`
+		Limit       int                `json:"limit"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid JSON body", false, cid)
@@ -84,6 +107,12 @@ func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 	if req.URL == "" {
 		respondError(w, http.StatusBadRequest, "MISSING_URL", "url is required", false, cid)
 		return
+	}
+	if req.Limit <= 0 || req.Limit > browseLimitMax {
+		req.Limit = browseLimitDefault
+	}
+	if req.Offset < 0 {
+		req.Offset = 0
 	}
 
 	base, err := url.Parse(req.URL)
@@ -102,36 +131,63 @@ func (h *BrowseHandler) Browse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find subdirectory links (href ending with "/", not "..", not absolute http(s))
-	dirs := findDirs(base, body)
-	if len(dirs) == 0 {
+	allDirs := findDirs(base, body)
+	if len(allDirs) == 0 {
 		// Fallback: no subdirectories — treat each video file in the root as its own movie.
 		movies := scanFlatDir(base, body)
-		respondJSON(w, http.StatusOK, movies)
+		respondJSON(w, http.StatusOK, BrowseResponse{Items: movies, Total: len(movies), HasMore: false})
 		return
 	}
 
-	// Concurrently scan each subdirectory — cap at 10 goroutines
+	// Paginate the sorted directory list.
+	total := len(allDirs)
+	end := req.Offset + req.Limit
+	if end > total {
+		end = total
+	}
+	var page []dirEntry
+	if req.Offset < total {
+		page = allDirs[req.Offset:end]
+	}
+
+	// Wrap the scan in a deadline so the HTTP handler always returns
+	// within browseOpTimeout regardless of remote latency.
+	opCtx, cancel := context.WithTimeout(r.Context(), browseOpTimeout)
+	defer cancel()
+
+	// Concurrently scan each subdirectory in this page — cap at 10 goroutines.
 	sem := make(chan struct{}, 10)
 	var mu sync.Mutex
-	movies := make([]RemoteMovie, 0, len(dirs))
+	movies := make([]RemoteMovie, 0, len(page))
 
 	var wg sync.WaitGroup
-	for name, dirURL := range dirs {
+	for _, entry := range page {
 		wg.Add(1)
 		go func(name, dirURL string) {
 			defer wg.Done()
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-opCtx.Done():
+				return
+			}
 			defer func() { <-sem }()
 
 			movie := scanDir(client, name, dirURL)
 			mu.Lock()
 			movies = append(movies, movie)
 			mu.Unlock()
-		}(name, dirURL)
+		}(entry.Name, entry.URL)
 	}
 	wg.Wait()
 
-	respondJSON(w, http.StatusOK, movies)
+	// Re-sort results (goroutines finish in arbitrary order).
+	sort.Slice(movies, func(i, j int) bool { return movies[i].Name < movies[j].Name })
+
+	respondJSON(w, http.StatusOK, BrowseResponse{
+		Items:   movies,
+		Total:   total,
+		HasMore: end < total,
+	})
 }
 
 // buildProxyClient returns an *http.Client configured to use the given proxy settings.
@@ -192,11 +248,11 @@ func fetchURL(client *http.Client, rawURL string) (string, error) {
 	return string(b), err
 }
 
-// findDirs parses directory listing HTML and returns name→absoluteURL map
+// findDirs parses directory listing HTML and returns a sorted slice of dirEntry
 // for all entries that look like subdirectories (href ending with "/").
 // Handles both relative hrefs and absolute URLs on the same host.
-func findDirs(base *url.URL, body string) map[string]string {
-	dirs := make(map[string]string)
+func findDirs(base *url.URL, body string) []dirEntry {
+	seen := make(map[string]string)
 	for _, m := range hrefRe.FindAllStringSubmatch(body, -1) {
 		href := m[1]
 		// skip anchors and query strings
@@ -235,9 +291,15 @@ func findDirs(base *url.URL, body string) map[string]string {
 		if name == "" || name == "." {
 			name = abs.Path
 		}
-		dirs[name] = abs.String()
+		seen[name] = abs.String()
 	}
-	return dirs
+
+	entries := make([]dirEntry, 0, len(seen))
+	for name, u := range seen {
+		entries = append(entries, dirEntry{Name: name, URL: u})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	return entries
 }
 
 // scanDir fetches a subdirectory URL and returns a RemoteMovie describing its contents.

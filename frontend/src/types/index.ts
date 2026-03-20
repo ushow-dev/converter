@@ -117,6 +117,12 @@ export interface RemoteMovie {
   subtitle_files: RemoteFile[]
 }
 
+export interface BrowseResponse {
+  items: RemoteMovie[]
+  total: number
+  has_more: boolean
+}
+
 export interface RemoteDownloadResponse {
   job_id: string
   status: string
