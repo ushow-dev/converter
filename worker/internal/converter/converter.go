@@ -383,11 +383,12 @@ func (w *Worker) archiveToScanner(
 
 	// Build archive request for scanner_library_movies.
 	relPath := fmt.Sprintf("%s/%s", movie.StorageKey, normalizedFilename)
+	// Prefer TMDB title (human-readable) over movie.Title which may be the storage key.
 	title := movie.StorageKey // fallback
-	if movie.Title != nil && *movie.Title != "" {
-		title = *movie.Title
-	} else if tmdbMeta != nil && tmdbMeta.Title != "" {
+	if tmdbMeta != nil && tmdbMeta.Title != "" {
 		title = tmdbMeta.Title
+	} else if movie.Title != nil && *movie.Title != "" {
+		title = *movie.Title
 	}
 	year := 0
 	if movie.Year != nil {
