@@ -7,27 +7,32 @@
 ## Корневая структура репозитория
 
 ```
-converter/                  ← корень проекта
-├── api/                    # Go API-сервис (HTTP, порт 8000)
-├── worker/                 # Go воркер (фоновая обработка)
-├── scanner/                # Python scanner-сервис (storage-сервер, порт 8080)
-├── frontend/               # Next.js Admin UI (порт 3000)
-├── docs/                   # Вся документация
-├── media/                  # Медиа-хранилище (bind mount)
-├── docker-compose.yml      # Оркестрация сервисов
-├── .env                    # Конфигурация (НЕ коммитить с реальными данными)
-├── .env.example            # Шаблон конфигурации
-├── ptrack.ink.conf         # Конфиг nginx (для продакшна)
-├── CLAUDE.md               # Инструкции для AI-ассистентов (с протоколом изменений)
-├── REPO_MAP.md             # Этот файл
-├── ARCHITECTURE.md         # Краткий обзор системной архитектуры
-├── CHANGELOG.md            # История изменений (обновляется при каждом изменении)
-├── Makefile                # Команды для разработки (make help)
+converter/                      ← корень проекта
+├── api/                        # Go API-сервис (HTTP, порт 8000)
+├── worker/                     # Go воркер (фоновая обработка)
+├── scanner/                    # Python scanner-сервис (порт 8080)
+├── frontend/                   # Next.js Admin UI (порт 3000)
+├── player/                     # Next.js Player UI (порт 3100)
+├── docs/                       # Вся документация
+├── infra/
+│   └── nginx/
+│       ├── api-server.conf     # nginx для API-сервера (178.104.100.36)
+│       └── storage-server.conf # nginx для Storage-сервера (45.134.174.84)
+├── docker-compose.api.yml      # Compose для API-сервера
+├── docker-compose.worker.yml   # Compose для Worker-сервера
+├── docker-compose.yml          # Старый all-in-one (устарел)
+├── .env.api.example            # Шаблон конфигурации API-сервера
+├── .env.worker.example         # Шаблон конфигурации Worker-сервера
+├── CLAUDE.md                   # Инструкции для AI-ассистентов
+├── REPO_MAP.md                 # Этот файл
+├── ARCHITECTURE.md             # Краткий обзор системной архитектуры
+├── CHANGELOG.md                # История изменений
+├── Makefile                    # Команды для разработки (make help)
 ├── scripts/
-│   └── new-adr.sh          # Скрипт создания нового ADR
-└── .githooks/              # Git хуки (активируются через make setup)
-    ├── commit-msg          # Валидация формата коммита
-    └── pre-commit          # go vet + проверка на секреты
+│   └── new-adr.sh              # Скрипт создания нового ADR
+└── .githooks/                  # Git хуки (активируются через make setup)
+    ├── commit-msg              # Валидация формата коммита
+    └── pre-commit              # go vet + проверка на секреты
 ```
 
 ---

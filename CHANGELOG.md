@@ -13,6 +13,16 @@
 
 ### Added
 - `docs/architecture/target-production-architecture.md`: целевая продакшн-архитектура — многосерверная схема с CDN Edge в Азии для раздачи HLS в Бангладеш; описывает роли серверов, потоки данных, pull-caching, этапы перехода
+- `infra/nginx/api-server.conf`: nginx конфиг для API-сервера (178.104.100.36) — admin.pimor.online, api.pimor.online, pimor.online
+- `infra/nginx/storage-server.conf`: nginx конфиг для Storage-сервера (45.134.174.84) — media.pimor.online, player.pimor.online
+
+### Changed
+- `docs/architecture/deployment.md`: полностью переписан под многосерверную архитектуру — сводная таблица серверов, ролей, доменов, compose-стеков, nginx, потока данных
+- `REPO_MAP.md`: добавлен `infra/nginx/`, `player/`, `docker-compose.worker.yml`, `.env.api.example`, `.env.worker.example`
+
+### Removed
+- `pimor.online.conf`: устаревший all-in-one nginx конфиг (старая архитектура, единый сервер) — заменён на `infra/nginx/`
+- `ptrack.ink.conf`: устаревший nginx конфиг для домена ptrack.ink (старый домен)
 - `docker-compose.api.yml`: compose-файл для API-сервера (postgres, redis, api, frontend) — без worker и torrent-сервисов
 - `docker-compose.worker.yml`: compose-файл для сервера конвертации (worker, qbittorrent, prowlarr, flaresolverr) — подключается к внешним postgres и redis на API-сервере
 - `.env.api.example`: переменные окружения для API-сервера

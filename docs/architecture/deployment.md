@@ -1,172 +1,191 @@
 # Развёртывание и инфраструктура
 
-## Docker Compose Stack
+## Серверы
 
-Все сервисы описаны в `converter/docker-compose.yml`.
-
-### Порядок запуска (depends_on)
-
-```
-media-init (alpine init)
-    │
-    ├── postgres (healthcheck: pg_isready)
-    │       │
-    │       └── api (ждёт postgres + redis)
-    │               │
-    │               └── worker (ждёт api + redis + qbittorrent)
-    │
-    ├── redis (healthcheck: ping)
-    │
-    ├── qbittorrent
-    │
-    └── frontend (независим, ждёт api)
-```
-
-### Exposed порты
-
-| Сервис | Внутренний | Внешний | Назначение |
+| Сервер | IP | Роль | SSH |
 |---|---|---|---|
-| api | 8000 | 8000 | Admin + Player API |
-| frontend | 3000 | 3000 | Admin UI |
-| qbittorrent | 8080 | 8080 | qBittorrent WebUI |
-| prowlarr | 9696 | 9696 | Prowlarr (начальная настройка) |
-| worker health | 8001 | — | Только внутренний |
-| postgres | 5432 | — | Только внутренний |
-| redis | 6379 | — | Только внутренний |
-| flaresolverr | 8191 | — | Только внутренний |
+| **API** | `178.104.100.36` | Go API + Admin UI + PostgreSQL + Redis | `ssh -i ~/.ssh/id_rsa_personal root@178.104.100.36` |
+| **Converter** | `178.104.53.215` | Go Worker + qBittorrent + Prowlarr + Flaresolverr | `ssh -i ~/.ssh/id_ed25519 root@178.104.53.215` |
+| **Storage** | `45.134.174.84` | HLS origin (nginx), Player UI | `ssh -i ~/.ssh/id_rsa_personal root@45.134.174.84` |
+| **Scanner** | `213.111.156.183` | Python scanner (incoming files), HTTP API :8080 | `ssh -i ~/.ssh/id_rsa_personal root@213.111.156.183` |
 
-### Volumes
+---
 
-| Volume | Тип | Назначение |
+## Домены и маршрутизация
+
+| Домен | Сервер | Назначение |
 |---|---|---|
-| `postgres_data` | Docker named | Данные PostgreSQL |
-| `redis_data` | Docker named | Redis AOF persistence |
-| `prowlarr_config` | Docker named | Prowlarr конфигурация |
-| `qbittorrent_config` | Docker named | qBittorrent конфигурация |
-| `${MEDIA_PATH}:/media` | Bind mount | Медиа файлы (загрузки, HLS) |
+| `admin.pimor.online` | API (178.104.100.36) | Admin UI (Next.js frontend) |
+| `api.pimor.online` | API (178.104.100.36) | Go API (admin + player endpoints) |
+| `pimor.online` | API (178.104.100.36) | Заглушка (404) |
+| `media.pimor.online` | Storage (45.134.174.84) | HLS файлы (nginx static) |
+| `player.pimor.online` | Storage (45.134.174.84) | Player UI (Next.js) |
 
-### Сеть
-
-Все сервисы в bridge-сети `app_net`.
-Внутренние DNS-имена: `postgres`, `redis`, `api`, `worker`, `qbittorrent`, `prowlarr`, `flaresolverr`.
+Cloudflare: **Full (strict)** SSL. Let's Encrypt сертификаты на каждом сервере.
 
 ---
 
-## Конфигурация (.env)
+## API Server (178.104.100.36)
 
-Полный список переменных в `.env.example`.
+### Стек
+```
+/opt/converter/
+├── docker-compose.api.yml   ← активный compose файл
+├── .env                     ← секреты (не в git)
+├── secrets/                 ← ключи
+└── media/                   ← временное хранение субтитров
+```
 
-### Критические переменные
+### Сервисы
+| Контейнер | Порт (host) | Назначение |
+|---|---|---|
+| `converter-api-1` | 8000 | Go API |
+| `converter-frontend-1` | 3000 | Admin UI |
+| `converter-postgres-1` | 5432 | PostgreSQL (доступен Worker-серверу) |
+| `converter-redis-1` | 6379 | Redis (доступен Worker-серверу) |
 
+Postgres и Redis открыты на `0.0.0.0`, доступ ограничен ufw только для IP Worker-сервера (178.104.53.215).
+
+### Nginx
+Конфиг: `infra/nginx/api-server.conf` → `/etc/nginx/sites-available/pimor.conf`
+
+### Запуск / обновление
 ```bash
-# Идентификация пользователя (для qBittorrent / Prowlarr)
-PUID=1000
-PGID=1000
-
-# PostgreSQL
-POSTGRES_USER=admin
-POSTGRES_PASSWORD=<strong_password>
-POSTGRES_DB=mediadb
-
-# Аутентификация
-JWT_SECRET=<min_32_chars_random>
-PLAYER_API_KEY=<random_key>
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=<bcrypt_hash_or_plaintext>
-
-# Внешние API
-TMDB_API_KEY=<tmdb_key>
-OPENSUBTITLES_API_KEY=<opensubs_key>
-PROWLARR_API_KEY=<prowlarr_key>
-
-# Медиа
-MEDIA_PATH=/path/to/media
-MEDIA_BASE_URL=https://your-domain.com
-MEDIA_SIGNING_KEY=<optional_signing_key>
-
-# Concurrency
-DOWNLOAD_CONCURRENCY=2
-CONVERT_CONCURRENCY=1
+cd /opt/converter
+git pull origin main
+docker compose -f docker-compose.api.yml build api frontend
+docker compose -f docker-compose.api.yml up -d
 ```
 
 ---
 
-## Dockerfiles
+## Converter Server (178.104.53.215)
 
-### API Dockerfile (multistage)
+### Стек
 ```
-Stage 1 (builder): golang:1.23-alpine
-  - go mod download
-  - go build -o /api ./cmd/api
-
-Stage 2 (runtime): alpine:3.21
-  - Копирует бинарник из builder
-  - EXPOSE 8000
-  - ENTRYPOINT ["/api"]
+/opt/converter/
+├── docker-compose.worker.yml  ← compose файл (worker без postgres/redis)
+├── .env                       ← секреты (не в git)
+└── secrets/
+    ├── mediarw_rclone         ← SSH ключ для SFTP на Storage
+    └── scanner_rclone         ← SSH ключ для SFTP на Scanner
 ```
 
-### Worker Dockerfile (multistage)
-Аналогичная структура, EXPOSE 8001 (health).
+### Сервисы
+| Контейнер | Порт (host) | Назначение |
+|---|---|---|
+| `converter-worker-1` | 8001 | Go Worker (health) |
+| `converter-qbittorrent-1` | 8080 | qBittorrent WebUI |
+| `converter-prowlarr-1` | 9696 | Prowlarr |
+| `converter-flaresolverr-1` | — | FlareSolverr (внутренний) |
 
-### Frontend Dockerfile (multistage)
+Worker подключается к PostgreSQL и Redis на API-сервере:
 ```
-Stage 1 (deps): node:20-alpine — npm ci
-Stage 2 (builder): node:20-alpine — npm run build
-Stage 3 (runner): node:20-alpine — standalone output
-  - EXPOSE 3000
+DATABASE_URL=postgres://app:...@178.104.100.36:5432/mediadb
+REDIS_URL=redis://178.104.100.36:6379
+```
+
+### Nginx
+Nginx не установлен. Сервисы доступны напрямую по IP.
+
+---
+
+## Storage Server (45.134.174.84)
+
+### Стек
+```
+/storage/             ← HLS файлы (rclone заливает сюда)
+/opt/player/          ← Player UI (Next.js, порт 3100)
+```
+
+### Сервисы
+| Контейнер | Порт (host) | Назначение |
+|---|---|---|
+| `ptrack-player` | 127.0.0.1:3100 | Player UI |
+
+### Nginx
+Конфиг: `infra/nginx/storage-server.conf` → `/etc/nginx/sites-available/pimor.conf`
+
+---
+
+## Scanner Server (213.111.156.183)
+
+### Стек
+```
+/opt/converter/scanner/
+├── docker-compose.yml
+├── scanner/
+└── tests/
+```
+
+### Сервисы
+| Контейнер | Порт (host) | Назначение |
+|---|---|---|
+| `scanner-scanner-1` | 8080 | Python FastAPI (HTTP API) |
+| `scanner-postgres-1` | — | PostgreSQL (внутренний) |
+
+### Nginx
+Nginx не установлен. API доступен напрямую: `http://213.111.156.183:8080`.
+
+---
+
+## Поток данных
+
+```
+Browser
+  │
+  ├── admin.pimor.online (Admin UI)
+  │     └── api.pimor.online (Go API)
+  │           ├── PostgreSQL (API Server)
+  │           └── Redis queues (API Server)
+  │                 └── Worker (Converter Server)
+  │                       ├── qBittorrent / rclone HTTP download
+  │                       ├── FFmpeg → HLS
+  │                       └── rclone SFTP → /storage (Storage Server)
+  │
+  └── player.pimor.online (Player UI)
+        └── api.pimor.online (player endpoints)
+              └── media.pimor.online (HLS segments, nginx static)
 ```
 
 ---
 
-## Первоначальная настройка
+## Конфигурация (env)
 
-### 1. Медиа-директории
+Шаблоны:
+- **API Server**: `.env.api.example`
+- **Worker Server**: `.env.worker.example`
+- **Player**: `player/.env.example`
+- **Scanner**: `scanner/.env.example`
 
-`media-init` контейнер создаёт:
+---
+
+## Первоначальная настройка сервера
+
+### API Server
 ```bash
-/media/downloads/
-/media/temp/
-/media/converted/
+git clone https://github.com/ushow-dev/converter.git /opt/converter
+cd /opt/converter
+cp .env.api.example .env   # заполнить значения
+docker compose -f docker-compose.api.yml up -d
 ```
-Устанавливает права владельца через `chown ${PUID}:${PGID}`.
 
-### 2. Prowlarr
-
-После запуска необходимо вручную:
-1. Открыть `http://localhost:9696`
-2. Добавить индексаторы
-3. Скопировать API key → `.env` `PROWLARR_API_KEY`
-
-### 3. qBittorrent
-
-После запуска:
-1. Открыть `http://localhost:8080`
-2. Сменить пароль (default: admin/adminadmin)
-3. Обновить `.env` `QBITTORRENT_USER` / `QBITTORRENT_PASSWORD`
+### Worker Server
+```bash
+git clone https://github.com/ushow-dev/converter.git /opt/converter
+cd /opt/converter
+cp .env.worker.example .env   # заполнить значения
+mkdir -p secrets
+# скопировать SSH ключи в secrets/mediarw_rclone и secrets/scanner_rclone
+docker compose -f docker-compose.worker.yml up -d
+```
 
 ---
 
-## Продакшн-рекомендации
+## Резервное копирование
 
-### nginx для медиа-стриминга
-
-В репозитории есть `ptrack.ink.conf` (nginx config, закомментирован в docker-compose).
-Рекомендуется раскомментировать nginx-сервис для:
-- Отдачи HLS сегментов напрямую (без Go API)
-- Поддержки `secure_link` подписывания URL
-- SSL termination
-
-### Безопасность
-
-- Не открывать порты PostgreSQL и Redis наружу
-- Установить `MEDIA_SIGNING_KEY` для подписывания медиа-URL
-- Использовать bcrypt-хэш для `ADMIN_PASSWORD`
-- Настроить reverse proxy (nginx/Caddy) перед API и Frontend
-- Рассмотреть firewall rules для ограничения доступа к :8080 (qBittorrent)
-
-### Backup
-
-Критические данные для резервного копирования:
-1. Docker volume `postgres_data` (все метаданные)
-2. `${MEDIA_PATH}/converted/` (конвертированные медиафайлы)
-3. `.env` файл (конфигурация)
+| Данные | Где | Метод |
+|---|---|---|
+| Метаданные фильмов | API Server — Docker volume `postgres_data` | `pg_dump` |
+| HLS файлы | Storage Server — `/storage` | rsync / snapshot |
+| Конфигурация | `.env` файлы на каждом сервере | ручное резервирование |
