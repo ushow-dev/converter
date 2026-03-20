@@ -12,6 +12,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `worker/internal/transfer/transfer.go`: после `rclone move` локальная директория не удалялась — `rclone` перемещает файлы но оставляет пустые поддиректории (`720/`, `480/`, `360/`); исправлено `os.Remove` → `os.RemoveAll`
 - `worker/internal/repository/movie.go`: storage key больше не корёжится при двойной нормализации — если `ConvertJob.StorageKey` задан, используется напрямую без вызова `buildStorageKey`
 - `worker/internal/model/model.go`, `api/internal/model/model.go`: добавлено поле `StorageKey` в `ConvertJob` и `RemoteDownloadJob`
 - `api/internal/service/job.go`: `CreateRemoteDownloadJob` теперь передаёт `StorageKey = normalizedName` в очередь

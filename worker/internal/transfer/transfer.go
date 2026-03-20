@@ -160,8 +160,8 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	log.Info("rclone transfer complete", "duration_s", time.Since(start).Seconds())
 
-	// Remove now-empty local directory.
-	if err := os.Remove(localPath); err != nil && !os.IsNotExist(err) {
+	// Remove local directory (rclone move leaves empty subdirs behind).
+	if err := os.RemoveAll(localPath); err != nil && !os.IsNotExist(err) {
 		log.Warn("could not remove local dir after transfer", "path", localPath, "error", err)
 	}
 
