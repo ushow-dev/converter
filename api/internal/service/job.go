@@ -421,6 +421,7 @@ func (s *JobService) CreateRemoteDownloadJob(
 			Filename:    safe,
 			TMDBID:      tmdbID,
 			Title:       normalizedName,
+			StorageKey:  normalizedName,
 			TargetDir:   fmt.Sprintf("%s/downloads/%s", s.mediaRoot, created.JobID),
 			ProxyConfig: req.ProxyConfig,
 		},

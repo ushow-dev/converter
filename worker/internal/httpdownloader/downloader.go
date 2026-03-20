@@ -150,6 +150,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			IMDbID:        msg.Payload.IMDbID,
 			TMDBID:        msg.Payload.TMDBID,
 			Title:         msg.Payload.Title,
+			StorageKey:    msg.Payload.StorageKey,
 		},
 	}
 	if err := w.q.Push(ctx, queue.ConvertQueue, convertMsg); err != nil {

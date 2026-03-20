@@ -202,7 +202,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			upsertPoster = &p
 		}
 	}
-	movie, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, upsertYear, upsertPoster)
+	movie, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, upsertYear, upsertPoster, msg.Payload.StorageKey)
 	if err != nil {
 		w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
 		return

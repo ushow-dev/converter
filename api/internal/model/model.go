@@ -192,6 +192,9 @@ type ConvertJob struct {
 	IMDbID        string `json:"imdb_id"`
 	TMDBID        string `json:"tmdb_id"`
 	Title         string `json:"title"`
+	// StorageKey is the pre-built normalized storage key (slug_year_[tmdb]).
+	// When set, the worker uses it directly and skips re-normalization.
+	StorageKey string `json:"storage_key,omitempty"`
 }
 
 // ProxyConfig holds optional proxy settings for remote HTTP requests.
@@ -225,6 +228,7 @@ type RemoteDownloadJob struct {
 	IMDbID      string       `json:"imdb_id"`
 	TMDBID      string       `json:"tmdb_id"`
 	Title       string       `json:"title"`
+	StorageKey  string       `json:"storage_key,omitempty"`  // pre-built normalized key; forwarded to ConvertJob
 	TargetDir   string       `json:"target_dir"`
 	ProxyConfig *ProxyConfig `json:"proxy_config,omitempty"` // optional proxy for the download
 }

@@ -136,6 +136,7 @@ func (w *Worker) processItem(ctx context.Context, item IncomingItem) {
 			FinalDir:      finalDir,
 			TMDBID:        tmdbID,
 			Title:         title,
+			StorageKey:    title, // title == normalized_name for ingest items
 		},
 	}
 

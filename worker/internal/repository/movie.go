@@ -26,8 +26,10 @@ func NewMovieRepository(pool *pgxpool.Pool) *MovieRepository {
 }
 
 // Upsert inserts or updates movie metadata and always returns a stable storage key.
+// storageKeyHint, if non-empty, is used as the storage key directly (skips buildStorageKey).
 func (r *MovieRepository) Upsert(
 	ctx context.Context, imdbID, tmdbID, title string, year *int, posterURL *string,
+	storageKeyHint string,
 ) (*model.Movie, error) {
 	imdb := nullableText(imdbID)
 	tmdb := nullableText(tmdbID)
@@ -64,7 +66,12 @@ func (r *MovieRepository) Upsert(
 	}
 
 	// Try normalized key, then with suffix on collision.
-	baseKey := buildStorageKey(title, year, tmdb)
+	var baseKey string
+	if storageKeyHint != "" {
+		baseKey = storageKeyHint
+	} else {
+		baseKey = buildStorageKey(title, year, tmdb)
+	}
 	var m *model.Movie
 	for attempt := 1; attempt <= 10; attempt++ {
 		key := baseKey
