@@ -43,6 +43,17 @@ class DownloadRequest(BaseModel):
     proxy_config: ProxyConfig | None = None
 
 
+class ArchiveRequest(BaseModel):
+    source_path: str        # full path on scanner, e.g. /incoming/film_2021_[123]/film.mkv
+    source_filename: str    # filename only
+    normalized_name: str | None = None
+    tmdb_id: str | None = None
+    imdb_id: str | None = None
+    title: str | None = None
+    year: int | None = None
+    file_size_bytes: int | None = None
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 def create_app(cfg: Config, move_queue: queue.Queue) -> FastAPI:
@@ -85,6 +96,14 @@ def create_app(cfg: Config, move_queue: queue.Queue) -> FastAPI:
     def fail(item_id: int, _: AuthDep, body: FailRequest = FailRequest()):
         _update_status_with_error(item_id, "failed", body.error_message)
         return Response(status_code=204)
+
+    @app.post("/api/v1/library/archive", status_code=201)
+    def archive_item(_: AuthDep, body: ArchiveRequest):
+        item_id = _create_archived_item(
+            body.source_path, body.source_filename, body.normalized_name,
+            body.tmdb_id, body.title, body.year, body.file_size_bytes,
+        )
+        return {"id": item_id}
 
     @app.post("/api/v1/downloads", status_code=201)
     def create_download(_: AuthDep, body: DownloadRequest):
@@ -254,6 +273,48 @@ def _retry_download(download_id: int) -> bool:
                     (download_id,),
                 )
                 return cur.rowcount > 0
+    finally:
+        db.put_conn(conn)
+
+
+def _create_archived_item(
+    source_path: str,
+    source_filename: str,
+    normalized_name: str | None,
+    tmdb_id: str | None,
+    title: str | None,
+    year: int | None,
+    file_size_bytes: int | None,
+) -> int:
+    conn = db.get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO scanner_incoming_items
+                        (source_path, source_filename, status, normalized_name,
+                         tmdb_id, title, year, file_size_bytes)
+                    VALUES (%s, %s, 'archived', %s, %s, %s, %s, %s)
+                    ON CONFLICT (source_path) DO UPDATE SET
+                        status           = 'archived',
+                        normalized_name  = COALESCE(EXCLUDED.normalized_name,
+                                                    scanner_incoming_items.normalized_name),
+                        tmdb_id          = COALESCE(EXCLUDED.tmdb_id,
+                                                    scanner_incoming_items.tmdb_id),
+                        title            = COALESCE(EXCLUDED.title,
+                                                    scanner_incoming_items.title),
+                        year             = COALESCE(EXCLUDED.year,
+                                                    scanner_incoming_items.year),
+                        file_size_bytes  = COALESCE(EXCLUDED.file_size_bytes,
+                                                    scanner_incoming_items.file_size_bytes),
+                        updated_at       = NOW()
+                    RETURNING id
+                    """,
+                    (source_path, source_filename, normalized_name,
+                     tmdb_id, title, year, file_size_bytes),
+                )
+                return cur.fetchone()[0]
     finally:
         db.put_conn(conn)
 

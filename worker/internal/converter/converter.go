@@ -10,11 +10,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"app/worker/internal/ffmpeg"
+	"app/worker/internal/ingest"
 	"app/worker/internal/model"
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
@@ -33,6 +36,11 @@ type Worker struct {
 	tmdbAPIKey      string
 	ffmpegThreads   int  // 0 = auto
 	transferEnabled bool // true if remote transfer is configured
+	// Archive-to-scanner: copy original file to scanner server after conversion.
+	// Enabled only for non-ingest jobs when scannerClient and ingestSourceRemote are set.
+	scannerClient        *ingest.Client // nil if archive disabled
+	ingestSourceRemote   string         // rclone remote name for scanner SFTP
+	ingestSourceBasePath string         // base path on scanner, e.g. /incoming
 }
 
 // New creates a convert Worker.
@@ -47,12 +55,18 @@ func New(
 	tmdbAPIKey string,
 	ffmpegThreads int,
 	transferEnabled bool,
+	scannerClient *ingest.Client,
+	ingestSourceRemote string,
+	ingestSourceBasePath string,
 ) *Worker {
 	return &Worker{
 		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
 		subtitleFetcher: subtitleFetcher, subtitleRepo: subtitleRepo,
 		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey, ffmpegThreads: ffmpegThreads,
-		transferEnabled: transferEnabled,
+		transferEnabled:      transferEnabled,
+		scannerClient:        scannerClient,
+		ingestSourceRemote:   ingestSourceRemote,
+		ingestSourceBasePath: ingestSourceBasePath,
 	}
 }
 
@@ -195,13 +209,25 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 	finalDir := filepath.Join(w.mediaRoot, "converted", "movies", movie.StorageKey)
 
-	// ── Delete original source file ──────────────────────────────────────────
-	// Source is preserved on the scanner server (/library); no need to keep it here.
+	// ── Archive or delete original source file ───────────────────────────────
+	// For ingest jobs the source is already on the scanner server — just delete local copy.
+	// For remote/torrent jobs, copy to scanner first then delete local copy.
 	if src := msg.Payload.InputPath; src != "" {
-		if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
-			log.Warn("could not delete source file", "src", src, "error", err)
+		isIngestJob := strings.HasPrefix(msg.JobID, "ingest-")
+		if !isIngestJob && w.scannerClient != nil && w.ingestSourceRemote != "" {
+			if err := w.archiveToScanner(ctx, log, src, movie, msg.Payload.TMDBID, tmdbMeta); err != nil {
+				log.Warn("archive to scanner failed, deleting locally instead", "error", err)
+				if err2 := os.Remove(src); err2 != nil && !os.IsNotExist(err2) {
+					log.Warn("could not delete source file", "src", src, "error", err2)
+				}
+			}
+			// archiveToScanner deletes the local file on success.
 		} else {
-			log.Info("source file deleted", "src", src)
+			if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
+				log.Warn("could not delete source file", "src", src, "error", err)
+			} else {
+				log.Info("source file deleted", "src", src)
+			}
 		}
 	}
 
@@ -314,6 +340,68 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			log.Error("update status to completed", "error", err)
 		}
 	}
+}
+
+// archiveToScanner copies the source file to the scanner server via rclone and
+// registers it in the scanner DB as an archived item. Deletes the local copy on success.
+func (w *Worker) archiveToScanner(
+	ctx context.Context,
+	log *slog.Logger,
+	src string,
+	movie *model.Movie,
+	tmdbID string,
+	tmdbMeta *tmdbMetadata,
+) error {
+	filename := filepath.Base(src)
+
+	// Get file size before any operations.
+	var fileSizeBytes int64
+	if info, err := os.Stat(src); err == nil {
+		fileSizeBytes = info.Size()
+	}
+
+	// Remote destination: {remote}:{basePath}/{storageKey}/
+	remoteDir := fmt.Sprintf("%s:%s/%s", w.ingestSourceRemote, w.ingestSourceBasePath, movie.StorageKey)
+	args := []string{"copy", src, remoteDir, "--progress", "--stats-one-line", "--stats=5s"}
+	cmd := exec.CommandContext(ctx, "rclone", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	log.Info("rclone archive to scanner", "src", src, "dest", remoteDir)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("rclone copy to scanner: %w", err)
+	}
+
+	// Delete local copy after successful transfer.
+	if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
+		log.Warn("could not delete local source after archive", "error", err)
+	} else {
+		log.Info("source file archived and deleted locally", "src", src)
+	}
+
+	// Register in scanner DB (best-effort: failure does not abort the job).
+	sourcePath := fmt.Sprintf("%s/%s/%s", w.ingestSourceBasePath, movie.StorageKey, filename)
+	archReq := ingest.ArchiveRequest{
+		SourcePath:     sourcePath,
+		SourceFilename: filename,
+		NormalizedName: movie.StorageKey,
+		TMDBID:         tmdbID,
+		FileSizeBytes:  fileSizeBytes,
+	}
+	if movie.Title != nil {
+		archReq.Title = *movie.Title
+	}
+	if movie.Year != nil {
+		archReq.Year = *movie.Year
+	}
+	if tmdbMeta != nil && tmdbMeta.Year > 0 && archReq.Year == 0 {
+		archReq.Year = tmdbMeta.Year
+	}
+	if _, err := w.scannerClient.Archive(ctx, archReq); err != nil {
+		log.Warn("scanner archive registration failed (file is on scanner)", "error", err)
+	} else {
+		log.Info("scanner archive registered", "source_path", sourcePath)
+	}
+	return nil
 }
 
 // failJob marks the job as permanently failed.

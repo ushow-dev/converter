@@ -146,6 +146,50 @@ X-Service-Token: <SERVICE_TOKEN>
 
 ---
 
+### POST /api/v1/library/archive
+
+Регистрирует оригинальный файл, уже скопированный конвертером на сервер scanner, в таблице `scanner_incoming_items` со статусом `archived`.
+
+Вызывается converter Worker сразу после успешной конвертации (не ingest-задание) — до или вместо удаления оригинала.
+
+**Request body:**
+```json
+{
+  "source_path": "/incoming/film_2021_[123]/film.mkv",
+  "source_filename": "film.mkv",
+  "normalized_name": "film_2021_[123]",
+  "tmdb_id": "123",
+  "title": "Film",
+  "year": 2021,
+  "file_size_bytes": 4294967296
+}
+```
+
+| Поле | Тип | Обязательное | Описание |
+|---|---|---|---|
+| `source_path` | string | да | Полный путь файла на scanner-сервере |
+| `source_filename` | string | да | Имя файла |
+| `normalized_name` | string | нет | Нормализованное имя (`slug_year_[tmdb_id]`) |
+| `tmdb_id` | string | нет | TMDB ID |
+| `title` | string | нет | Название фильма |
+| `year` | int | нет | Год выхода |
+| `file_size_bytes` | int | нет | Размер файла в байтах |
+
+**Response 201:**
+```json
+{ "id": 99 }
+```
+
+**Побочный эффект:**
+- INSERT … ON CONFLICT (source_path) DO UPDATE в `scanner_incoming_items` со `status='archived'`
+- При повторном вызове с тем же `source_path` — обновляет метаданные (идемпотентно)
+
+**Ошибки:**
+- `401` — неверный токен
+- `422` — невалидное тело (Pydantic)
+
+---
+
 ### POST /api/v1/downloads
 
 Создаёт задачу скачивания файла напрямую в `incoming/`. Вызывается converter API когда `SCANNER_API_URL` задан — вместо того, чтобы скачивать файл на converter и затем передавать через SFTP.

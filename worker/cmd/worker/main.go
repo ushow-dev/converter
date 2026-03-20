@@ -109,9 +109,23 @@ func main() {
 
 	// ── Pipeline workers ───────────────────────────────────────────────────────
 	dlWorker := downloader.New(redisClient, jobRepo, qbt, cfg.MediaRoot)
+
+	// Scanner client for archive-to-scanner: reuse ingest credentials.
+	// Archive is enabled when INGEST_SERVICE_TOKEN, INGEST_SOURCE_REMOTE, and
+	// INGEST_SOURCE_BASE_PATH are all set.
+	var scannerClientForArchive *ingest.Client
+	if cfg.IngestServiceToken != "" && cfg.ScannerAPIURL != "" && cfg.IngestSourceRemote != "" {
+		scannerClientForArchive = ingest.NewClient(cfg.ScannerAPIURL, cfg.IngestServiceToken)
+		slog.Info("archive-to-scanner enabled",
+			"remote", cfg.IngestSourceRemote, "base", cfg.IngestSourceBasePath)
+	} else {
+		slog.Info("archive-to-scanner disabled (INGEST_SERVICE_TOKEN/INGEST_SOURCE_REMOTE not set)")
+	}
+
 	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo,
 		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads,
-		cfg.RcloneRemote != "")
+		cfg.RcloneRemote != "", scannerClientForArchive,
+		cfg.IngestSourceRemote, cfg.IngestSourceBasePath)
 	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot)
 
 	// Transfer worker (optional: only when RCLONE_REMOTE is set)

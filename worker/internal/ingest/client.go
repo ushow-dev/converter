@@ -64,6 +64,29 @@ func (c *Client) Complete(ctx context.Context, id int64) error {
 	return c.post(ctx, fmt.Sprintf("/api/v1/incoming/%d/complete", id), []byte("{}"), nil)
 }
 
+// ArchiveRequest holds fields for registering an archived (externally converted) file.
+type ArchiveRequest struct {
+	SourcePath     string `json:"source_path"`
+	SourceFilename string `json:"source_filename"`
+	NormalizedName string `json:"normalized_name,omitempty"`
+	TMDBID         string `json:"tmdb_id,omitempty"`
+	Title          string `json:"title,omitempty"`
+	Year           int    `json:"year,omitempty"`
+	FileSizeBytes  int64  `json:"file_size_bytes,omitempty"`
+}
+
+// Archive registers an externally converted file in the scanner DB with status=archived.
+func (c *Client) Archive(ctx context.Context, req ArchiveRequest) (int64, error) {
+	body, _ := json.Marshal(req)
+	var resp struct {
+		ID int64 `json:"id"`
+	}
+	if err := c.post(ctx, "/api/v1/library/archive", body, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
+}
+
 func (c *Client) post(ctx context.Context, path string, body []byte, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
 	if err != nil {
