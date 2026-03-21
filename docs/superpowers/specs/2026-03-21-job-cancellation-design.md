@@ -11,7 +11,10 @@ When a job is deleted via `DELETE /api/admin/jobs/{jobID}`, the API removes the 
 
 When a job is deleted from the admin UI, the worker must immediately stop the active download (HTTP) or conversion (ffmpeg) for that job and free the concurrency slot.
 
-Transfer stage (rclone) is explicitly out of scope — transfers are not cancelled.
+**Out of scope:**
+- Transfer worker (rclone) — not cancelled
+- Torrent downloader (`download_queue`) — already handles deletion: `waitForDownloadOrCancel` polls `Exists()` every 5 seconds and exits naturally when the job is gone from DB
+- Ingest worker — not cancelled
 
 ---
 
@@ -19,9 +22,15 @@ Transfer stage (rclone) is explicitly out of scope — transfers are not cancell
 
 ### Signal mechanism: Redis cancel queue
 
-API pushes the jobID as a plain string to a new Redis list `cancel_queue` (RPUSH) when `DeleteJob` is called. This follows the existing BLPOP pattern used by all other queues.
+API pushes the jobID to a new Redis list `cancel_queue` (RPUSH) when `DeleteJob` is called. Wire format: JSON-marshalled string — e.g. `"job_01abc123"` (with quotes). This is the output of `json.Marshal(jobID)` and is consistent with how both `api/internal/queue` and `worker/internal/queue` clients work — both call `json.Marshal(v)` before push. The consumer does `json.Unmarshal(raw, &jobID)`.
 
-No new infrastructure. No pub/sub. Consistent with the rest of the codebase.
+No new infrastructure. No pub/sub. No `PushRaw`. Consistent with existing patterns.
+
+### Fix IsTerminal for missing rows
+
+`worker/internal/repository/job.go:IsTerminal` currently returns `(false, err)` when the job row does not exist (`pgx.ErrNoRows`). Workers guard with `if err != nil || terminal { return }`, so deleted jobs are skipped — but via a side-effect of the error path, with a misleading log "skipping terminal job".
+
+As part of this change, fix `IsTerminal` to explicitly return `(true, nil)` on `pgx.ErrNoRows` — "a deleted job is treated as terminal." This makes the intent explicit and the log message accurate.
 
 ### CancelRegistry
 
@@ -34,7 +43,7 @@ type Registry struct {
 }
 
 func (r *Registry) Register(jobID string, cancel context.CancelFunc)
-func (r *Registry) Cancel(jobID string)   // calls cancel func if present, no-op otherwise
+func (r *Registry) Cancel(jobID string)    // no-op if jobID not registered
 func (r *Registry) Unregister(jobID string)
 ```
 
@@ -47,13 +56,19 @@ Both `httpdownloader.Worker` and `converter.Worker` accept a `*cancelregistry.Re
 In each `process()` method, before doing any work:
 
 ```go
-jobCtx, cancel := context.WithCancel(ctx)
-registry.Register(msg.JobID, cancel)
+jobCtx, jobCancel := context.WithCancel(ctx)   // ctx = global SIGTERM context
+registry.Register(msg.JobID, jobCancel)
 defer registry.Unregister(msg.JobID)
-defer cancel()
+defer jobCancel()
 ```
 
-All downstream calls use `jobCtx` instead of `ctx`. Since `http.NewRequestWithContext` and `exec.CommandContext` already respect context cancellation, no further changes are needed in the HTTP client or ffmpeg runner.
+All downstream calls use `jobCtx`. Since `http.NewRequestWithContext` and `exec.CommandContext` already respect context cancellation, no changes are needed in the HTTP client or ffmpeg runner.
+
+**Lock release:** `ReleaseLock` must be called with the global `ctx` (not `jobCtx`), because `jobCtx` may already be cancelled at defer time. If called with a cancelled context, the Redis `DEL` fails silently and the lock persists for up to 1 hour (the TTL). Fix:
+
+```go
+defer w.q.ReleaseLock(ctx, msg.JobID)  // ctx = global, not jobCtx
+```
 
 ### Cancel watcher goroutine
 
@@ -62,50 +77,47 @@ New goroutine in `main.go`:
 ```go
 go func() {
     for {
+        if ctx.Err() != nil { return }
         raw, err := redisClient.Pop(ctx, queue.CancelQueue, 5*time.Second)
         if errors.Is(err, queue.ErrEmpty) { continue }
         if err != nil { ... continue }
-        registry.Cancel(string(raw)) // raw is plain jobID, not JSON
+        var jobID string
+        if err := json.Unmarshal(raw, &jobID); err != nil { continue }
+        registry.Cancel(jobID)
     }
 }()
 ```
 
-Uses the existing `queue.Client.Pop` method. `CancelQueue = "cancel_queue"` added as a constant.
+Uses the existing `queue.Client.Pop`. `CancelQueue = "cancel_queue"` added as a constant to both `api/internal/queue` and `worker/internal/queue`.
 
 ### API side
 
-In `api/internal/service/job.go`, `DeleteJob` gains a queue dependency and pushes to cancel_queue after deleting from DB:
+In `api/internal/service/job.go`, `JobService` gains a queue dependency (already has it for other operations). After deleting from DB:
 
 ```go
-_ = s.queue.Enqueue(ctx, queue.CancelQueue, jobID)
+_ = s.queue.Enqueue(ctx, queue.CancelQueue, jobID)  // best-effort, error ignored
 ```
 
-The push is best-effort (error ignored) — if Redis is unavailable, the job is still deleted from DB and the worker will naturally detect the missing record on its next status update attempt.
+Push is best-effort — if Redis is unavailable, the job is still deleted from DB; the worker will detect the missing record via `IsTerminal` on its next status update.
 
 ### Behaviour on cancellation
 
 | Stage | What happens |
 |---|---|
-| HTTP download | `io.Copy` returns context error → partial file already removed by existing error handler → no retry, no `SetFailed` (job gone from DB) |
-| ffmpeg conversion | `exec.CommandContext` kills the process → existing cleanup removes temp dir → no retry |
-| Job already queued (not yet picked up) | Worker pops it, calls `IsTerminal`/DB lookup → not found → skips (already works today) |
-| Cancel signal arrives after job completes | `registry.Cancel` is a no-op (jobID already unregistered) |
+| HTTP download (active) | `io.Copy` returns context error → partial file removed by existing error handler → no retry, no `SetFailed` (job gone from DB) |
+| ffmpeg conversion (active) | `exec.CommandContext` kills ffmpeg → existing cleanup removes temp dir |
+| Job queued but not yet picked up | Worker pops it → `IsTerminal` returns `(true, nil)` (fixed) → skipped cleanly |
+| Cancel signal after job completes | `registry.Cancel` is a no-op (jobID already unregistered) |
 
 ### Files changed
 
 | File | Change |
 |---|---|
 | `worker/internal/cancelregistry/registry.go` | New package |
-| `worker/internal/queue/redis.go` | Add `CancelQueue` constant; add `PushRaw` for plain string push |
-| `worker/internal/httpdownloader/downloader.go` | Accept registry, per-job context |
-| `worker/internal/converter/converter.go` | Accept registry, per-job context |
-| `worker/cmd/worker/main.go` | Create registry, start cancel watcher goroutine, wire registry into workers |
-| `api/internal/service/job.go` | Push jobID to cancel_queue after delete |
+| `worker/internal/queue/redis.go` | Add `CancelQueue` constant |
+| `worker/internal/repository/job.go` | Fix `IsTerminal` to return `(true, nil)` on `pgx.ErrNoRows` |
+| `worker/internal/httpdownloader/downloader.go` | Accept registry; per-job context; fix `ReleaseLock` to use global ctx |
+| `worker/internal/converter/converter.go` | Accept registry; per-job context; fix `ReleaseLock` to use global ctx |
+| `worker/cmd/worker/main.go` | Create registry; start cancel watcher goroutine; wire registry into workers |
 | `api/internal/queue/queue.go` | Add `CancelQueue` constant |
-
-### What is NOT changed
-
-- Transfer worker — rclone transfers are not cancellable (out of scope)
-- Queue message format — cancel_queue carries plain jobID strings, not JSON envelopes
-- No new API endpoints
-- No new DB migrations
+| `api/internal/service/job.go` | Push jobID to `cancel_queue` after delete |
