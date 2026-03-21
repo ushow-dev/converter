@@ -21,29 +21,50 @@ export function Nav() {
   }
 
   return (
-    <nav className="border-b border-gray-800 bg-gray-900 px-6 py-3">
-      <div className="mx-auto flex max-w-7xl items-center justify-between">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold text-white">Media Admin</span>
+    <nav className="border-b border-gray-800 bg-gray-900">
+      <div className="px-3 py-3 sm:px-6">
+        {/* Brand row */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <span className="font-semibold text-white">Media Admin</span>
+            {/* Desktop links */}
+            <div className="hidden sm:flex items-center gap-6">
+              {links.map(({ href, label }) => {
+                const active = href === '/' ? pathname === '/' : pathname.startsWith(href)
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`text-sm transition ${active ? 'text-indigo-400' : 'text-gray-400 hover:text-gray-200'}`}
+                  >
+                    {label}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-gray-400 hover:text-gray-200"
+          >
+            Выйти
+          </button>
+        </div>
+        {/* Mobile links row */}
+        <div className="flex items-center gap-5 mt-2.5 overflow-x-auto pb-0.5 sm:hidden">
           {links.map(({ href, label }) => {
             const active = href === '/' ? pathname === '/' : pathname.startsWith(href)
             return (
               <Link
                 key={href}
                 href={href}
-                className={`text-sm transition ${active ? 'text-indigo-400' : 'text-gray-400 hover:text-gray-200'}`}
+                className={`shrink-0 text-sm transition ${active ? 'text-indigo-400' : 'text-gray-400 hover:text-gray-200'}`}
               >
                 {label}
               </Link>
             )
           })}
         </div>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-gray-400 hover:text-gray-200"
-        >
-          Выйти
-        </button>
       </div>
     </nav>
   )

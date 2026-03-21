@@ -177,8 +177,8 @@ export default function QueuePage() {
     <div className="min-h-screen">
       <Nav />
 
-      <main className="px-6 py-8">
-        <div className="mb-6 flex items-center justify-between">
+      <main className="px-3 py-4 sm:px-6 sm:py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-y-3">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-semibold text-white">В работе</h1>
             {activeJobs.length > 0 && (
@@ -219,7 +219,7 @@ export default function QueuePage() {
         )}
 
         {activeJobs.length > 0 && (
-          <div className="overflow-hidden rounded-md border border-gray-800">
+          <div className="overflow-x-auto rounded-md border border-gray-800">
             <table className="w-full">
               <thead className="bg-gray-900 text-left text-xs uppercase tracking-wider text-gray-500">
                 <tr>

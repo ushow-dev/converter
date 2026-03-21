@@ -45,7 +45,7 @@ export default function JobDetailPage({ params }: { params: { jobId: string } })
   return (
     <div className="min-h-screen">
       <Nav />
-      <main className="mx-auto max-w-4xl px-6 py-8">
+      <main className="mx-auto max-w-4xl px-3 py-4 sm:px-6 sm:py-8">
         <div className="mb-6">
           <Link href="/queue" className="text-sm text-indigo-400 hover:text-indigo-300">
             ← Back to Jobs

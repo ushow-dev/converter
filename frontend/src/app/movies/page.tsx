@@ -389,8 +389,8 @@ export default function MoviesPage() {
       {playingMovie && <PlayerModal movie={playingMovie} playerUrl={playerUrl} onClose={() => setPlayingMovie(null)} />}
       <Nav />
 
-      <main className="px-6 py-8">
-        <div className="mb-6 flex items-center justify-between">
+      <main className="px-3 py-4 sm:px-6 sm:py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-y-3">
           <h1 className="text-xl font-semibold text-white">Фильмы</h1>
           <div className="flex items-center gap-2">
             {data && data.items.length > 0 && (
@@ -440,7 +440,7 @@ export default function MoviesPage() {
         )}
 
         {data && data.items.length > 0 && (
-          <div className="overflow-hidden rounded-md border border-gray-800">
+          <div className="overflow-x-auto rounded-md border border-gray-800">
             <table className="w-full">
               <thead className="bg-gray-900 text-left text-xs uppercase tracking-wider text-gray-500">
                 <tr>

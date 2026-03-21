@@ -167,7 +167,7 @@ export default function UploadPage() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <Nav />
-      <main className="w-full px-4 py-8">
+      <main className="w-full px-3 py-4 sm:px-6 sm:py-8">
         <h1 className="text-2xl font-bold mb-6">Добавить фильм</h1>
 
         <div className="space-y-5">

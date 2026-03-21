@@ -66,12 +66,12 @@ export default function SearchPage() {
   return (
     <div className="min-h-screen">
       <Nav />
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="px-3 py-4 sm:px-6 sm:py-8">
         <h2 className="mb-6 text-xl font-semibold text-white">Search</h2>
 
         {/* Search form */}
         <form onSubmit={handleSearch} className="mb-6 space-y-3">
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3">
             <input
               type="text"
               value={query}

@@ -11,6 +11,14 @@
 
 ## [Unreleased]
 
+### Changed
+- `frontend/src/components/Nav.tsx`: мобильная адаптация — ссылки перенесены во вторую строку на экранах < sm, горизонтальный скролл при нехватке места, отступы уменьшены на мобиле
+- `frontend/src/app/movies/page.tsx`: таблица обёрнута в `overflow-x-auto` (вместо `overflow-hidden`), адаптивные отступы `px-3 py-4 sm:px-6 sm:py-8`, заголовок страницы с `flex-wrap`
+- `frontend/src/app/queue/page.tsx`: таблица обёрнута в `overflow-x-auto`, адаптивные отступы, заголовок с `flex-wrap`
+- `frontend/src/app/search/page.tsx`: убран `max-w-6xl` — таблица теперь во всю ширину страницы, адаптивные отступы
+- `frontend/src/app/jobs/[jobId]/page.tsx`: адаптивные отступы `px-3 sm:px-6`
+- `frontend/src/app/upload/page.tsx`: адаптивные отступы `px-3 sm:px-6`
+
 ### Fixed
 - `api/internal/handler/browse.go`: browse корневой папки с большим количеством поддиректорий больше не вызывает 500/таймаут — реализована пагинация (offset/limit, по 100 за раз), результаты сортируются, добавлен 25-секундный таймаут на страницу
 - `frontend/src/app/upload/page.tsx`: кнопка «Загрузить ещё (осталось N)» для догрузки следующей страницы директорий; счётчик «Показано X из Y»
