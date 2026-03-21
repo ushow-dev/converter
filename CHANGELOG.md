@@ -11,6 +11,17 @@
 
 ## [Unreleased]
 
+### Added
+- `worker/internal/cancelregistry/registry.go`: thread-safe CancelRegistry — maps jobID → cancelFunc for per-job context cancellation
+- `worker/cmd/worker/main.go`: cancel watcher goroutine BLPOPs from `cancel_queue` and calls `registry.Cancel(jobID)` to abort in-flight jobs
+- `api/internal/queue/redis.go`, `worker/internal/queue/redis.go`: `CancelQueue = "cancel_queue"` constant
+
+### Fixed
+- `worker/internal/repository/job.go`: `IsTerminal` now returns `(true, nil)` for deleted jobs (`pgx.ErrNoRows`) — queued jobs that were deleted before processing are skipped cleanly
+- `worker/internal/httpdownloader/downloader.go`: per-job context cancellation; `ReleaseLock` uses global ctx; cancelled downloads abort immediately without retry
+- `worker/internal/converter/converter.go`: per-job context cancellation; `ReleaseLock` uses global ctx; cancelled ffmpeg processes are killed cleanly
+- `api/internal/service/job.go`: `DeleteJob` pushes jobID to `cancel_queue` so the worker stops in-flight work immediately on deletion
+
 ### Changed
 - `frontend/src/app/movies/page.tsx`: скрыты колонки ID, IMDb, год, дата, субтитры на мобиле (`hidden sm:table-cell`); TMDB и название остаются
 - `frontend/src/app/queue/page.tsx`: скрыты колонки прогресс и дата на мобиле
