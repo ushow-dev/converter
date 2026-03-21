@@ -101,7 +101,7 @@ function QueueRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void 
       </td>
 
       {/* Stage / progress */}
-      <td className="whitespace-nowrap px-3 py-3 text-xs">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-3 text-xs">
         {job.status === 'in_progress' ? (
           <div className="flex items-center gap-2">
             <span className="text-gray-400">{stageName ?? '—'}</span>
@@ -123,7 +123,7 @@ function QueueRow({ job, onDelete }: { job: Job; onDelete: (id: string) => void 
       </td>
 
       {/* Date */}
-      <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-500">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-3 text-xs text-gray-500">
         {formatDate(job.created_at)}
       </td>
 
@@ -226,8 +226,8 @@ export default function QueuePage() {
                   <th className="px-3 py-2 w-12" />
                   <th className="px-3 py-2">Название</th>
                   <th className="px-3 py-2">Статус</th>
-                  <th className="px-3 py-2">Прогресс</th>
-                  <th className="px-3 py-2">Добавлен</th>
+                  <th className="hidden sm:table-cell px-3 py-2">Прогресс</th>
+                  <th className="hidden sm:table-cell px-3 py-2">Добавлен</th>
                   <th className="px-3 py-2 w-10" />
                 </tr>
               </thead>

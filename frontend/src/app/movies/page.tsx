@@ -221,12 +221,12 @@ function MovieRow({
       </td>
 
       {/* Movie ID */}
-      <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-400">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-2 text-xs text-gray-400">
         {movie.id}
       </td>
 
       {/* IMDb */}
-      <td className="whitespace-nowrap px-3 py-2">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-2">
         <EditableID
           value={movie.imdb_id}
           placeholder="tt0000000"
@@ -259,17 +259,17 @@ function MovieRow({
       </td>
 
       {/* Year */}
-      <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-400">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-2 text-sm text-gray-400">
         {movie.year ?? <span className="text-gray-700">—</span>}
       </td>
 
       {/* Date */}
-      <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">
+      <td className="hidden sm:table-cell whitespace-nowrap px-3 py-2 text-xs text-gray-500">
         {formatDate(movie.created_at)}
       </td>
 
       {/* Subtitles */}
-      <td className="px-3 py-2">
+      <td className="hidden sm:table-cell px-3 py-2">
         <SubtitleCell movie={movie} />
       </td>
 
@@ -445,13 +445,13 @@ export default function MoviesPage() {
               <thead className="bg-gray-900 text-left text-xs uppercase tracking-wider text-gray-500">
                 <tr>
                   <th className="px-3 py-2 w-14" />
-                  <th className="px-3 py-2">ID</th>
-                  <th className="px-3 py-2">IMDb</th>
+                  <th className="hidden sm:table-cell px-3 py-2">ID</th>
+                  <th className="hidden sm:table-cell px-3 py-2">IMDb</th>
                   <th className="px-3 py-2">TMDB</th>
                   <th className="px-3 py-2">Название</th>
-                  <th className="px-3 py-2">Год</th>
-                  <th className="px-3 py-2">Добавлен</th>
-                  <th className="px-3 py-2">Субтитры</th>
+                  <th className="hidden sm:table-cell px-3 py-2">Год</th>
+                  <th className="hidden sm:table-cell px-3 py-2">Добавлен</th>
+                  <th className="hidden sm:table-cell px-3 py-2">Субтитры</th>
                   <th className="px-3 py-2 w-8" />
                   <th className="px-3 py-2 w-10" />
                 </tr>

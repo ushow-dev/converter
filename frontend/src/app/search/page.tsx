@@ -142,7 +142,7 @@ export default function SearchPage() {
               <thead className="bg-gray-900 text-left text-xs uppercase tracking-wider text-gray-400">
                 <tr>
                   <th className="px-4 py-3">Title</th>
-                  <th className="px-4 py-3">Indexer</th>
+                  <th className="hidden sm:table-cell px-4 py-3">Indexer</th>
                   <th className="px-4 py-3 text-right">Seeders</th>
                   <th className="px-4 py-3 text-right">Size</th>
                   <th className="px-4 py-3"></th>
@@ -154,7 +154,7 @@ export default function SearchPage() {
                     <td className="max-w-xs truncate px-4 py-3 font-mono text-xs text-gray-200">
                       {item.title}
                     </td>
-                    <td className="px-4 py-3 text-gray-400">{item.indexer}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-gray-400">{item.indexer}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-green-400">
                       {item.seeders}
                     </td>

@@ -12,6 +12,9 @@
 ## [Unreleased]
 
 ### Changed
+- `frontend/src/app/movies/page.tsx`: скрыты колонки ID, IMDb, год, дата, субтитры на мобиле (`hidden sm:table-cell`); TMDB и название остаются
+- `frontend/src/app/queue/page.tsx`: скрыты колонки прогресс и дата на мобиле
+- `frontend/src/app/search/page.tsx`: скрыта колонка Indexer на мобиле
 - `frontend/src/components/Nav.tsx`: мобильная адаптация — ссылки перенесены во вторую строку на экранах < sm, горизонтальный скролл при нехватке места, отступы уменьшены на мобиле
 - `frontend/src/app/movies/page.tsx`: таблица обёрнута в `overflow-x-auto` (вместо `overflow-hidden`), адаптивные отступы `px-3 py-4 sm:px-6 sm:py-8`, заголовок страницы с `flex-wrap`
 - `frontend/src/app/queue/page.tsx`: таблица обёрнута в `overflow-x-auto`, адаптивные отступы, заголовок с `flex-wrap`
