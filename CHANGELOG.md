@@ -18,6 +18,7 @@
 
 ### Fixed
 - `worker/internal/repository/job.go`: `IsTerminal` now returns `(true, nil)` for deleted jobs (`pgx.ErrNoRows`) — queued jobs that were deleted before processing are skipped cleanly
+- `frontend/src/app/movies/page.tsx`: limit title column to `max-w-[8rem]` on mobile with text truncation to reduce horizontal scroll
 - `worker/internal/httpdownloader/downloader.go`: per-job context cancellation; `ReleaseLock` uses global ctx; cancelled downloads abort immediately without retry
 - `worker/internal/converter/converter.go`: per-job context cancellation; `ReleaseLock` uses global ctx; cancelled ffmpeg processes are killed cleanly
 - `api/internal/service/job.go`: `DeleteJob` pushes jobID to `cancel_queue` so the worker stops in-flight work immediately on deletion
