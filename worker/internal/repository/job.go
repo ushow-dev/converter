@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -87,13 +89,17 @@ func (r *JobRepository) SetFailed(
 }
 
 // IsTerminal returns true if the job is already in a terminal state
-// (completed or failed). Used to guard against duplicate processing.
+// (completed or failed), or if the job no longer exists in the DB
+// (treated as terminal — the job was deleted while queued).
 func (r *JobRepository) IsTerminal(ctx context.Context, jobID string) (bool, error) {
 	var status string
 	err := r.pool.QueryRow(ctx,
 		"SELECT status FROM media_jobs WHERE job_id = $1", jobID).
 		Scan(&status)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return true, nil
+		}
 		return false, fmt.Errorf("get status %s: %w", jobID, err)
 	}
 	return status == "completed" || status == "failed", nil
