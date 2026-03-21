@@ -107,11 +107,13 @@ function EditableID({
   value,
   placeholder,
   width,
+  btnClassName,
   onSave,
 }: {
   value: string | undefined
   placeholder: string
   width: string
+  btnClassName?: string
   onSave: (v: string) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -150,7 +152,7 @@ function EditableID({
     <button
       onClick={open}
       title="Нажмите для редактирования"
-      className="font-mono text-xs text-gray-400 hover:text-indigo-400 transition-colors"
+      className={`font-mono text-xs text-gray-400 hover:text-indigo-400 transition-colors${btnClassName ? ' ' + btnClassName : ''}`}
     >
       {value ?? <span className="text-gray-700">—</span>}
     </button>
@@ -246,11 +248,12 @@ function MovieRow({
       </td>
 
       {/* Title */}
-      <td className="px-3 py-2">
+      <td className="px-3 py-2 max-w-[8rem] sm:max-w-none overflow-hidden">
         <EditableID
           value={movie.title}
           placeholder="Название фильма"
           width="w-72"
+          btnClassName="block truncate max-w-full"
           onSave={v => onUpdate(movie.id, movie.imdb_id ?? '', movie.tmdb_id ?? '', v)}
         />
         {!movie.title && (
