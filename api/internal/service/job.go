@@ -311,11 +311,17 @@ func (s *JobService) CreateUploadJob(
 }
 
 // DeleteJob removes a job, its DB records, and its files from disk.
+// It also signals the worker to cancel any in-flight processing for this job.
 func (s *JobService) DeleteJob(ctx context.Context, jobID string) error {
 	meta, err := s.jobs.Delete(ctx, jobID)
 	if err != nil {
 		return err
 	}
+
+	// Signal the worker to cancel any in-flight processing.
+	// Best-effort: if Redis is unavailable the job is already gone from DB
+	// and the worker will detect deletion via IsTerminal on its next DB check.
+	_ = s.queue.Enqueue(ctx, queue.CancelQueue, jobID)
 
 	// Best-effort filesystem cleanup — ignore missing dirs.
 	for _, sub := range []string{"downloads", "converted", "temp"} {
