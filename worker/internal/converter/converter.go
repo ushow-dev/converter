@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"app/worker/internal/cancelregistry"
 	"app/worker/internal/ffmpeg"
 	"app/worker/internal/ingest"
 	"app/worker/internal/model"
@@ -41,6 +42,7 @@ type Worker struct {
 	scannerClient      *ingest.Client // nil if archive disabled
 	ingestSourceRemote string         // rclone remote name for scanner SFTP
 	archiveDestPath    string         // destination path on scanner, e.g. /library/movies
+	registry           *cancelregistry.Registry
 }
 
 // New creates a convert Worker.
@@ -58,6 +60,7 @@ func New(
 	scannerClient *ingest.Client,
 	ingestSourceRemote string,
 	archiveDestPath string,
+	registry *cancelregistry.Registry,
 ) *Worker {
 	return &Worker{
 		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
@@ -67,6 +70,7 @@ func New(
 		scannerClient:      scannerClient,
 		ingestSourceRemote: ingestSourceRemote,
 		archiveDestPath:    archiveDestPath,
+		registry:           registry,
 	}
 }
 
@@ -129,8 +133,17 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 	defer w.q.ReleaseLock(ctx, lockKey)
 
+	// Per-job cancellable context. ReleaseLock above captures global ctx intentionally
+	// so the lock is released even when jobCtx is cancelled.
+	jobCtx, jobCancel := context.WithCancel(ctx)
+	w.registry.Register(msg.JobID, jobCancel)
+	defer func() {
+		jobCancel()
+		w.registry.Unregister(msg.JobID)
+	}()
+
 	stage := model.StageConvert
-	if err := w.jobRepo.UpdateStatus(ctx, msg.JobID, model.StatusInProgress, &stage, 0); err != nil {
+	if err := w.jobRepo.UpdateStatus(jobCtx, msg.JobID, model.StatusInProgress, &stage, 0); err != nil {
 		log.Error("update status to in_progress", "error", err)
 		return
 	}
@@ -152,11 +165,16 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	// ── HLS encode ───────────────────────────────────────────────────────────
 	start := time.Now()
-	result, err := ffmpeg.RunHLS(ctx, inputPath, outputDir, 4, w.ffmpegThreads, func(pct int) {
-		_ = w.jobRepo.UpdateProgress(ctx, msg.JobID, pct)
+	result, err := ffmpeg.RunHLS(jobCtx, inputPath, outputDir, 4, w.ffmpegThreads, func(pct int) {
+		_ = w.jobRepo.UpdateProgress(jobCtx, msg.JobID, pct)
 		log.Info("convert progress", "pct", pct)
 	})
 	if err != nil {
+		if jobCtx.Err() != nil {
+			log.Info("convert cancelled", "job_id", msg.JobID)
+			_ = os.RemoveAll(outputDir)
+			return
+		}
 		w.failOrRequeue(ctx, msg, "FFMPEG_ERROR", err.Error(), false)
 		return
 	}
@@ -164,7 +182,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	// ── Thumbnail ─────────────────────────────────────────────────────────────
 	thumbSrc := outputDir + "/thumbnail.jpg"
-	if err := ffmpeg.Thumbnail(ctx, inputPath, thumbSrc, 600); err != nil {
+	if err := ffmpeg.Thumbnail(jobCtx, inputPath, thumbSrc, 600); err != nil {
 		// Non-fatal: log and continue without thumbnail.
 		log.Warn("thumbnail extraction failed", "error", err)
 		thumbSrc = ""
@@ -173,14 +191,14 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	// ── Fetch TMDB metadata (backdrop + year + poster) ───────────────────────
 	var tmdbMeta *tmdbMetadata
 	if w.tmdbAPIKey != "" && msg.Payload.TMDBID != "" {
-		meta, err := fetchTMDBMetadata(ctx, w.tmdbAPIKey, msg.Payload.TMDBID)
+		meta, err := fetchTMDBMetadata(jobCtx, w.tmdbAPIKey, msg.Payload.TMDBID)
 		if err != nil {
 			log.Warn("TMDB metadata fetch failed", "error", err)
 		} else {
 			tmdbMeta = meta
 			if meta.BackdropPath != "" {
 				backdropDest := outputDir + "/thumbnail.jpg"
-				if err := downloadImage(ctx, "https://image.tmdb.org/t/p/w1280"+meta.BackdropPath, backdropDest); err != nil {
+				if err := downloadImage(jobCtx, "https://image.tmdb.org/t/p/w1280"+meta.BackdropPath, backdropDest); err != nil {
 					log.Warn("TMDB backdrop download failed, keeping ffmpeg thumbnail", "error", err)
 				} else {
 					log.Info("TMDB backdrop saved", "tmdb_id", msg.Payload.TMDBID)
@@ -202,7 +220,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			upsertPoster = &p
 		}
 	}
-	movie, err := w.movieRepo.Upsert(ctx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, upsertYear, upsertPoster, msg.Payload.StorageKey)
+	movie, err := w.movieRepo.Upsert(jobCtx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, upsertYear, upsertPoster, msg.Payload.StorageKey)
 	if err != nil {
 		w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
 		return
@@ -215,7 +233,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	if src := msg.Payload.InputPath; src != "" {
 		isIngestJob := strings.HasPrefix(msg.JobID, "ingest-")
 		if !isIngestJob && w.scannerClient != nil && w.ingestSourceRemote != "" {
-			if err := w.archiveToScanner(ctx, log, src, movie, msg.Payload.TMDBID, msg.Payload.IMDbID, tmdbMeta); err != nil {
+			if err := w.archiveToScanner(jobCtx, log, src, movie, msg.Payload.TMDBID, msg.Payload.IMDbID, tmdbMeta); err != nil {
 				log.Warn("archive to scanner failed, deleting locally instead", "error", err)
 				if err2 := os.Remove(src); err2 != nil && !os.IsNotExist(err2) {
 					log.Warn("could not delete source file", "src", src, "error", err2)
@@ -254,7 +272,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	// ── Probe accurate duration from master.m3u8's first variant ─────────────
 	durationSec := result.DurationSec
-	if probed := ffmpeg.ProbeInfo(ctx, filepath.Join(finalDir, "720", "index.m3u8")); probed > 0 {
+	if probed := ffmpeg.ProbeInfo(jobCtx, filepath.Join(finalDir, "720", "index.m3u8")); probed > 0 {
 		durationSec = probed
 	}
 
@@ -277,7 +295,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
-	if err := w.assetRepo.Create(ctx, asset); err != nil {
+	if err := w.assetRepo.Create(jobCtx, asset); err != nil {
 		log.Error("create asset record", "error", err)
 		// Non-fatal.
 	}
@@ -294,13 +312,13 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	// Must run BEFORE transfer enqueue to avoid race: rclone move may start
 	// while subtitle files are still being written to finalDir.
 	if w.subtitleFetcher != nil && msg.Payload.TMDBID != "" {
-		results := w.subtitleFetcher.FetchAndSave(ctx, msg.Payload.TMDBID, finalDir)
+		results := w.subtitleFetcher.FetchAndSave(jobCtx, msg.Payload.TMDBID, finalDir)
 		for _, sub := range results {
 			extID := &sub.ExternalID
 			if sub.ExternalID == "" {
 				extID = nil
 			}
-			if err := w.subtitleRepo.Upsert(ctx, movie.ID, sub.Language, "opensubtitles", sub.FilePath, extID); err != nil {
+			if err := w.subtitleRepo.Upsert(jobCtx, movie.ID, sub.Language, "opensubtitles", sub.FilePath, extID); err != nil {
 				log.Warn("subtitle upsert failed", "lang", sub.Language, "error", err)
 			}
 		}

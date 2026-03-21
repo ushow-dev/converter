@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"app/worker/internal/cancelregistry"
 	"app/worker/internal/model"
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
@@ -26,14 +27,16 @@ type Worker struct {
 	q         *queue.Client
 	jobRepo   *repository.JobRepository
 	mediaRoot string
+	registry  *cancelregistry.Registry
 }
 
 // New creates an HTTP download Worker.
-func New(q *queue.Client, jobRepo *repository.JobRepository, mediaRoot string) *Worker {
+func New(q *queue.Client, jobRepo *repository.JobRepository, mediaRoot string, registry *cancelregistry.Registry) *Worker {
 	return &Worker{
 		q:         q,
 		jobRepo:   jobRepo,
 		mediaRoot: mediaRoot,
+		registry:  registry,
 	}
 }
 
@@ -92,8 +95,17 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 	defer w.q.ReleaseLock(ctx, msg.JobID)
 
+	// Per-job cancellable context. ReleaseLock above captures global ctx intentionally
+	// so the lock is released even when jobCtx is cancelled.
+	jobCtx, jobCancel := context.WithCancel(ctx)
+	w.registry.Register(msg.JobID, jobCancel)
+	defer func() {
+		jobCancel()
+		w.registry.Unregister(msg.JobID)
+	}()
+
 	stage := model.StageDownload
-	if err := w.jobRepo.UpdateStatus(ctx, msg.JobID, model.StatusInProgress, &stage, 0); err != nil {
+	if err := w.jobRepo.UpdateStatus(jobCtx, msg.JobID, model.StatusInProgress, &stage, 0); err != nil {
 		log.Error("update status to in_progress", "error", err)
 		return
 	}
@@ -116,8 +128,11 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	log.Info("starting HTTP download", "url", msg.Payload.SourceURL, "dest", destPath)
 
 	client := buildHTTPClient(msg.Payload.ProxyConfig)
-	if err := w.downloadWithProgress(ctx, client, msg.JobID, msg.Payload.SourceURL, destPath, log); err != nil {
-		if ctx.Err() != nil {
+	if err := w.downloadWithProgress(jobCtx, client, msg.JobID, msg.Payload.SourceURL, destPath, log); err != nil {
+		if jobCtx.Err() != nil {
+			// Cancelled (job deleted) — abort cleanly without retry.
+			log.Info("download cancelled", "job_id", msg.JobID)
+			_ = os.Remove(destPath)
 			return
 		}
 		w.failOrRequeue(ctx, msg, "DOWNLOAD_ERROR", err.Error(), true)
@@ -128,7 +143,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	// Transition to convert stage.
 	stageConvert := model.StageConvert
-	if err := w.jobRepo.UpdateStatus(ctx, msg.JobID, model.StatusInProgress, &stageConvert, 0); err != nil {
+	if err := w.jobRepo.UpdateStatus(jobCtx, msg.JobID, model.StatusInProgress, &stageConvert, 0); err != nil {
 		log.Error("update status to convert stage", "error", err)
 	}
 
@@ -153,7 +168,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			StorageKey:    msg.Payload.StorageKey,
 		},
 	}
-	if err := w.q.Push(ctx, queue.ConvertQueue, convertMsg); err != nil {
+	if err := w.q.Push(jobCtx, queue.ConvertQueue, convertMsg); err != nil {
 		log.Error("enqueue convert job", "error", err)
 	}
 	log.Info("convert job enqueued")

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -9,7 +11,9 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
+	"app/worker/internal/cancelregistry"
 	"app/worker/internal/config"
 	"app/worker/internal/converter"
 	"app/worker/internal/db"
@@ -107,6 +111,9 @@ func main() {
 		slog.Info("subtitle fetcher disabled (OPENSUBTITLES_API_KEY not set)")
 	}
 
+	// ── Cancel registry ────────────────────────────────────────────────────────
+	registry := cancelregistry.New()
+
 	// ── Pipeline workers ───────────────────────────────────────────────────────
 	dlWorker := downloader.New(redisClient, jobRepo, qbt, cfg.MediaRoot)
 
@@ -125,8 +132,8 @@ func main() {
 	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo,
 		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads,
 		cfg.RcloneRemote != "", scannerClientForArchive,
-		cfg.IngestSourceRemote, cfg.ArchiveDestPath)
-	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot)
+		cfg.IngestSourceRemote, cfg.ArchiveDestPath, registry)
+	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot, registry)
 
 	// Transfer worker (optional: only when RCLONE_REMOTE is set)
 	const remoteStorageLocID = int64(2) // matches id from migration 011
@@ -144,6 +151,38 @@ func main() {
 
 	// ── Run consumers ──────────────────────────────────────────────────────────
 	var wg sync.WaitGroup
+
+	// Cancel watcher: reads job IDs from cancel_queue and aborts in-flight jobs.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		slog.Info("cancel watcher started")
+		for {
+			if ctx.Err() != nil {
+				slog.Info("cancel watcher stopped")
+				return
+			}
+			raw, err := redisClient.Pop(ctx, queue.CancelQueue, 5*time.Second)
+			if errors.Is(err, queue.ErrEmpty) {
+				continue
+			}
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				slog.Error("cancel queue pop error", "error", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			var jobID string
+			if err := json.Unmarshal(raw, &jobID); err != nil {
+				slog.Error("unmarshal cancel message", "error", err, "raw", string(raw))
+				continue
+			}
+			slog.Info("cancelling job", "job_id", jobID)
+			registry.Cancel(jobID)
+		}
+	}()
 
 	// Download worker(s)
 	for i := 0; i < cfg.DownloadConcurrency; i++ {
