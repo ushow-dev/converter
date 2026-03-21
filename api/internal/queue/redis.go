@@ -14,6 +14,7 @@ const (
 	ConvertQueue        = "convert_queue"
 	RemoteDownloadQueue = "remote_download_queue"
 	TransferQueue       = "transfer_queue"
+	CancelQueue         = "cancel_queue"
 )
 
 // Client wraps redis.Client with domain-level queue operations.

@@ -15,6 +15,7 @@ const (
 	ConvertQueue        = "convert_queue"
 	RemoteDownloadQueue = "remote_download_queue"
 	TransferQueue       = "transfer_queue"
+	CancelQueue         = "cancel_queue"
 
 	lockTTL = time.Hour
 )
