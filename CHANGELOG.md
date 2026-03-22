@@ -17,6 +17,7 @@
 - `api/internal/queue/redis.go`, `worker/internal/queue/redis.go`: `CancelQueue = "cancel_queue"` constant
 
 ### Fixed
+- `scanner/scanner/loops/scan_loop.py`: skip files prefixed with `._` (macOS SMB resource forks) and files under 1MB — prevents premature ffmpeg on empty or stub files
 - `scanner/docker-compose.yml`: added `restart: unless-stopped` to postgres service — after server reboot postgres stayed stopped, scanner crash-looped unable to connect to DB
 - `scanner/docker-compose.yml`: removed public port 5432 from postgres — DB is internal only, exposed port attracted scanner bots
 - `worker/internal/repository/job.go`: `IsTerminal` now returns `(true, nil)` for deleted jobs (`pgx.ErrNoRows`) — queued jobs that were deleted before processing are skipped cleanly
