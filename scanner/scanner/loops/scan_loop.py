@@ -36,9 +36,14 @@ def _scan_once(cfg: Config) -> None:
             logger.exception("error processing file %s", file_path)
 
 
+MIN_FILE_SIZE_BYTES = 1024 * 1024  # 1 MB — ignore stubs and resource forks
+
+
 def _walk_video_files(root: Path):
     for dirpath, _, filenames in os.walk(root):
         for fname in filenames:
+            if fname.startswith("._"):
+                continue  # macOS resource fork files
             if Path(fname).suffix.lower() in VIDEO_EXTENSIONS:
                 yield Path(dirpath) / fname
 
@@ -48,6 +53,9 @@ def _process_file(cfg: Config, file_path: Path, now: datetime) -> None:
         current_size = file_path.stat().st_size
     except OSError:
         return  # file disappeared
+
+    if current_size < MIN_FILE_SIZE_BYTES:
+        return  # file not yet written or too small to be a real video
 
     conn = db.get_conn()
     try:
