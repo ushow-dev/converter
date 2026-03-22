@@ -99,6 +99,35 @@ The root of this repository is `/converter/`. All code, docs, and config live he
 
 ---
 
+## Deployment
+
+### API Server (178.104.100.36)
+
+**CRITICAL: always use `-f docker-compose.api.yml`** — the default `docker-compose.yml` does NOT publish Redis port 6379. Using it breaks Worker connectivity to Redis and stalls all queued jobs.
+
+```bash
+ssh -i ~/.ssh/id_rsa_personal root@178.104.100.36
+cd /opt/converter && git pull origin main
+docker compose -f docker-compose.api.yml build api frontend
+docker compose -f docker-compose.api.yml up -d
+```
+
+### Worker Server (178.104.53.215)
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@178.104.53.215
+cd /opt/converter && git pull origin main
+docker compose -f docker-compose.worker.yml build worker
+docker compose -f docker-compose.worker.yml up -d
+```
+
+If Worker gets `READONLY` errors from Redis after API server redeploy — restart it:
+```bash
+docker compose -f docker-compose.worker.yml restart worker
+```
+
+---
+
 ## Common Tasks
 
 ### Adding a new API endpoint

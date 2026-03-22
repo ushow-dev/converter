@@ -57,6 +57,11 @@ docker compose -f docker-compose.api.yml build api frontend
 docker compose -f docker-compose.api.yml up -d
 ```
 
+> ⚠️ **ВАЖНО: всегда указывай `-f docker-compose.api.yml`.**
+> Если запустить `docker compose` без флага `-f`, Docker использует дефолтный `docker-compose.yml`,
+> в котором Redis **не публикует порт 6379**. Воркер потеряет доступ к Redis и перестанет
+> обрабатывать задания. Восстановление — перезапустить воркер на Converter Server.
+
 ---
 
 ## Converter Server (178.104.53.215)
