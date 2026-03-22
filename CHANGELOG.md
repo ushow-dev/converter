@@ -17,6 +17,7 @@
 - `api/internal/queue/redis.go`, `worker/internal/queue/redis.go`: `CancelQueue = "cancel_queue"` constant
 
 ### Fixed
+- `scanner/docker-compose.yml`: added `restart: unless-stopped` to postgres service — after server reboot postgres stayed stopped, scanner crash-looped unable to connect to DB
 - `worker/internal/repository/job.go`: `IsTerminal` now returns `(true, nil)` for deleted jobs (`pgx.ErrNoRows`) — queued jobs that were deleted before processing are skipped cleanly
 - `frontend/src/app/movies/page.tsx`: limit title column to `max-w-[8rem]` on mobile with text truncation to reduce horizontal scroll
 - `worker/internal/httpdownloader/downloader.go`: per-job context cancellation; `ReleaseLock` uses global ctx; cancelled downloads abort immediately without retry
