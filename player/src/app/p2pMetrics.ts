@@ -39,9 +39,15 @@ function flush() {
     window_sec: REPORT_INTERVAL_MS / 1000,
   })
 
-  if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-    navigator.sendBeacon(endpoint, new Blob([payload], { type: 'application/json' }))
-  }
+  // Use fetch instead of sendBeacon — sendBeacon with application/json
+  // triggers CORS preflight which it cannot handle.
+  fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: payload,
+    keepalive: true,
+    mode: 'cors',
+  }).catch(() => { /* ignore */ })
 
   // Reset accumulators (keep peersConnected — it is a gauge).
   state.httpBytes = 0
