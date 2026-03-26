@@ -1,12 +1,15 @@
 FROM node:22-alpine AS builder
 RUN apk add --no-cache git python3 make g++
-RUN npm install -g wt-tracker
-WORKDIR /usr/local/lib/node_modules/wt-tracker
-RUN npm install && npx tsc --skipLibCheck
+WORKDIR /build
+RUN git clone --depth 1 https://github.com/Novage/wt-tracker.git .
+RUN npm ci
+RUN npx tsc --skipLibCheck
 
 FROM node:22-alpine
-COPY --from=builder /usr/local/lib/node_modules/wt-tracker /usr/local/lib/node_modules/wt-tracker
-RUN ln -s /usr/local/lib/node_modules/wt-tracker/bin/wt-tracker /usr/local/bin/wt-tracker
+RUN apk add --no-cache git python3 make g++
+COPY --from=builder /build /app/wt-tracker
+WORKDIR /app/wt-tracker
+RUN npm ci --omit=dev && apk del git python3 make g++
 COPY config.json /app/config.json
 WORKDIR /app
-CMD ["wt-tracker", "/app/config.json"]
+CMD ["node", "wt-tracker/bin/wt-tracker", "/app/config.json"]
