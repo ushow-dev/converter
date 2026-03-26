@@ -10,7 +10,7 @@
       "title": "P2P Ratio",
       "type": "stat",
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
           "expr": "converter_p2p_bytes_total{source=\"p2p\"} / (converter_p2p_bytes_total{source=\"http\"} + converter_p2p_bytes_total{source=\"p2p\"}) * 100",
@@ -35,7 +35,7 @@
       "title": "Active Peers",
       "type": "stat",
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
           "expr": "converter_p2p_peers",
@@ -57,7 +57,7 @@
       "title": "Bandwidth Saved (P2P bytes/sec)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
           "expr": "rate(converter_p2p_bytes_total{source=\"p2p\"}[5m])",
@@ -79,7 +79,7 @@
       "title": "Segments by Source",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
           "expr": "rate(converter_p2p_segments_total{source=\"p2p\"}[5m])",
@@ -100,7 +100,7 @@
       "title": "Total Bytes Transferred",
       "type": "stat",
       "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
           "expr": "converter_p2p_bytes_total{source=\"http\"}",
