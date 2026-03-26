@@ -197,7 +197,8 @@ docs/
 │   ├── pipeline.md                 # FFmpeg HLS pipeline
 │   └── ffmpeg.md                   # FFmpeg конфигурация и профили
 ├── player/
-│   └── player-architecture.md      # Архитектура плеера
+│   ├── player-architecture.md      # Архитектура плеера
+│   └── p2p-streaming.md            # P2P HLS: работа, метрики, конфигурация
 ├── admin/
 │   └── admin-overview.md           # Admin UI обзор
 ├── decisions/
