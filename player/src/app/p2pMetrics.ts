@@ -74,8 +74,8 @@ export function startP2PMetrics(engine: any, streamId: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   engine.addEventListener('onSegmentLoaded', (details: any) => {
     if (!state) return
-    const bytes = details?.bytesLength ?? details?.byteLength ?? 0
-    if (details?.isP2PLoaded ?? details?.type === 'p2p') {
+    const bytes = details?.bytesLength ?? 0
+    if (details?.downloadSource === 'p2p') {
       state.p2pBytes += bytes
       state.p2pSegments += 1
     } else {

@@ -139,7 +139,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       setStreamMode('hlsjs')
 
       const hlsConfig = isP2P
-        ? { ...HLS_CONFIG, p2pMediaLoader: getP2PConfig() }
+        ? { ...HLS_CONFIG, p2p: getP2PConfig() }
         : { ...HLS_CONFIG }
 
       const hls = new Hls(hlsConfig)
@@ -203,7 +203,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     setStreamMode('hlsjs')
 
     const hlsConfig = isP2P
-      ? { ...HLS_CONFIG, p2pMediaLoader: getP2PConfig() }
+      ? { ...HLS_CONFIG, p2p: getP2PConfig() }
       : { ...HLS_CONFIG }
 
     const hls = new Hls(hlsConfig)
