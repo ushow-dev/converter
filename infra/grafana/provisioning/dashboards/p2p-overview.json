@@ -1,0 +1,127 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "P2P Ratio",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "converter_p2p_bytes_total{source=\"p2p\"} / (converter_p2p_bytes_total{source=\"http\"} + converter_p2p_bytes_total{source=\"p2p\"}) * 100",
+          "legendFormat": "P2P %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "green", "value": 30 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Active Peers",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "converter_p2p_peers",
+          "legendFormat": "Peers"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Bandwidth Saved (P2P bytes/sec)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(converter_p2p_bytes_total{source=\"p2p\"}[5m])",
+          "legendFormat": "P2P bytes/s"
+        },
+        {
+          "expr": "rate(converter_p2p_bytes_total{source=\"http\"}[5m])",
+          "legendFormat": "HTTP bytes/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } }
+        }
+      }
+    },
+    {
+      "title": "Segments by Source",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(converter_p2p_segments_total{source=\"p2p\"}[5m])",
+          "legendFormat": "P2P segments/s"
+        },
+        {
+          "expr": "rate(converter_p2p_segments_total{source=\"http\"}[5m])",
+          "legendFormat": "HTTP segments/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } }
+        }
+      }
+    },
+    {
+      "title": "Total Bytes Transferred",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "converter_p2p_bytes_total{source=\"http\"}",
+          "legendFormat": "HTTP total"
+        },
+        {
+          "expr": "converter_p2p_bytes_total{source=\"p2p\"}",
+          "legendFormat": "P2P total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes"
+        }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["p2p", "hls", "streaming"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "P2P HLS Overview",
+  "uid": "p2p-hls-overview"
+}

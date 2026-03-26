@@ -267,3 +267,4 @@ ADRs live in `docs/decisions/`. Next ADR number: check `docs/decisions/README.md
 | MD5 URL signing | ADR-004 |
 | HLS 360/480/720p | ADR-005 |
 | Dual auth (JWT + API Key) | ADR-006 |
+| P2P HLS (p2p-media-loader) | ADR-010 |

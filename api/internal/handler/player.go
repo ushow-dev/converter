@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -285,6 +287,62 @@ func mediaSigningPath(path string) string {
 	}
 
 	return normalized
+}
+
+// ── P2P metrics ───────────────────────────────────────────────────────────────
+
+// Atomic counters for P2P metrics (no external dependency needed).
+var (
+	p2pHTTPBytes     atomic.Int64
+	p2pP2PBytes      atomic.Int64
+	p2pHTTPSegments  atomic.Int64
+	p2pP2PSegments   atomic.Int64
+	p2pPeersSnapshot atomic.Int64
+)
+
+// P2PMetricsSnapshot returns current P2P counters (for /metrics or monitoring).
+func P2PMetricsSnapshot() map[string]int64 {
+	return map[string]int64{
+		"p2p_http_bytes_total":     p2pHTTPBytes.Load(),
+		"p2p_p2p_bytes_total":      p2pP2PBytes.Load(),
+		"p2p_http_segments_total":  p2pHTTPSegments.Load(),
+		"p2p_p2p_segments_total":   p2pP2PSegments.Load(),
+		"p2p_peers_last_snapshot":  p2pPeersSnapshot.Load(),
+	}
+}
+
+type p2pMetricsPayload struct {
+	StreamID    string `json:"stream_id"`
+	HTTPBytes   int64  `json:"http_bytes"`
+	P2PBytes    int64  `json:"p2p_bytes"`
+	HTTPSegments int64 `json:"http_segments"`
+	P2PSegments int64  `json:"p2p_segments"`
+	Peers       int64  `json:"peers"`
+	WindowSec   int    `json:"window_sec"`
+}
+
+// PostP2PMetrics handles POST /api/player/p2p-metrics.
+func (h *PlayerHandler) PostP2PMetrics(w http.ResponseWriter, r *http.Request) {
+	var payload p2pMetricsPayload
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&payload); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	p2pHTTPBytes.Add(payload.HTTPBytes)
+	p2pP2PBytes.Add(payload.P2PBytes)
+	p2pHTTPSegments.Add(payload.HTTPSegments)
+	p2pP2PSegments.Add(payload.P2PSegments)
+	p2pPeersSnapshot.Store(payload.Peers)
+
+	slog.Debug("p2p metrics",
+		"stream_id", payload.StreamID,
+		"http_bytes", payload.HTTPBytes,
+		"p2p_bytes", payload.P2PBytes,
+		"peers", payload.Peers,
+	)
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // GetJobStatus handles GET /api/player/jobs/{jobID}/status.

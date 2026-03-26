@@ -47,6 +47,8 @@ POST   /api/admin/movies/{movieId}/subtitles/search
 GET    /api/player/movie
 GET    /api/player/assets/{assetID}
 GET    /api/player/jobs/{jobID}/status
+POST   /api/player/p2p-metrics
+GET    /metrics
 GET    /health/live
 GET    /health/ready
 ```

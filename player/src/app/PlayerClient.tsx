@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Script from 'next/script'
+import { startP2PMetrics, stopP2PMetrics } from './p2pMetrics'
 
 export interface MovieResponse {
   data: {
@@ -52,6 +53,55 @@ declare global {
   }
 }
 
+const P2P_ENABLED = process.env.NEXT_PUBLIC_P2P_ENABLED === 'true'
+const P2P_TRACKER_URL = process.env.NEXT_PUBLIC_P2P_TRACKER_URL || 'wss://t.pimor.online'
+
+const HLS_CONFIG = {
+  startLevel: 0,
+  capLevelToPlayerSize: true,
+  testBandwidth: true,
+  lowLatencyMode: false,
+  abrEwmaDefaultEstimate: 300000,
+  abrBandWidthFactor: 0.8,
+  abrBandWidthUpFactor: 0.6,
+  abrEwmaFastVoD: 3.0,
+  abrEwmaSlowVoD: 9.0,
+  maxBufferLength: 6,
+  maxMaxBufferLength: 10,
+  maxBufferSize: 12000000,
+  maxBufferHole: 0.5,
+  backBufferLength: 20,
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function createHlsInstance(): Promise<{ Hls: any; isP2P: boolean }> {
+  const HlsMod = await import('hls.js')
+  const Hls = HlsMod.default
+
+  if (!P2P_ENABLED) {
+    return { Hls, isP2P: false }
+  }
+
+  try {
+    const { HlsJsP2PEngine } = await import('p2p-media-loader-hlsjs')
+    const HlsWithP2P = HlsJsP2PEngine.injectMixin(Hls)
+    return { Hls: HlsWithP2P, isP2P: true }
+  } catch {
+    return { Hls, isP2P: false }
+  }
+}
+
+function getP2PConfig() {
+  return {
+    core: {
+      announceTrackers: [P2P_TRACKER_URL],
+      rtcConfig: {
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      },
+    },
+  }
+}
+
 export default function PlayerClient({ initialData }: { initialData: MovieResponse }) {
   const movieData = initialData
   const [fluidReady, setFluidReady] = useState(false)
@@ -79,8 +129,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const setupHlsJsMode = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (video: HTMLVideoElement, streamUrl: string): Promise<any | null> => {
-      const HlsMod = await import('hls.js')
-      const Hls = HlsMod.default
+      const { Hls, isP2P } = await createHlsInstance()
 
       if (!Hls.isSupported()) {
         video.src = streamUrl
@@ -89,22 +138,15 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       }
       setStreamMode('hlsjs')
 
-      const hls = new Hls({
-        startLevel: 0,
-        capLevelToPlayerSize: true,
-        testBandwidth: true,
-        lowLatencyMode: false,
-        abrEwmaDefaultEstimate: 300000,
-        abrBandWidthFactor: 0.8,
-        abrBandWidthUpFactor: 0.6,
-        abrEwmaFastVoD: 3.0,
-        abrEwmaSlowVoD: 9.0,
-        maxBufferLength: 6,
-        maxMaxBufferLength: 10,
-        maxBufferSize: 12000000,
-        maxBufferHole: 0.5,
-        backBufferLength: 20,
-      })
+      const hlsConfig = isP2P
+        ? { ...HLS_CONFIG, p2pMediaLoader: getP2PConfig() }
+        : { ...HLS_CONFIG }
+
+      const hls = new Hls(hlsConfig)
+
+      if (isP2P && hls.p2pEngine) {
+        startP2PMetrics(hls.p2pEngine, streamUrl)
+      }
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         const levels: QualityLevel[] = (hls.levels || []).map(
@@ -144,11 +186,12 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
 
     if (hlsRef.current) {
+      stopP2PMetrics()
       try { hlsRef.current.destroy() } catch { /* ignore */ }
       hlsRef.current = null
     }
 
-    const { default: Hls } = await import('hls.js')
+    const { Hls, isP2P } = await createHlsInstance()
     const resumeTime = video.currentTime || 0
     const shouldResume = !video.paused
 
@@ -159,24 +202,16 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
     setStreamMode('hlsjs')
 
-    const hls = new Hls({
-      startLevel: 0,
-      capLevelToPlayerSize: true,
-      testBandwidth: true,
-      lowLatencyMode: false,
-      abrEwmaDefaultEstimate: 300000,
-      abrBandWidthFactor: 0.8,
-      abrBandWidthUpFactor: 0.6,
-      abrEwmaFastVoD: 3.0,
-      abrEwmaSlowVoD: 9.0,
-      maxBufferLength: 6,
-      maxMaxBufferLength: 10,
-      maxBufferSize: 12000000,
-      maxBufferHole: 0.5,
-      backBufferLength: 20,
-    })
+    const hlsConfig = isP2P
+      ? { ...HLS_CONFIG, p2pMediaLoader: getP2PConfig() }
+      : { ...HLS_CONFIG }
 
+    const hls = new Hls(hlsConfig)
     hlsRef.current = hls
+
+    if (isP2P && hls.p2pEngine) {
+      startP2PMetrics(hls.p2pEngine, streamUrlRef.current)
+    }
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       if (resumeTime > 0) {
@@ -260,6 +295,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     })
 
     return () => {
+      stopP2PMetrics()
       if (hlsRef.current) {
         try { hlsRef.current.destroy() } catch { /* ignore */ }
         hlsRef.current = null

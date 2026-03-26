@@ -12,6 +12,15 @@
 ## [Unreleased]
 
 ### Added
+- `player/src/app/PlayerClient.tsx`: P2P HLS streaming via p2p-media-loader — peers share `.ts` segments over WebRTC, reducing CDN/origin load
+- `player/src/app/p2pMetrics.ts`: client-side P2P metrics collector — beacons HTTP/P2P byte counts and peer count to API every 30s
+- `api/internal/handler/metrics.go`: Prometheus `/metrics` endpoint exposing P2P byte/segment counters
+- `api/internal/handler/player.go`: `POST /api/player/p2p-metrics` endpoint for ingesting client P2P stats
+- `docker-compose.api.yml`: `wt-tracker` service — WebTorrent tracker for P2P peer discovery
+- `infra/wt-tracker/config.json`: wt-tracker configuration (port 8050, announce interval 120s)
+- `infra/nginx/api-server.conf`: `tracker.pimor.online` server block with WSS proxy to wt-tracker
+- `infra/grafana/provisioning/dashboards/p2p-overview.json`: Grafana dashboard — P2P ratio, bandwidth saved, active peers, segments by source
+- `infra/prometheus/prometheus.yml`: API metrics scrape job for P2P counters
 - `worker/internal/cancelregistry/registry.go`: thread-safe CancelRegistry — maps jobID → cancelFunc for per-job context cancellation
 - `worker/cmd/worker/main.go`: cancel watcher goroutine BLPOPs from `cancel_queue` and calls `registry.Cancel(jobID)` to abort in-flight jobs
 - `api/internal/queue/redis.go`, `worker/internal/queue/redis.go`: `CancelQueue = "cancel_queue"` constant

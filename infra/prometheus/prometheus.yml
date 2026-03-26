@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          server: 'api'
+          host: '178.104.100.36'
+      - targets: ['178.104.53.215:9100']
+        labels:
+          server: 'converter'
+          host: '178.104.53.215'
+      - targets: ['45.134.174.84:9100']
+        labels:
+          server: 'storage'
+          host: '45.134.174.84'
+      # scanner: node-exporter not deployed
+      # - targets: ['213.111.156.183:9100']
+
+  - job_name: 'api'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['api:8000']
+        labels:
+          service: 'api'

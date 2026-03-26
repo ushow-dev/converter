@@ -17,7 +17,7 @@ Query:  ?token=<token>
 ```
 Header: X-Player-Key: <PLAYER_API_KEY>
 ```
-Применяется для всех `/api/player/*` endpoints.
+Применяется для `/api/player/*` endpoints кроме `POST /api/player/p2p-metrics` (unauthenticated).
 
 ---
 
@@ -345,6 +345,38 @@ Header: X-Player-Key: <PLAYER_API_KEY>
   "progress_percent": "number",
   "hls_url": "string (null пока не completed)"
 }
+```
+
+### POST /api/player/p2p-metrics
+**Назначение:** Приём P2P-метрик от клиентского плеера (без аутентификации)
+
+**Request:**
+```json
+{
+  "stream_id": "string",
+  "http_bytes": "number",
+  "p2p_bytes": "number",
+  "http_segments": "number",
+  "p2p_segments": "number",
+  "peers": "number",
+  "window_sec": "number"
+}
+```
+
+**Response:** `204 No Content`
+
+---
+
+### GET /metrics
+**Назначение:** Prometheus-совместимый endpoint для P2P-метрик (без аутентификации)
+
+**Response 200:** `text/plain` (Prometheus format)
+```
+converter_p2p_bytes_total{source="http"} 12345
+converter_p2p_bytes_total{source="p2p"} 6789
+converter_p2p_segments_total{source="http"} 100
+converter_p2p_segments_total{source="p2p"} 50
+converter_p2p_peers 3
 ```
 
 ---

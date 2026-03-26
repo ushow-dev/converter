@@ -15,9 +15,15 @@ converter/                      ← корень проекта
 ├── player/                     # Next.js Player UI (порт 3100)
 ├── docs/                       # Вся документация
 ├── infra/
-│   └── nginx/
-│       ├── api-server.conf     # nginx для API-сервера (178.104.100.36)
-│       └── storage-server.conf # nginx для Storage-сервера (45.134.174.84)
+│   ├── nginx/
+│   │   ├── api-server.conf     # nginx для API-сервера (178.104.100.36)
+│   │   └── storage-server.conf # nginx для Storage-сервера (45.134.174.84)
+│   ├── wt-tracker/
+│   │   └── config.json         # WebTorrent tracker для P2P HLS
+│   ├── prometheus/
+│   │   └── prometheus.yml      # Конфигурация Prometheus (scrape jobs)
+│   └── grafana/
+│       └── provisioning/       # Datasources и dashboards (P2P overview)
 ├── docker-compose.api.yml      # Compose для API-сервера
 ├── docker-compose.worker.yml   # Compose для Worker-сервера
 ├── docker-compose.yml          # Старый all-in-one (устарел)
@@ -53,7 +59,8 @@ api/
     │   ├── search.go               # GET /api/admin/search (Prowlarr)
     │   ├── jobs.go                 # CRUD /api/admin/jobs
     │   ├── movies.go               # CRUD /api/admin/movies
-    │   ├── player.go               # GET /api/player/movie, /api/player/assets
+    │   ├── player.go               # GET /api/player/movie, /api/player/assets, POST /api/player/p2p-metrics
+    │   ├── metrics.go              # GET /metrics (Prometheus P2P counters)
     │   ├── subtitles.go            # Управление субтитрами
     │   ├── browse.go               # Браузер удалённых файлов (заглушка)
     │   └── respond.go              # Утилиты JSON-ответов

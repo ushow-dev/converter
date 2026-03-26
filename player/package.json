@@ -11,7 +11,9 @@
     "next": "14.2.15",
     "react": "^18",
     "react-dom": "^18",
-    "hls.js": "^1.6.15"
+    "hls.js": "^1.6.15",
+    "p2p-media-loader-core": "^2.2.2",
+    "p2p-media-loader-hlsjs": "^2.2.2"
   },
   "devDependencies": {
     "typescript": "^5",
