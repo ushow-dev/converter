@@ -187,6 +187,8 @@ services:
       context: ./infra/wt-tracker
     image: app/wt-tracker:latest
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8050:8050"
     networks:
       - app_net
     logging:
