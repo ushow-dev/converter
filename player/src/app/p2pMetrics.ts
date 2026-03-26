@@ -8,7 +8,7 @@ interface P2PMetricsState {
   p2pBytes: number
   httpSegments: number
   p2pSegments: number
-  peersConnected: number
+  activePeers: Set<string>
   timer: ReturnType<typeof setInterval> | null
 }
 
@@ -26,7 +26,7 @@ function flush() {
   const endpoint = reportEndpoint()
   if (!endpoint) return
 
-  const { streamId, httpBytes, p2pBytes, httpSegments, p2pSegments, peersConnected } = state
+  const { streamId, httpBytes, p2pBytes, httpSegments, p2pSegments, activePeers } = state
   if (httpBytes === 0 && p2pBytes === 0) return
 
   const payload = JSON.stringify({
@@ -35,7 +35,7 @@ function flush() {
     p2p_bytes: p2pBytes,
     http_segments: httpSegments,
     p2p_segments: p2pSegments,
-    peers: peersConnected,
+    peers: activePeers.size,
     window_sec: REPORT_INTERVAL_MS / 1000,
   })
 
@@ -66,7 +66,7 @@ export function startP2PMetrics(engine: any, streamId: string) {
     p2pBytes: 0,
     httpSegments: 0,
     p2pSegments: 0,
-    peersConnected: 0,
+    activePeers: new Set(),
     timer: null,
   }
 
@@ -84,11 +84,13 @@ export function startP2PMetrics(engine: any, streamId: string) {
     }
   })
 
-  engine.addEventListener('onPeerConnect', () => {
-    if (state) state.peersConnected += 1
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  engine.addEventListener('onPeerConnect', (params: any) => {
+    if (state && params?.peerId) state.activePeers.add(params.peerId)
   })
-  engine.addEventListener('onPeerClose', () => {
-    if (state) state.peersConnected = Math.max(0, state.peersConnected - 1)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  engine.addEventListener('onPeerClose', (params: any) => {
+    if (state && params?.peerId) state.activePeers.delete(params.peerId)
   })
 
   state.timer = setInterval(flush, REPORT_INTERVAL_MS)
