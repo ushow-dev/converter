@@ -183,12 +183,10 @@ services:
 
   # ── P2P Tracker ──────────────────────────────────────────────
   wt-tracker:
-    image: node:22-alpine
+    build:
+      context: ./infra/wt-tracker
+    image: app/wt-tracker:latest
     restart: unless-stopped
-    working_dir: /app
-    command: ["npx", "wt-tracker", "/app/config.json"]
-    volumes:
-      - ./infra/wt-tracker/config.json:/app/config.json:ro
     networks:
       - app_net
     logging:
