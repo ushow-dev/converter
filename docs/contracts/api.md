@@ -347,6 +347,39 @@ Header: X-Player-Key: <PLAYER_API_KEY>
 }
 ```
 
+### GET /api/player/catalog
+
+Returns TMDB IDs of all converted (ready) movies. Supports delta loading via `since` parameter.
+
+**Auth:** `X-Player-Key` header
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `since` | RFC 3339 timestamp | no | Return only movies updated after this timestamp. Omit for full list. |
+
+**Response (200):**
+
+```json
+{
+  "items": [
+    {"tmdb_id": "16662"},
+    {"tmdb_id": "278"}
+  ],
+  "count": 2
+}
+```
+
+**Errors:**
+
+| Status | Code | Condition |
+|---|---|---|
+| 400 | VALIDATION_ERROR | Invalid `since` format |
+| 401 | UNAUTHORIZED | Missing or invalid X-Player-Key |
+
+---
+
 ### POST /api/player/p2p-metrics
 **Назначение:** Приём P2P-метрик от клиентского плеера (без аутентификации)
 

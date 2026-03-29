@@ -12,6 +12,9 @@
 ## [Unreleased]
 
 ### Added
+- `api/internal/repository/movie.go`: `ListReadyTMDBIDs` method for querying converted movies by TMDB ID with delta support
+- `api/internal/handler/player.go`: `GetCatalog` handler for `GET /api/player/catalog` endpoint
+- `api/internal/server/server.go`: registered `/catalog` route in player auth group
 - `player/src/app/PlayerClient.tsx`: P2P HLS streaming via p2p-media-loader — peers share `.ts` segments over WebRTC, reducing CDN/origin load
 - `player/src/app/p2pMetrics.ts`: client-side P2P metrics collector — beacons HTTP/P2P byte counts and peer count to API every 30s
 - `api/internal/handler/metrics.go`: Prometheus `/metrics` endpoint exposing P2P byte/segment counters
