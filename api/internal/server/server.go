@@ -91,6 +91,7 @@ func New(deps Dependencies) http.Handler {
 			r.Get("/movie", deps.PlayerHandler.GetMovie)
 			r.Get("/assets/{assetID}", deps.PlayerHandler.GetAsset)
 			r.Get("/jobs/{jobID}/status", deps.PlayerHandler.GetJobStatus)
+			r.Get("/catalog", deps.PlayerHandler.GetCatalog)
 		})
 	})
 
