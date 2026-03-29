@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -89,6 +90,42 @@ func (r *MovieRepository) List(ctx context.Context, limit int, cursor string) ([
 		nextCursor = movies[limit-1].CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z")
 	}
 	return movies, nextCursor, nil
+}
+
+// ListReadyTMDBIDs returns tmdb_id values for movies that have at least one
+// ready asset. When since is non-nil only movies updated after that timestamp
+// are returned.
+func (r *MovieRepository) ListReadyTMDBIDs(ctx context.Context, since *time.Time) ([]string, error) {
+	const base = `
+		SELECT DISTINCT m.tmdb_id
+		FROM movies m
+		JOIN media_assets a ON a.movie_id = m.id
+		WHERE a.is_ready = true
+		  AND m.tmdb_id IS NOT NULL`
+
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if since != nil {
+		rows, err = r.pool.Query(ctx, base+` AND m.updated_at > $1 ORDER BY m.updated_at ASC`, *since)
+	} else {
+		rows, err = r.pool.Query(ctx, base+` ORDER BY m.updated_at ASC`)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list ready tmdb ids: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan tmdb id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // UpdateMeta updates imdb_id, tmdb_id and title for a movie.
