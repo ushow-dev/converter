@@ -97,7 +97,7 @@ func (r *MovieRepository) List(ctx context.Context, limit int, cursor string) ([
 // are returned.
 func (r *MovieRepository) ListReadyTMDBIDs(ctx context.Context, since *time.Time) ([]string, error) {
 	const base = `
-		SELECT DISTINCT m.tmdb_id
+		SELECT DISTINCT m.tmdb_id, m.updated_at
 		FROM movies m
 		JOIN media_assets a ON a.movie_id = m.id
 		WHERE a.is_ready = true
@@ -120,7 +120,8 @@ func (r *MovieRepository) ListReadyTMDBIDs(ctx context.Context, since *time.Time
 	var ids []string
 	for rows.Next() {
 		var id string
-		if err := rows.Scan(&id); err != nil {
+		var updatedAt time.Time
+		if err := rows.Scan(&id, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan tmdb id: %w", err)
 		}
 		ids = append(ids, id)
