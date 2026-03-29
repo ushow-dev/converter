@@ -171,6 +171,40 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetCatalog handles GET /api/player/catalog?since=...
+func (h *PlayerHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+
+	var since *time.Time
+	if raw := strings.TrimSpace(r.URL.Query().Get("since")); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+				"invalid since parameter: expected RFC 3339 format", false, cid)
+			return
+		}
+		since = &t
+	}
+
+	ids, err := h.movieRepo.ListReadyTMDBIDs(r.Context(), since)
+	if err != nil {
+		slog.Error("catalog query failed", "error", err, "correlation_id", cid)
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
+			"failed to fetch catalog", false, cid)
+		return
+	}
+
+	items := make([]map[string]string, len(ids))
+	for i, id := range ids {
+		items[i] = map[string]string{"tmdb_id": id}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"items": items,
+		"count": len(items),
+	})
+}
+
 type repositoryMovieView struct {
 	id                int64
 	storageKey        string
