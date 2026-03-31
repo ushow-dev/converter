@@ -11,11 +11,16 @@ RUN npm install
 COPY . .
 RUN mkdir -p public
 
-# NEXT_PUBLIC_* vars must be available at build time (inlined into JS bundle)
+# NEXT_PUBLIC_* vars must be available at build time (inlined into JS bundle).
+# Docker ARG alone is not visible to npm run build — promote to ENV.
 ARG NEXT_PUBLIC_P2P_ENABLED=true
 ARG NEXT_PUBLIC_P2P_TRACKER_URL=wss://t.pimor.online
 ARG NEXT_PUBLIC_API_URL=https://api.pimor.online
 ARG NEXT_PUBLIC_VAST_TAG=
+ENV NEXT_PUBLIC_P2P_ENABLED=$NEXT_PUBLIC_P2P_ENABLED
+ENV NEXT_PUBLIC_P2P_TRACKER_URL=$NEXT_PUBLIC_P2P_TRACKER_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_VAST_TAG=$NEXT_PUBLIC_VAST_TAG
 
 RUN npm run build
 
