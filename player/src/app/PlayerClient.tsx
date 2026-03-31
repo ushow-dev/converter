@@ -91,12 +91,29 @@ async function createHlsInstance(): Promise<{ Hls: any; isP2P: boolean }> {
   }
 }
 
-function getP2PConfig() {
+function deriveSwarmId(streamUrl: string): string {
+  try {
+    const url = new URL(streamUrl)
+    // Strip filename (master.m3u8) to get the movie directory as swarm ID
+    // e.g. /movies/inception_2010_[16662]/master.m3u8 → /movies/inception_2010_[16662]
+    const parts = url.pathname.split('/')
+    parts.pop()
+    return parts.join('/')
+  } catch {
+    return streamUrl
+  }
+}
+
+function getP2PConfig(streamUrl: string) {
   return {
     core: {
+      swarmId: deriveSwarmId(streamUrl),
       announceTrackers: [P2P_TRACKER_URL],
       rtcConfig: {
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
       },
     },
   }
@@ -139,7 +156,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       setStreamMode('hlsjs')
 
       const hlsConfig = isP2P
-        ? { ...HLS_CONFIG, p2p: getP2PConfig() }
+        ? { ...HLS_CONFIG, p2p: getP2PConfig(streamUrl) }
         : { ...HLS_CONFIG }
 
       const hls = new Hls(hlsConfig)
@@ -203,7 +220,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     setStreamMode('hlsjs')
 
     const hlsConfig = isP2P
-      ? { ...HLS_CONFIG, p2p: getP2PConfig() }
+      ? { ...HLS_CONFIG, p2p: getP2PConfig(streamUrlRef.current) }
       : { ...HLS_CONFIG }
 
     const hls = new Hls(hlsConfig)

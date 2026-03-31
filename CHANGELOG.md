@@ -12,6 +12,8 @@
 ## [Unreleased]
 
 ### Fixed
+- `player/src/app/PlayerClient.tsx`: add `swarmId` derived from stream URL so peers watching the same movie join the same swarm — fixes P2P showing zero peer traffic
+- `infra/nginx/api-server.conf`: add `X-Forwarded-For` header to wt-tracker proxy so tracker sees real peer IPs
 - `scanner/scanner/services/metadata.py`: TMDB search now scores results by title similarity instead of blindly picking the first (most popular) result — fixes mismatches like "Fire" → "Avatar: Fire and Ash"
 
 ### Added
