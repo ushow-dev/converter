@@ -10,6 +10,13 @@ RUN npm install
 # Copy source and build
 COPY . .
 RUN mkdir -p public
+
+# NEXT_PUBLIC_* vars must be available at build time (inlined into JS bundle)
+ARG NEXT_PUBLIC_P2P_ENABLED=true
+ARG NEXT_PUBLIC_P2P_TRACKER_URL=wss://t.pimor.online
+ARG NEXT_PUBLIC_API_URL=https://api.pimor.online
+ARG NEXT_PUBLIC_VAST_TAG=
+
 RUN npm run build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
