@@ -127,7 +127,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const [qualities, setQualities] = useState<QualityLevel[]>([])
   const [selectedQuality, setSelectedQuality] = useState<string>('auto')
   const [showQualityMenu, setShowQualityMenu] = useState(false)
-  const [hlsReady, setHlsReady] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const quickbarRef = useRef<HTMLDivElement>(null)
@@ -151,7 +150,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       if (!Hls.isSupported()) {
         video.src = streamUrl
         setStreamMode('native')
-        setHlsReady(true)
         return null
       }
       setStreamMode('hlsjs')
@@ -182,7 +180,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
           const idx = parseInt(q, 10)
           if (!isNaN(idx)) hls.currentLevel = idx
         }
-        setHlsReady(true)
       })
 
       hls.attachMedia(video)
@@ -266,28 +263,8 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
   }, [])
 
-  useEffect(() => {
-    if (!movieData || !videoRef.current) return
-    const video = videoRef.current
-    const streamUrl = movieData.data.playback.hls
-    streamUrlRef.current = streamUrl
-    setStreamMode('pending')
-    setHlsReady(false)
-
-    setupHlsJsMode(video, streamUrl).then((hls) => {
-      hlsRef.current = hls
-    })
-
-    return () => {
-      stopP2PMetrics()
-      if (hlsRef.current) {
-        try { hlsRef.current.destroy() } catch { /* ignore */ }
-        hlsRef.current = null
-      }
-      setStreamMode('pending')
-      setHlsReady(false)
-    }
-  }, [movieData, setupHlsJsMode])
+  // hls.js init moved into the Fluid Player useEffect below — Fluid Player
+  // must initialize first so it doesn't clobber the MSE source.
 
   useEffect(() => {
     const video = videoRef.current
@@ -343,16 +320,14 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
   }, [isMobileRuntime, streamMode])
 
+  // ── Fluid Player init (UI only) ──────────────────────────────────────────
+  // Fluid Player is initialized FIRST as UI chrome. It will take over the
+  // video element and set its own source. We then attach hls.js AFTER
+  // Fluid Player is ready, so hls.js gets the final word on the source.
   useEffect(() => {
-    if (!fluidReady || !hlsReady || !movieData || !videoRef.current) return
+    if (!fluidReady || !movieData || !videoRef.current) return
     if (typeof window.fluidPlayer !== 'function') return
-    if (fluidInstanceRef.current && typeof fluidInstanceRef.current.destroy === 'function') {
-      try { fluidInstanceRef.current.destroy() } catch { /* ignore */ }
-      fluidInstanceRef.current = null
-    }
-    if (streamMode === 'native') {
-      videoRef.current.src = movieData.data.playback.hls
-    }
+    if (fluidInstanceRef.current) return // already initialized
 
     const vastTag = process.env.NEXT_PUBLIC_VAST_TAG || ''
 
@@ -418,13 +393,26 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
 
     mountSettingsInPlayer(0)
 
+    // Now that Fluid Player is done with its init (and VAST pre-roll
+    // attempt), attach hls.js to take over the source via MSE.
+    const video = videoRef.current
+    const streamUrl = movieData.data.playback.hls
+    setupHlsJsMode(video, streamUrl).then((hls) => {
+      hlsRef.current = hls
+    })
+
     return () => {
+      stopP2PMetrics()
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy() } catch { /* ignore */ }
+        hlsRef.current = null
+      }
       if (fluidInstanceRef.current && typeof fluidInstanceRef.current.destroy === 'function') {
         try { fluidInstanceRef.current.destroy() } catch { /* ignore */ }
         fluidInstanceRef.current = null
       }
     }
-  }, [fluidReady, hlsReady, movieData, mountSettingsInPlayer, onAdStart, onAdEnd])
+  }, [fluidReady, movieData, mountSettingsInPlayer, onAdStart, onAdEnd, setupHlsJsMode])
 
   const applyQuality = useCallback(
     (value: string) => {
