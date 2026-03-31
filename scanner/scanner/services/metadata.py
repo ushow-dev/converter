@@ -50,6 +50,41 @@ def quality_label_from_release_type(release_type: Optional[str]) -> Optional[str
     return None
 
 
+def _normalize(s: str) -> str:
+    """Lowercase, strip punctuation and collapse whitespace for comparison."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", s.lower())).strip()
+
+
+def _title_score(query: str, candidate: dict) -> float:
+    """Score a TMDB result against the parsed filename title.
+
+    Higher is better.  Exact title match is strongly preferred over
+    partial/substring matches that TMDB returns by popularity.
+    """
+    q = _normalize(query)
+    title = _normalize(candidate.get("title", ""))
+    original = _normalize(candidate.get("original_title", ""))
+
+    # Exact match on title or original_title → best score
+    if q == title or q == original:
+        return 100.0
+
+    # Starts-with (e.g. query "fire" vs title "fire 2025")
+    if title.startswith(q) or original.startswith(q):
+        return 80.0
+
+    # Word-level containment: query words ⊆ title words, weighted by overlap ratio
+    q_words = set(q.split())
+    t_words = set(title.split()) | set(original.split())
+    if q_words and q_words <= t_words:
+        # Ratio of query words to title words — penalise titles much longer than query
+        ratio = len(q_words) / len(t_words)
+        return 40.0 + 20.0 * ratio
+
+    # Fallback: TMDB relevance order (position in results list)
+    return 0.0
+
+
 def tmdb_search(title: str, year: Optional[int], api_key: str) -> Optional[dict]:
     try:
         params = {"api_key": api_key, "query": title, "language": "en-US"}
@@ -60,7 +95,19 @@ def tmdb_search(title: str, year: Optional[int], api_key: str) -> Optional[dict]
         results = resp.json().get("results", [])
         if not results:
             return None
-        best = results[0]
+
+        # Pick the result whose title best matches the query, not just the
+        # most popular one TMDB returns first.
+        scored = sorted(results, key=lambda r: _title_score(title, r), reverse=True)
+        best = scored[0]
+
+        score = _title_score(title, best)
+        if score < 60:
+            logger.info(
+                "TMDB: no close title match for %r (best=%r, score=%.0f), using top result",
+                title, best.get("title"), score,
+            )
+
         poster_url = f"{_TMDB_IMAGE_BASE}{best['poster_path']}" if best.get("poster_path") else None
         return {
             "tmdb_id": str(best["id"]),

@@ -6,6 +6,7 @@ from scanner.services.metadata import (
     build_normalized_name,
     quality_label_from_release_type,
     tmdb_search,
+    _title_score,
 )
 
 
@@ -55,6 +56,47 @@ def test_quality_label_unknown():
 
 def test_quality_label_none():
     assert quality_label_from_release_type(None) is None
+
+
+def test_title_score_exact_match():
+    assert _title_score("Fire", {"title": "Fire", "original_title": "Fire"}) == 100.0
+
+
+def test_title_score_exact_match_case_insensitive():
+    assert _title_score("fire", {"title": "Fire", "original_title": "Fire"}) == 100.0
+
+
+def test_title_score_original_title():
+    assert _title_score("Fire", {"title": "Огонь", "original_title": "Fire"}) == 100.0
+
+
+def test_title_score_partial_match_ranked_lower():
+    exact = _title_score("Fire", {"title": "Fire", "original_title": "Fire"})
+    partial = _title_score("Fire", {"title": "Avatar: Fire and Ash", "original_title": "Avatar: Fire and Ash"})
+    assert exact > partial
+
+
+def test_title_score_no_match():
+    score = _title_score("Fire", {"title": "Avatar: Fire and Ash", "original_title": "Avatar: Fire and Ash"})
+    assert score < 60
+
+
+def test_tmdb_search_prefers_exact_title():
+    """When TMDB returns a popular movie first but an exact match exists, pick the exact match."""
+    mock_resp = Mock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "results": [
+            {"id": 83533, "title": "Avatar: Fire and Ash", "original_title": "Avatar: Fire and Ash",
+             "release_date": "2025-12-19", "poster_path": "/avatar.jpg"},
+            {"id": 1246945, "title": "Fire", "original_title": "Fire",
+             "release_date": "2025-03-14", "poster_path": "/fire.jpg"},
+        ]
+    }
+    with patch("requests.get", return_value=mock_resp):
+        result = tmdb_search("Fire", 2025, "fake_key")
+    assert result["tmdb_id"] == "1246945"
+    assert result["title"] == "Fire"
 
 
 def test_tmdb_search_success():
