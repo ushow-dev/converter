@@ -12,6 +12,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `player/src/app/PlayerClient.tsx`: gate Fluid Player init on `hlsReady` state instead of `streamMode !== 'pending'` — eliminates race where Fluid Player could initialize before hls.js parsed the manifest, killing MSE/P2P playback
 - `player/src/app/PlayerClient.tsx`: add `swarmId` derived from stream URL so peers watching the same movie join the same swarm — fixes P2P showing zero peer traffic
 - `infra/nginx/api-server.conf`: add `X-Forwarded-For` header to wt-tracker proxy so tracker sees real peer IPs
 - `scanner/scanner/services/metadata.py`: TMDB search now scores results by title similarity instead of blindly picking the first (most popular) result — fixes mismatches like "Fire" → "Avatar: Fire and Ash"

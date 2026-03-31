@@ -127,6 +127,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const [qualities, setQualities] = useState<QualityLevel[]>([])
   const [selectedQuality, setSelectedQuality] = useState<string>('auto')
   const [showQualityMenu, setShowQualityMenu] = useState(false)
+  const [hlsReady, setHlsReady] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const quickbarRef = useRef<HTMLDivElement>(null)
@@ -151,6 +152,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       if (!Hls.isSupported()) {
         video.src = streamUrl
         setStreamMode('native')
+        setHlsReady(true)
         return null
       }
       setStreamMode('hlsjs')
@@ -181,6 +183,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
           const idx = parseInt(q, 10)
           if (!isNaN(idx)) hls.currentLevel = idx
         }
+        setHlsReady(true)
       })
 
       hls.attachMedia(video)
@@ -306,6 +309,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     const streamUrl = movieData.data.playback.hls
     streamUrlRef.current = streamUrl
     setStreamMode('pending')
+    setHlsReady(false)
 
     setupHlsJsMode(video, streamUrl).then((hls) => {
       hlsRef.current = hls
@@ -318,6 +322,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         hlsRef.current = null
       }
       setStreamMode('pending')
+      setHlsReady(false)
     }
   }, [movieData, setupHlsJsMode])
 
@@ -376,7 +381,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   }, [isMobileRuntime, streamMode])
 
   useEffect(() => {
-    if (!fluidReady || !movieData || !videoRef.current || streamMode === 'pending') return
+    if (!fluidReady || !hlsReady || !movieData || !videoRef.current) return
     if (typeof window.fluidPlayer !== 'function') return
     if (fluidInstanceRef.current && typeof fluidInstanceRef.current.destroy === 'function') {
       try { fluidInstanceRef.current.destroy() } catch { /* ignore */ }
@@ -459,7 +464,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         fluidInstanceRef.current = null
       }
     }
-  }, [fluidReady, movieData, reattachHlsAfterAd, mountSettingsInPlayer, streamMode])
+  }, [fluidReady, hlsReady, movieData, reattachHlsAfterAd, mountSettingsInPlayer])
 
   const applyQuality = useCallback(
     (value: string) => {
