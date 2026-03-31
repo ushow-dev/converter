@@ -15,6 +15,7 @@
 - `scanner/scanner/services/metadata.py`: TMDB search now scores results by title similarity instead of blindly picking the first (most popular) result — fixes mismatches like "Fire" → "Avatar: Fire and Ash"
 
 ### Added
+- `scripts/re-resolve-tmdb.py`: one-off script to re-resolve TMDB/IMDB IDs for all movies — extracts tags from filenames, re-searches TMDB with scoring, updates DB (dry-run by default)
 - `api/internal/repository/movie.go`: `ListReadyTMDBIDs` method for querying converted movies by TMDB ID with delta support
 - `api/internal/handler/player.go`: `GetCatalog` handler for `GET /api/player/catalog` endpoint
 - `api/internal/server/server.go`: registered `/catalog` route in player auth group
