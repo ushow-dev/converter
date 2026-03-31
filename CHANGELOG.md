@@ -12,6 +12,7 @@
 ## [Unreleased]
 
 ### Fixed
+- `player/src/app/PlayerClient.tsx`: replace `reattachHlsAfterAd` (destroy+recreate hls.js on ad end) with `onAdStart`/`onAdEnd` using `detachMedia`/`attachMedia` — preserves the P2P engine and WebRTC connections across VAST ads
 - `player/src/app/PlayerClient.tsx`: gate Fluid Player init on `hlsReady` state instead of `streamMode !== 'pending'` — eliminates race where Fluid Player could initialize before hls.js parsed the manifest, killing MSE/P2P playback
 - `player/src/app/PlayerClient.tsx`: add `swarmId` derived from stream URL so peers watching the same movie join the same swarm — fixes P2P showing zero peer traffic
 - `infra/nginx/api-server.conf`: add `X-Forwarded-For` header to wt-tracker proxy so tracker sees real peer IPs

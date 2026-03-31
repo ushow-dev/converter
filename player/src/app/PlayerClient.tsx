@@ -137,7 +137,6 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const fluidInstanceRef = useRef<any>(null)
   const qualityModeRef = useRef<string>('auto')
   const adActiveRef = useRef(false)
-  const hlsRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seekIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seekLoadStoppedRef = useRef(false)
   const seekWasPlayingRef = useRef(false)
@@ -196,65 +195,29 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     [],
   )
 
-  const reattachHlsAfterAd = useCallback(async () => {
-    const video = videoRef.current
-    if (!video) return
-
-    if (hlsRestoreTimerRef.current) {
-      clearTimeout(hlsRestoreTimerRef.current)
-      hlsRestoreTimerRef.current = null
-    }
-
+  const onAdStart = useCallback(() => {
+    adActiveRef.current = true
     if (hlsRef.current) {
-      stopP2PMetrics()
-      try { hlsRef.current.destroy() } catch { /* ignore */ }
-      hlsRef.current = null
+      try {
+        hlsRef.current.stopLoad()
+        hlsRef.current.detachMedia()
+      } catch { /* ignore */ }
     }
+  }, [])
 
-    const { Hls, isP2P } = await createHlsInstance()
-    const resumeTime = video.currentTime || 0
-    const shouldResume = !video.paused
+  const onAdEnd = useCallback(() => {
+    adActiveRef.current = false
+    const video = videoRef.current
+    const hls = hlsRef.current
+    if (!video || !hls) return
 
-    if (!Hls.isSupported()) {
-      video.src = streamUrlRef.current
-      setStreamMode('native')
-      return
-    }
-    setStreamMode('hlsjs')
-
-    const hlsConfig = isP2P
-      ? { ...HLS_CONFIG, p2p: getP2PConfig(streamUrlRef.current) }
-      : { ...HLS_CONFIG }
-
-    const hls = new Hls(hlsConfig)
-    hlsRef.current = hls
-
-    if (isP2P && hls.p2pEngine) {
-      startP2PMetrics(hls.p2pEngine, streamUrlRef.current)
-    }
-
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      if (resumeTime > 0) {
-        try { video.currentTime = resumeTime } catch { /* ignore */ }
-      }
-      const q = qualityModeRef.current
-      if (q === 'auto') hls.currentLevel = -1
-      else {
-        const idx = parseInt(q, 10)
-        if (!isNaN(idx)) hls.currentLevel = idx
-      }
-      if (shouldResume) {
-        setTimeout(() => {
-          const p = video.play()
-          if (p) p.catch(() => { /* autoplay blocked */ })
-        }, 180)
-      }
-    })
-
-    hls.attachMedia(video)
-    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-      hls.loadSource(streamUrlRef.current)
-    })
+    try {
+      hls.attachMedia(video)
+      hls.on(hls.constructor.Events.MEDIA_ATTACHED, () => {
+        const resumeTime = video.currentTime || 0
+        hls.startLoad(resumeTime)
+      })
+    } catch { /* ignore */ }
   }, [])
 
   const mountSettingsInPlayer = useCallback((attempt: number) => {
@@ -419,16 +382,13 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         skipButtonClickCaption: 'Skip ad',
         vastAdvanced: {
           vastVideoEndedCallback: () => {
-            adActiveRef.current = false
-            reattachHlsAfterAd()
+            onAdEnd()
           },
           vastVideoSkippedCallback: () => {
-            adActiveRef.current = false
-            reattachHlsAfterAd()
+            onAdEnd()
           },
           noVastVideoCallback: () => {
-            adActiveRef.current = false
-            reattachHlsAfterAd()
+            onAdEnd()
           },
         },
       }
@@ -443,7 +403,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         const info = typeof arg2 !== 'undefined' ? arg2 : _arg1
         const sourceType = info?.mediaSourceType ?? 'source'
         if (sourceType !== 'source' && !adActiveRef.current) {
-          adActiveRef.current = true
+          onAdStart()
         }
       })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -464,7 +424,7 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
         fluidInstanceRef.current = null
       }
     }
-  }, [fluidReady, hlsReady, movieData, reattachHlsAfterAd, mountSettingsInPlayer])
+  }, [fluidReady, hlsReady, movieData, mountSettingsInPlayer, onAdStart, onAdEnd])
 
   const applyQuality = useCallback(
     (value: string) => {
