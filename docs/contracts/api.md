@@ -311,22 +311,100 @@ Header: X-Player-Key: <PLAYER_API_KEY>
 ### GET /api/player/movie
 **Query params:** `imdb_id=tt...` OR `tmdb_id=number`
 
+**Auth:** `X-Player-Key` header
+
 **Response 200:**
 ```json
 {
-  "movie_id": "number",
-  "title": "string",
-  "year": "number",
-  "hls_url": "string (подписанный если MEDIA_SIGNING_KEY задан)",
-  "thumbnail_url": "string",
-  "subtitles": [
-    {
-      "language": "string",
-      "url": "string"
-    }
-  ]
+  "data": {
+    "movie": {"id": 1, "imdb_id": "tt1234567", "tmdb_id": "278"},
+    "playback": {"hls": "string (signed if MEDIA_SIGNING_KEY set)"},
+    "assets": {"poster": "string"},
+    "subtitles": [{"language": "en", "url": "string"}],
+    "audio_tracks": [
+      {"index": 0, "is_default": true, "language": "en", "label": "English"}
+    ]
+  },
+  "meta": {"version": "v1"}
 }
 ```
+
+---
+
+### GET /api/player/series
+**Query params:** `tmdb_id=number`
+
+**Auth:** `X-Player-Key` header
+
+Returns all seasons and episodes for a series. Only episodes with a ready asset include playback URLs.
+
+**Response 200:**
+```json
+{
+  "data": {
+    "series": {"id": 1, "tmdb_id": "1399", "imdb_id": "tt0944947", "title": "Game of Thrones", "year": 2011},
+    "seasons": [
+      {
+        "season_number": 1,
+        "episodes": [
+          {
+            "episode_number": 1,
+            "title": "Winter Is Coming",
+            "is_ready": true,
+            "playback": {"hls": "string (signed)"},
+            "assets": {"thumbnail": "string"},
+            "audio_tracks": [{"index": 0, "is_default": true, "language": "en"}],
+            "subtitles": [{"language": "en", "url": "string"}]
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {"version": "v1"}
+}
+```
+
+**Errors:**
+
+| Status | Code | Condition |
+|---|---|---|
+| 400 | VALIDATION_ERROR | Missing `tmdb_id` |
+| 404 | NOT_FOUND | Series not found |
+
+---
+
+### GET /api/player/episode
+**Query params:** `tmdb_id=number&s=1&e=1`
+
+**Auth:** `X-Player-Key` header
+
+Returns a single episode with playback info.
+
+**Response 200:**
+```json
+{
+  "data": {
+    "series": {"id": 1, "tmdb_id": "1399"},
+    "episode": {
+      "episode_number": 1,
+      "title": "Winter Is Coming",
+      "is_ready": true,
+      "playback": {"hls": "string (signed)"},
+      "assets": {"thumbnail": "string"},
+      "audio_tracks": [{"index": 0, "is_default": true, "language": "en"}],
+      "subtitles": [{"language": "en", "url": "string"}]
+    }
+  },
+  "meta": {"version": "v1"}
+}
+```
+
+**Errors:**
+
+| Status | Code | Condition |
+|---|---|---|
+| 400 | VALIDATION_ERROR | Missing or invalid `tmdb_id`, `s`, or `e` |
+| 404 | NOT_FOUND | Series or episode not found |
 
 ---
 

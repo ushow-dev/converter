@@ -34,6 +34,25 @@ func (r *AssetRepository) GetByID(ctx context.Context, assetID string) (*model.A
 	return a, nil
 }
 
+// GetByMovieID fetches the ready asset associated with a movie.
+func (r *AssetRepository) GetByMovieID(ctx context.Context, movieID int64) (*model.Asset, error) {
+	a := &model.Asset{}
+	err := r.pool.QueryRow(ctx, `
+		SELECT asset_id, job_id, storage_path, thumbnail_path, duration_sec,
+		       video_codec, audio_codec, is_ready, created_at, updated_at
+		FROM media_assets
+		WHERE movie_id = $1
+		  AND is_ready = true
+		ORDER BY created_at DESC
+		LIMIT 1`, movieID).
+		Scan(&a.AssetID, &a.JobID, &a.StoragePath, &a.ThumbnailPath, &a.DurationSec,
+			&a.VideoCodec, &a.AudioCodec, &a.IsReady, &a.CreatedAt, &a.UpdatedAt)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	return a, nil
+}
+
 // GetByJobID fetches the asset associated with a job (one-to-one for movie pipeline).
 func (r *AssetRepository) GetByJobID(ctx context.Context, jobID string) (*model.Asset, error) {
 	a := &model.Asset{}

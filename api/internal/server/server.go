@@ -89,6 +89,8 @@ func New(deps Dependencies) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.PlayerKeyMiddleware(deps.Cfg.PlayerAPIKey))
 			r.Get("/movie", deps.PlayerHandler.GetMovie)
+			r.Get("/series", deps.PlayerHandler.GetSeries)
+			r.Get("/episode", deps.PlayerHandler.GetEpisode)
 			r.Get("/assets/{assetID}", deps.PlayerHandler.GetAsset)
 			r.Get("/jobs/{jobID}/status", deps.PlayerHandler.GetJobStatus)
 			r.Get("/catalog", deps.PlayerHandler.GetCatalog)

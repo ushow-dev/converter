@@ -29,6 +29,10 @@
 - `worker/internal/ingest/client.go`: added `SeriesTMDBID`, `SeasonNumber`, `EpisodeNumber` fields to `IncomingItem` — scanner can now supply episode context for series content
 - `worker/internal/ingest/worker.go`: added `seriesRepo` field and updated `New()` to accept `*repository.SeriesRepository`; `processItem` now upserts the series record and forwards `SeriesID`, `SeasonNumber`, `EpisodeNumber` in the `ConvertMessage` payload for `content_kind=episode` items
 - `worker/cmd/worker/main.go`: instantiate `seriesRepo` and pass it to `ingest.New()`
+- `api/internal/handler/player.go`: added `GetSeries` and `GetEpisode` handlers; added audio tracks to `GetMovie` response; added `buildSeriesMediaURL` helper and `buildEpisodePayload`/`buildEpisodeAudioTracks`/`buildEpisodeSubtitles` helpers; updated `mediaSigningPath` to support `series` content type
+- `api/internal/repository/asset.go`: added `GetByMovieID` method to look up the ready asset for a movie by movie ID
+- `api/cmd/api/main.go`: instantiate `seriesRepo`, `audioTrackRepo`, `epSubtitleRepo` and pass to `NewPlayerHandler`
+- `api/internal/server/server.go`: register `GET /api/player/series` and `GET /api/player/episode` routes
 
 ### Changed
 - `worker/internal/ffmpeg/runner.go`: `RunHLS` now maps all audio tracks from the source file into every HLS variant instead of hardcoding `0:a:0`; falls back to probeHasAudio and a single synthetic silence track when ProbeAudioStreams fails; builds `var_stream_map` dynamically so N audio × 3 video variants are correctly muxed; writes language/title metadata tags per audio stream
