@@ -115,12 +115,14 @@ func (w *Worker) processItem(ctx context.Context, item IncomingItem) {
 
 	var seriesID *int64
 	if contentKind == "episode" && item.SeriesTMDBID != nil {
-		// Strip episode suffix (_sNNeNN) from normalized name to get series title.
-		seriesTitle := title
-		if idx := strings.LastIndex(seriesTitle, "_s"); idx > 0 {
-			seriesTitle = seriesTitle[:idx]
+		// Strip episode suffix (_sNNeNN) from normalized name to get series storage key.
+		// e.g. "devil_may_cry_2025_[235930]_s01e01" → "devil_may_cry_2025_[235930]"
+		seriesStorageKey := title
+		if idx := strings.LastIndex(seriesStorageKey, "_s"); idx > 0 {
+			seriesStorageKey = seriesStorageKey[:idx]
 		}
-		series, err := w.seriesRepo.UpsertSeries(ctx, *item.SeriesTMDBID, "", seriesTitle, nil, nil, "")
+		// Pass storageKey directly — it's already in the correct format from scanner.
+		series, err := w.seriesRepo.UpsertSeries(ctx, *item.SeriesTMDBID, "", seriesStorageKey, nil, nil, seriesStorageKey)
 		if err != nil {
 			log.Error("upsert series for ingest failed", "error", err)
 		} else {
