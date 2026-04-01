@@ -24,6 +24,12 @@
 - `api/internal/repository/audio_track.go`: new `AudioTrackRepository` with `ListByAsset` — retrieves audio tracks by asset ID and type for the API service
 - `api/internal/repository/episode_subtitle.go`: new `EpisodeSubtitleRepository` with `ListByEpisodeID` — retrieves episode subtitles ordered by language for the API service
 
+- `worker/internal/converter/converter.go`: added `seriesRepo` and `audioTrackRepo` fields to `Worker`; `New()` now accepts both repos; `process()` branches on `content_type="series"` to upsert season/episode and write HLS to `converted/series/{key}/sNN/eNN` path; episode assets are created via `SeriesRepository.CreateEpisodeAsset`; audio tracks from `HLSResult.AudioTracks` are bulk-inserted after asset creation via `AudioTrackRepository.BulkInsert`; `TransferJob` now carries `ContentType` and uses `contentID`/`filepath.Base(finalDir)` so transfer worker can handle both content types; added `nullableText` helper
+- `worker/cmd/worker/main.go`: instantiate `audioTrackRepo` and pass `seriesRepo`+`audioTrackRepo` to `converter.New()`
+- `worker/internal/ingest/client.go`: added `SeriesTMDBID`, `SeasonNumber`, `EpisodeNumber` fields to `IncomingItem` — scanner can now supply episode context for series content
+- `worker/internal/ingest/worker.go`: added `seriesRepo` field and updated `New()` to accept `*repository.SeriesRepository`; `processItem` now upserts the series record and forwards `SeriesID`, `SeasonNumber`, `EpisodeNumber` in the `ConvertMessage` payload for `content_kind=episode` items
+- `worker/cmd/worker/main.go`: instantiate `seriesRepo` and pass it to `ingest.New()`
+
 ### Changed
 - `worker/internal/ffmpeg/runner.go`: `RunHLS` now maps all audio tracks from the source file into every HLS variant instead of hardcoding `0:a:0`; falls back to probeHasAudio and a single synthetic silence track when ProbeAudioStreams fails; builds `var_stream_map` dynamically so N audio × 3 video variants are correctly muxed; writes language/title metadata tags per audio stream
 

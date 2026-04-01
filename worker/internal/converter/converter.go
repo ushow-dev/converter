@@ -33,6 +33,8 @@ type Worker struct {
 	movieRepo       *repository.MovieRepository
 	subtitleFetcher *subtitles.Fetcher // nil if OpenSubtitles not configured
 	subtitleRepo    *repository.SubtitleRepository
+	seriesRepo      *repository.SeriesRepository
+	audioTrackRepo  *repository.AudioTrackRepository
 	mediaRoot       string
 	tmdbAPIKey      string
 	ffmpegThreads   int  // 0 = auto
@@ -53,6 +55,8 @@ func New(
 	movieRepo *repository.MovieRepository,
 	subtitleFetcher *subtitles.Fetcher,
 	subtitleRepo *repository.SubtitleRepository,
+	seriesRepo *repository.SeriesRepository,
+	audioTrackRepo *repository.AudioTrackRepository,
 	mediaRoot string,
 	tmdbAPIKey string,
 	ffmpegThreads int,
@@ -65,6 +69,7 @@ func New(
 	return &Worker{
 		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
 		subtitleFetcher: subtitleFetcher, subtitleRepo: subtitleRepo,
+		seriesRepo: seriesRepo, audioTrackRepo: audioTrackRepo,
 		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey, ffmpegThreads: ffmpegThreads,
 		transferEnabled:    transferEnabled,
 		scannerClient:      scannerClient,
@@ -208,7 +213,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		}
 	}
 
-	// ── Create movie row and derive final directory ───────────────────────────
+	// ── Create movie/series row and derive final directory ────────────────────
 	var upsertYear *int
 	var upsertPoster *string
 	if tmdbMeta != nil {
@@ -220,19 +225,62 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			upsertPoster = &p
 		}
 	}
-	movie, err := w.movieRepo.Upsert(jobCtx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, upsertYear, upsertPoster, msg.Payload.StorageKey)
-	if err != nil {
-		w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
-		return
+
+	var finalDir string
+	var contentID int64
+	contentType := msg.ContentType
+	var movie *model.Movie // non-nil for movie content type only
+
+	if contentType == "series" && msg.Payload.SeriesID != nil {
+		series, err := w.seriesRepo.GetSeriesByID(jobCtx, *msg.Payload.SeriesID)
+		if err != nil {
+			w.failJob(ctx, msg, "DB_ERROR", "get series: "+err.Error(), false)
+			return
+		}
+		seasonNum := 1
+		if msg.Payload.SeasonNumber != nil {
+			seasonNum = *msg.Payload.SeasonNumber
+		}
+		season, err := w.seriesRepo.UpsertSeason(jobCtx, series.ID, seasonNum)
+		if err != nil {
+			w.failJob(ctx, msg, "DB_ERROR", "upsert season: "+err.Error(), false)
+			return
+		}
+		episodeNum := 1
+		if msg.Payload.EpisodeNumber != nil {
+			episodeNum = *msg.Payload.EpisodeNumber
+		}
+		epTitle := nullableText(msg.Payload.Title)
+		epStorageKey := fmt.Sprintf("s%02de%02d", seasonNum, episodeNum)
+		episode, err := w.seriesRepo.UpsertEpisode(jobCtx, season.ID, episodeNum, epTitle, epStorageKey)
+		if err != nil {
+			w.failJob(ctx, msg, "DB_ERROR", "upsert episode: "+err.Error(), false)
+			return
+		}
+		finalDir = filepath.Join(w.mediaRoot, "converted", "series", series.StorageKey,
+			fmt.Sprintf("s%02d", seasonNum), fmt.Sprintf("e%02d", episodeNum))
+		contentID = episode.ID
+		contentType = "episode"
+	} else {
+		// Movie path.
+		m, err := w.movieRepo.Upsert(jobCtx, msg.Payload.IMDbID, msg.Payload.TMDBID, msg.Payload.Title, upsertYear, upsertPoster, msg.Payload.StorageKey)
+		if err != nil {
+			w.failJob(ctx, msg, "DB_ERROR", "create movie record: "+err.Error(), false)
+			return
+		}
+		movie = m
+		finalDir = filepath.Join(w.mediaRoot, "converted", "movies", movie.StorageKey)
+		contentID = movie.ID
+		contentType = "movie"
 	}
-	finalDir := filepath.Join(w.mediaRoot, "converted", "movies", movie.StorageKey)
 
 	// ── Archive or delete original source file ───────────────────────────────
 	// For ingest jobs the source is already on the scanner server — just delete local copy.
 	// For remote/torrent jobs, copy to scanner first then delete local copy.
+	// Archive to scanner is only supported for movie content (series archive not yet implemented).
 	if src := msg.Payload.InputPath; src != "" {
 		isIngestJob := strings.HasPrefix(msg.JobID, "ingest-")
-		if !isIngestJob && w.scannerClient != nil && w.ingestSourceRemote != "" {
+		if !isIngestJob && movie != nil && w.scannerClient != nil && w.ingestSourceRemote != "" {
 			if err := w.archiveToScanner(jobCtx, log, src, movie, msg.Payload.TMDBID, msg.Payload.IMDbID, tmdbMeta); err != nil {
 				log.Warn("archive to scanner failed, deleting locally instead", "error", err)
 				if err2 := os.Remove(src); err2 != nil && !os.IsNotExist(err2) {
@@ -282,22 +330,62 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	videoCodec := "h264"
 	audioCodec := "aac"
 
-	asset := &model.Asset{
-		AssetID:       assetID,
-		JobID:         msg.JobID,
-		MovieID:       &movie.ID,
-		StoragePath:   masterPath,
-		ThumbnailPath: thumbFinalPath,
-		DurationSec:   &durationSec,
-		VideoCodec:    &videoCodec,
-		AudioCodec:    &audioCodec,
-		IsReady:       true,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+	if contentType == "episode" {
+		epAsset := &model.EpisodeAsset{
+			AssetID:       assetID,
+			JobID:         msg.JobID,
+			EpisodeID:     contentID,
+			StoragePath:   masterPath,
+			ThumbnailPath: thumbFinalPath,
+			DurationSec:   &durationSec,
+			VideoCodec:    &videoCodec,
+			AudioCodec:    &audioCodec,
+			IsReady:       true,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+		if err := w.seriesRepo.CreateEpisodeAsset(jobCtx, epAsset); err != nil {
+			log.Error("create episode asset record", "error", err)
+			// Non-fatal.
+		}
+	} else {
+		asset := &model.Asset{
+			AssetID:       assetID,
+			JobID:         msg.JobID,
+			MovieID:       &contentID,
+			StoragePath:   masterPath,
+			ThumbnailPath: thumbFinalPath,
+			DurationSec:   &durationSec,
+			VideoCodec:    &videoCodec,
+			AudioCodec:    &audioCodec,
+			IsReady:       true,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+		if err := w.assetRepo.Create(jobCtx, asset); err != nil {
+			log.Error("create asset record", "error", err)
+			// Non-fatal.
+		}
 	}
-	if err := w.assetRepo.Create(jobCtx, asset); err != nil {
-		log.Error("create asset record", "error", err)
-		// Non-fatal.
+
+	// ── Save audio tracks ─────────────────────────────────────────────────────
+	if len(result.AudioTracks) > 0 {
+		var tracks []model.AudioTrack
+		for i, at := range result.AudioTracks {
+			lang := nullableText(at.Language)
+			label := nullableText(at.Title)
+			tracks = append(tracks, model.AudioTrack{
+				AssetID:    assetID,
+				AssetType:  contentType,
+				TrackIndex: i,
+				Language:   lang,
+				Label:      label,
+				IsDefault:  i == 0,
+			})
+		}
+		if err := w.audioTrackRepo.BulkInsert(jobCtx, tracks); err != nil {
+			log.Warn("save audio tracks failed", "error", err)
+		}
 	}
 
 	// Best-effort cleanup of original downloaded torrent data on successful convert.
@@ -308,10 +396,10 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 
 	log.Info("job completed", "asset_id", assetID, "master", masterPath)
 
-	// ── Subtitle fetch (best-effort, non-fatal) ───────────────────────────────
+	// ── Subtitle fetch (best-effort, non-fatal, movies only) ─────────────────
 	// Must run BEFORE transfer enqueue to avoid race: rclone move may start
 	// while subtitle files are still being written to finalDir.
-	if w.subtitleFetcher != nil && msg.Payload.TMDBID != "" {
+	if movie != nil && w.subtitleFetcher != nil && msg.Payload.TMDBID != "" {
 		results := w.subtitleFetcher.FetchAndSave(jobCtx, msg.Payload.TMDBID, finalDir)
 		for _, sub := range results {
 			extID := &sub.ExternalID
@@ -338,9 +426,10 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			CorrelationID: msg.CorrelationID,
 			CreatedAt:     time.Now().UTC(),
 			Payload: model.TransferJob{
-				MovieID:    movie.ID,
-				StorageKey: movie.StorageKey,
-				LocalPath:  finalDir,
+				MovieID:     contentID,
+				StorageKey:  filepath.Base(finalDir),
+				LocalPath:   finalDir,
+				ContentType: msg.ContentType,
 			},
 		}
 		if err := w.q.Push(ctx, queue.TransferQueue, tfMsg); err != nil {
@@ -350,7 +439,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 				log.Error("fallback complete failed", "error", err2)
 			}
 		} else {
-			log.Info("transfer job enqueued", "movie_id", movie.ID)
+			log.Info("transfer job enqueued", "content_id", contentID, "content_type", contentType)
 		}
 	} else {
 		// No transfer configured: mark job completed immediately.
@@ -578,3 +667,10 @@ func downloadImage(ctx context.Context, url, destPath string) error {
 	return err
 }
 
+func nullableText(v string) *string {
+	trimmed := strings.TrimSpace(v)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}

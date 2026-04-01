@@ -101,6 +101,8 @@ func main() {
 	assetRepo := repository.NewAssetRepository(pool)
 	movieRepo := repository.NewMovieRepository(pool)
 	subtitleRepo := repository.NewSubtitleRepository(pool)
+	seriesRepo := repository.NewSeriesRepository(pool)
+	audioTrackRepo := repository.NewAudioTrackRepository(pool)
 
 	// ── Subtitle fetcher (optional) ────────────────────────────────────────────
 	var subtitleFetcher *subtitles.Fetcher
@@ -130,7 +132,8 @@ func main() {
 	}
 
 	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo,
-		subtitleFetcher, subtitleRepo, cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads,
+		subtitleFetcher, subtitleRepo, seriesRepo, audioTrackRepo,
+		cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads,
 		cfg.RcloneRemote != "", scannerClientForArchive,
 		cfg.IngestSourceRemote, cfg.ArchiveDestPath, registry)
 	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot, registry)
@@ -225,7 +228,7 @@ func main() {
 	if cfg.IngestServiceToken != "" && cfg.IngestSourceRemote != "" {
 		ingestClient := ingest.NewClient(cfg.ScannerAPIURL, cfg.IngestServiceToken)
 		ingestPuller := ingest.NewPuller(cfg.IngestSourceRemote, cfg.IngestSourceBasePath)
-		ingestWkr := ingest.New(ingestClient, ingestPuller, jobRepo, redisClient, cfg.MediaRoot, cfg.IngestClaimTTLSec)
+		ingestWkr := ingest.New(ingestClient, ingestPuller, jobRepo, seriesRepo, redisClient, cfg.MediaRoot, cfg.IngestClaimTTLSec)
 		for i := 0; i < cfg.IngestConcurrency; i++ {
 			wg.Add(1)
 			go func() {
