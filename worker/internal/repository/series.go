@@ -3,8 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"strings"
-	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -161,27 +159,7 @@ func (r *SeriesRepository) GetSeriesByID(ctx context.Context, id int64) (*model.
 }
 
 // buildSeriesStorageKey builds a filesystem-safe folder name for a series.
-// Uses parentheses instead of brackets to avoid rclone glob interpretation:
-// {slug}_{year}_(tmdb_id)
+// Format matches movie convention: {slug}_{year}_[{tmdb_id}].
 func buildSeriesStorageKey(title string, year *int, tmdbID *string) string {
-	var sb strings.Builder
-	for _, r := range strings.ToLower(title) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ' {
-			sb.WriteRune(r)
-		}
-	}
-	slug := strings.TrimSpace(sb.String())
-	slug = strings.Join(strings.Fields(slug), "_")
-	if slug == "" {
-		slug = "untitled"
-	}
-	parts := []string{slug}
-	if year != nil && *year > 0 {
-		parts = append(parts, fmt.Sprintf("%d", *year))
-	}
-	key := strings.Join(parts, "_")
-	if tmdbID != nil && *tmdbID != "" {
-		key += fmt.Sprintf("_(%s)", *tmdbID)
-	}
-	return key
+	return buildStorageKey(title, year, tmdbID)
 }
