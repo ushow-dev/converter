@@ -80,7 +80,7 @@ api/
     ├── subtitles/                  # Клиент OpenSubtitles + конвертация SRT→VTT
     └── db/
         ├── postgres.go             # Пул соединений pgxpool + авто-миграции
-        └── migrations/             # SQL миграции (001–013)
+        └── migrations/             # SQL миграции (001–014)
 ```
 
 ---

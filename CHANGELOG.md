@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Added
+- `api/internal/db/migrations/014_series_and_audio_tracks.sql`: new tables `series`, `seasons`, `episodes`, `episode_assets`, `episode_subtitles`, `audio_tracks`; extends `media_jobs` with `series_id`, `season_number`, `episode_number` columns — foundation for series/episode support
+
 ### Fixed
 - `player/src/app/PlayerClient.tsx`: replace `reattachHlsAfterAd` (destroy+recreate hls.js on ad end) with `onAdStart`/`onAdEnd` using `detachMedia`/`attachMedia` — preserves the P2P engine and WebRTC connections across VAST ads
 - `player/src/app/PlayerClient.tsx`: gate Fluid Player init on `hlsReady` state instead of `streamMode !== 'pending'` — eliminates race where Fluid Player could initialize before hls.js parsed the manifest, killing MSE/P2P playback
