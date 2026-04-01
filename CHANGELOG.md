@@ -18,6 +18,8 @@
 - `worker/internal/model/series.go`: new worker-side domain structs `Series`, `Season`, `Episode`, `EpisodeAsset`, `AudioTrack` mirroring API models (no JSON tags on domain structs)
 - `worker/internal/model/model.go`: added `SeriesID`, `SeasonNumber`, `EpisodeNumber` to `ConvertJob`; added `ContentType`, `EpisodeID` to `TransferJob` to route series content through the worker pipeline
 - `worker/internal/ffmpeg/runner.go`: `HLSResult` now carries `AudioTracks []AudioStreamInfo` — callers can persist per-track language/title metadata after encoding
+- `worker/internal/repository/series.go`: new `SeriesRepository` with `UpsertSeries`, `UpsertSeason`, `UpsertEpisode`, `CreateEpisodeAsset`, `GetSeriesByID` — persists series catalog and episode records after conversion
+- `worker/internal/repository/audio_track.go`: new `AudioTrackRepository` with `BulkInsert` — persists audio track metadata produced by multi-audio HLS encoding
 
 ### Changed
 - `worker/internal/ffmpeg/runner.go`: `RunHLS` now maps all audio tracks from the source file into every HLS variant instead of hardcoding `0:a:0`; falls back to probeHasAudio and a single synthetic silence track when ProbeAudioStreams fails; builds `var_stream_map` dynamically so N audio × 3 video variants are correctly muxed; writes language/title metadata tags per audio stream
