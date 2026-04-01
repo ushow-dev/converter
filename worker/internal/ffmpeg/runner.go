@@ -18,6 +18,7 @@ import (
 type HLSResult struct {
 	DurationSec int
 	HasAudio    bool
+	AudioTracks []AudioStreamInfo
 }
 
 // RunHLS converts inputPath to a 3-variant HLS stream (720p / 480p / 360p)
@@ -60,14 +61,23 @@ func RunHLS(
 	if gop < 1 {
 		gop = 1
 	}
-	hasAudio := probeHasAudio(ctx, inputPath)
+	audioStreams, probeErr := ProbeAudioStreams(ctx, inputPath)
+	hasAudio := len(audioStreams) > 0
+	if probeErr != nil {
+		slog.Warn("could not probe audio streams, checking fallback", "error", probeErr)
+		hasAudio = probeHasAudio(ctx, inputPath)
+		if hasAudio {
+			audioStreams = []AudioStreamInfo{{Index: 0, Language: "und", Title: ""}}
+		}
+	}
 
 	segS := strconv.Itoa(segDur)
 	gopS := strconv.Itoa(gop)
 
 	slog.Info("HLS encode params",
 		"target_fps", targetFPS, "gop", gop,
-		"seg_dur", segDur, "has_audio", hasAudio)
+		"seg_dur", segDur, "has_audio", hasAudio,
+		"audio_tracks", len(audioStreams))
 
 	filterComplex := "[0:v]split=3[v720][v480][v360];" +
 		"[v720]scale=-2:720:flags=bicubic[v720o];" +
@@ -85,6 +95,7 @@ func RunHLS(
 		args = append(args,
 			"-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000")
 		aSrc = "1"
+		audioStreams = []AudioStreamInfo{{Index: 0, Language: "und", Title: "Silence"}}
 	}
 
 	args = append(args,
@@ -93,45 +104,78 @@ func RunHLS(
 		"-filter_complex", filterComplex,
 	)
 
-	// 720p stream — per-stream map keeps HLS muxer happy (shared audio causes exit 234).
-	// bufsize ~2× maxrate gives the encoder headroom for variable scenes.
-	args = append(args,
-		"-map", "[v720o]", "-map", aSrc+":a:0",
-		"-c:v:0", "libx264", "-preset", "fast",
-		"-profile:v:0", "high", "-level:v:0", "4.0",
-		"-pix_fmt:v:0", "yuv420p", "-sc_threshold:v:0", "0",
-		"-x264-params:v:0", "rc-lookahead=30",
-		"-b:v:0", "1050k", "-maxrate:v:0", "1155k", "-bufsize:v:0", "2300k",
-		"-g:v:0", gopS, "-keyint_min:v:0", gopS,
-		"-c:a:0", "aac", "-b:a:0", "80k", "-ar:a:0", "48000", "-ac:a:0", "2",
-	)
+	numAudio := len(audioStreams)
 
-	// 480p stream
-	args = append(args,
-		"-map", "[v480o]", "-map", aSrc+":a:0",
-		"-c:v:1", "libx264", "-preset", "fast",
-		"-profile:v:1", "high", "-level:v:1", "4.0",
-		"-pix_fmt:v:1", "yuv420p", "-sc_threshold:v:1", "0",
-		"-x264-params:v:1", "rc-lookahead=30",
-		"-b:v:1", "700k", "-maxrate:v:1", "770k", "-bufsize:v:1", "1500k",
-		"-g:v:1", gopS, "-keyint_min:v:1", gopS,
-		"-c:a:1", "aac", "-b:a:1", "80k", "-ar:a:1", "48000", "-ac:a:1", "2",
-	)
+	type variantSpec struct {
+		videoMap string
+		videoIdx string
+		bitrate  string
+		maxrate  string
+		bufsize  string
+	}
+	variants := []variantSpec{
+		{"[v720o]", "0", "1050k", "1155k", "2300k"},
+		{"[v480o]", "1", "700k", "770k", "1500k"},
+		{"[v360o]", "2", "320k", "352k", "700k"},
+	}
 
-	// 360p stream
-	args = append(args,
-		"-map", "[v360o]", "-map", aSrc+":a:0",
-		"-c:v:2", "libx264", "-preset", "fast",
-		"-profile:v:2", "high", "-level:v:2", "4.0",
-		"-pix_fmt:v:2", "yuv420p", "-sc_threshold:v:2", "0",
-		"-x264-params:v:2", "rc-lookahead=30",
-		"-b:v:2", "320k", "-maxrate:v:2", "352k", "-bufsize:v:2", "700k",
-		"-g:v:2", gopS, "-keyint_min:v:2", gopS,
-		"-c:a:2", "aac", "-b:a:2", "80k", "-ar:a:2", "48000", "-ac:a:2", "2",
-	)
+	for _, v := range variants {
+		args = append(args, "-map", v.videoMap)
+		for ai := 0; ai < numAudio; ai++ {
+			args = append(args, "-map", fmt.Sprintf("%s:a:%d", aSrc, ai))
+		}
+		args = append(args,
+			"-c:v:"+v.videoIdx, "libx264", "-preset", "fast",
+			"-profile:v:"+v.videoIdx, "high", "-level:v:"+v.videoIdx, "4.0",
+			"-pix_fmt:v:"+v.videoIdx, "yuv420p", "-sc_threshold:v:"+v.videoIdx, "0",
+			"-x264-params:v:"+v.videoIdx, "rc-lookahead=30",
+			"-b:v:"+v.videoIdx, v.bitrate, "-maxrate:v:"+v.videoIdx, v.maxrate, "-bufsize:v:"+v.videoIdx, v.bufsize,
+			"-g:v:"+v.videoIdx, gopS, "-keyint_min:v:"+v.videoIdx, gopS,
+		)
+		vi, _ := strconv.Atoi(v.videoIdx)
+		for ai := 0; ai < numAudio; ai++ {
+			aIdx := strconv.Itoa(vi*numAudio + ai)
+			args = append(args,
+				"-c:a:"+aIdx, "aac", "-b:a:"+aIdx, "80k",
+				"-ar:a:"+aIdx, "48000", "-ac:a:"+aIdx, "2",
+			)
+		}
+	}
+
+	// Set audio stream metadata (language tags).
+	globalAudioIdx := 0
+	for vi := 0; vi < 3; vi++ {
+		for ai := 0; ai < numAudio; ai++ {
+			if audioStreams[ai].Language != "" {
+				args = append(args,
+					fmt.Sprintf("-metadata:s:a:%d", globalAudioIdx),
+					"language="+audioStreams[ai].Language,
+				)
+			}
+			if audioStreams[ai].Title != "" {
+				args = append(args,
+					fmt.Sprintf("-metadata:s:a:%d", globalAudioIdx),
+					"title="+audioStreams[ai].Title,
+				)
+			}
+			globalAudioIdx++
+		}
+	}
 
 	if !hasAudio {
 		args = append(args, "-shortest")
+	}
+
+	// Build -var_stream_map: "v:0,a:0,a:1,name:720 v:1,a:2,a:3,name:480 ..."
+	var varStreamParts []string
+	names := []string{"720", "480", "360"}
+	for vi := 0; vi < 3; vi++ {
+		part := fmt.Sprintf("v:%d", vi)
+		for ai := 0; ai < numAudio; ai++ {
+			part += fmt.Sprintf(",a:%d", vi*numAudio+ai)
+		}
+		part += ",name:" + names[vi]
+		varStreamParts = append(varStreamParts, part)
 	}
 
 	args = append(args,
@@ -141,7 +185,7 @@ func RunHLS(
 		"-hls_list_size", "0",
 		"-hls_flags", "independent_segments",
 		"-master_pl_name", "master.m3u8",
-		"-var_stream_map", "v:0,a:0,name:720 v:1,a:1,name:480 v:2,a:2,name:360",
+		"-var_stream_map", strings.Join(varStreamParts, " "),
 		"-hls_segment_filename", filepath.Join(outputDir, "%v", "seg%03d.ts"),
 		filepath.Join(outputDir, "%v", "index.m3u8"),
 	)
@@ -180,6 +224,7 @@ func RunHLS(
 	return &HLSResult{
 		DurationSec: int(totalSec),
 		HasAudio:    hasAudio,
+		AudioTracks: audioStreams,
 	}, nil
 }
 

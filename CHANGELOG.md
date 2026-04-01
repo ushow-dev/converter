@@ -17,6 +17,10 @@
 - `api/internal/db/migrations/014_series_and_audio_tracks.sql`: new tables `series`, `seasons`, `episodes`, `episode_assets`, `episode_subtitles`, `audio_tracks`; extends `media_jobs` with `series_id`, `season_number`, `episode_number` columns — foundation for series/episode support
 - `worker/internal/model/series.go`: new worker-side domain structs `Series`, `Season`, `Episode`, `EpisodeAsset`, `AudioTrack` mirroring API models (no JSON tags on domain structs)
 - `worker/internal/model/model.go`: added `SeriesID`, `SeasonNumber`, `EpisodeNumber` to `ConvertJob`; added `ContentType`, `EpisodeID` to `TransferJob` to route series content through the worker pipeline
+- `worker/internal/ffmpeg/runner.go`: `HLSResult` now carries `AudioTracks []AudioStreamInfo` — callers can persist per-track language/title metadata after encoding
+
+### Changed
+- `worker/internal/ffmpeg/runner.go`: `RunHLS` now maps all audio tracks from the source file into every HLS variant instead of hardcoding `0:a:0`; falls back to probeHasAudio and a single synthetic silence track when ProbeAudioStreams fails; builds `var_stream_map` dynamically so N audio × 3 video variants are correctly muxed; writes language/title metadata tags per audio stream
 
 ### Fixed
 - `player/src/app/PlayerClient.tsx`: replace `reattachHlsAfterAd` (destroy+recreate hls.js on ad end) with `onAdStart`/`onAdEnd` using `detachMedia`/`attachMedia` — preserves the P2P engine and WebRTC connections across VAST ads
