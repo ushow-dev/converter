@@ -50,6 +50,11 @@
 - `frontend/src/app/series/page.tsx`: new series list page with cursor pagination and table view
 - `frontend/src/app/series/[id]/page.tsx`: new series detail page with metadata header, collapsible season sections, and episode tables
 
+- `docs/contracts/api.md`: added admin series endpoints (`GET /api/admin/series`, `GET /api/admin/series/{seriesId}`, `DELETE /api/admin/series/{seriesId}`) with request/response examples
+- `REPO_MAP.md`: added entries for all new series-support files — handler, model, repository layers for both API and Worker; added `player/` dedicated section with `SeriesPlayer.tsx`; added frontend series pages
+- `docs/decisions/ADR-011-separate-tables-for-series.md`: new ADR documenting the decision to use separate `series`/`seasons`/`episodes` tables instead of extending the polymorphic `movies` table
+- `docs/decisions/README.md`: added ADR-011 to the index, updated next number to 012
+
 ### Changed
 - `worker/internal/ffmpeg/runner.go`: `RunHLS` now maps all audio tracks from the source file into every HLS variant instead of hardcoding `0:a:0`; falls back to probeHasAudio and a single synthetic silence track when ProbeAudioStreams fails; builds `var_stream_map` dynamically so N audio × 3 video variants are correctly muxed; writes language/title metadata tags per audio stream
 

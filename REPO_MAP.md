@@ -59,6 +59,7 @@ api/
     │   ├── search.go               # GET /api/admin/search (Prowlarr)
     │   ├── jobs.go                 # CRUD /api/admin/jobs
     │   ├── movies.go               # CRUD /api/admin/movies
+    │   ├── series.go               # CRUD /api/admin/series + GET /api/player/series + /api/player/episode
     │   ├── player.go               # GET /api/player/movie, /api/player/assets, POST /api/player/p2p-metrics
     │   ├── metrics.go              # GET /metrics (Prometheus P2P counters)
     │   ├── subtitles.go            # Управление субтитрами
@@ -72,9 +73,13 @@ api/
     │   ├── asset.go                # media_assets таблица
     │   ├── movie.go                # movies таблица
     │   ├── subtitle.go             # movie_subtitles таблица
-    │   └── search.go               # search_results кэш
+    │   ├── search.go               # search_results кэш
+    │   ├── series.go               # series, seasons, episodes таблицы
+    │   ├── audio_track.go          # media_audio_tracks таблица
+    │   └── episode_subtitle.go     # episode_subtitles таблица
     ├── auth/                       # JWT-токены и middleware авторизации
     ├── model/                      # Доменные модели и payload-структуры очереди
+    │   └── series.go               # Series, Season, Episode, AudioTrack структуры
     ├── queue/                      # Redis клиент (RPUSH/BLPOP)
     ├── indexer/                    # Клиент Prowlarr + circuit breaker
     ├── subtitles/                  # Клиент OpenSubtitles + конвертация SRT→VTT
@@ -95,8 +100,11 @@ worker/
 └── internal/
     ├── config/                     # Конфигурация (concurrency, FFmpeg threads)
     ├── model/                      # Модели сообщений очереди
+    │   └── series.go               # Series, Season, Episode, AudioTrack структуры (mirror API)
     ├── queue/                      # Redis консьюмер (BLPOP)
     ├── repository/                 # Обновление статусов заданий в БД
+    │   ├── series.go               # Запись series/seasons/episodes после конвертации
+    │   └── audio_track.go          # Запись audio_tracks после зондирования
     ├── downloader/                 # Потребитель download_queue (торренты)
     ├── httpdownloader/             # Потребитель remote_download_queue (HTTP)
     ├── converter/                  # Потребитель convert_queue (FFmpeg HLS)
@@ -106,6 +114,7 @@ worker/
     │   ├── client.go               # HTTP клиент к scanner API
     │   └── puller.go               # rclone copy с storage-сервера
     ├── ffmpeg/                     # Обёртка FFmpeg (профили, thumbnail)
+    │   └── probe.go                # ffprobe audio track detection
     ├── qbittorrent/                # API-клиент qBittorrent
     ├── subtitles/                  # Авто-получение субтитров
     ├── health/                     # HTTP health server (порт 8001)
@@ -134,11 +143,29 @@ frontend/
     │   ├── upload/page.tsx         # Загрузка файлов + HTTP-загрузка
     │   ├── queue/page.tsx          # Очередь заданий
     │   ├── movies/page.tsx         # Каталог фильмов
+    │   ├── series/page.tsx         # Каталог сериалов
+    │   ├── series/[id]/page.tsx    # Детали сериала (сезоны и эпизоды)
     │   └── jobs/[jobId]/page.tsx   # Детали задания
     └── components/
         ├── Nav.tsx                 # Навигационная панель
         ├── VideoPlayer.tsx         # HLS-плеер (hls.js)
         └── SubtitleSection.tsx     # Управление субтитрами
+```
+
+---
+
+## `player/` — Player UI (Next.js)
+
+```
+player/
+├── package.json
+├── next.config.mjs
+├── Dockerfile
+└── src/
+    └── app/
+        ├── layout.tsx              # Root layout с HLS + P2P инициализацией
+        ├── page.tsx                # Movie player (tmdb_id query param)
+        └── SeriesPlayer.tsx        # Series player (сезоны, эпизоды, навигация)
 ```
 
 ---

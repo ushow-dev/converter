@@ -264,6 +264,80 @@ Header: X-Player-Key: <PLAYER_API_KEY>
 
 ---
 
+### GET /api/admin/series
+**Назначение:** Список сериалов с курсорной пагинацией
+
+**Auth:** JWT
+
+**Query params:**
+- `cursor` (optional) — series_id последнего элемента предыдущей страницы
+- `limit` (optional, default: 20)
+
+**Response 200:**
+```json
+{
+  "series": [
+    {
+      "id": "number",
+      "tmdb_id": "number",
+      "imdb_id": "string",
+      "title": "string",
+      "year": "number",
+      "poster_url": "string",
+      "created_at": "string (ISO 8601)"
+    }
+  ],
+  "next_cursor": "string (null если последняя страница)"
+}
+```
+
+---
+
+### GET /api/admin/series/{seriesId}
+**Назначение:** Детали сериала со всеми сезонами и эпизодами
+
+**Auth:** JWT
+
+**Response 200:**
+```json
+{
+  "id": "number",
+  "tmdb_id": "number",
+  "imdb_id": "string",
+  "title": "string",
+  "year": "number",
+  "poster_url": "string",
+  "created_at": "string (ISO 8601)",
+  "seasons": [
+    {
+      "season_number": "number",
+      "episodes": [
+        {
+          "id": "number",
+          "episode_number": "number",
+          "title": "string",
+          "job_id": "string (null если нет задания)",
+          "is_ready": "boolean",
+          "asset_id": "string (null если не готово)",
+          "created_at": "string (ISO 8601)"
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### DELETE /api/admin/series/{seriesId}
+**Назначение:** Удалить сериал и все связанные данные (сезоны, эпизоды, ассеты)
+
+**Auth:** JWT
+
+**Response 204:** (no content)
+
+---
+
 ### GET /api/admin/movies/{movieId}/subtitles
 **Response 200:**
 ```json
