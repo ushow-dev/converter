@@ -212,6 +212,8 @@ def _process_series_folder(cfg: Config, folder_path: Path, now: datetime) -> Non
     tmdb_result = metadata.tmdb_tv_search(first["title"], first.get("year"), cfg.tmdb_api_key)
     series_tmdb_id = tmdb_result["tmdb_id"] if tmdb_result else None
 
+    canonical_title = tmdb_result["title"] if tmdb_result else first["title"]
+
     for ep in episodes:
         file_path = ep["file_path"]
         try:
@@ -220,6 +222,10 @@ def _process_series_folder(cfg: Config, folder_path: Path, now: datetime) -> Non
             continue
         if current_size < MIN_FILE_SIZE_BYTES:
             continue
+
+        ep_year = ep.get("year") or first.get("year")
+        ep_normalized = metadata.build_normalized_name(canonical_title, ep_year, series_tmdb_id)
+        ep_normalized = f"{ep_normalized}_s{ep['season']:02d}e{ep['episode']:02d}"
 
         conn = db.get_conn()
         try:
@@ -236,13 +242,16 @@ def _process_series_folder(cfg: Config, folder_path: Path, now: datetime) -> Non
                         """
                         INSERT INTO scanner_incoming_items
                             (source_path, source_filename, file_size_bytes, status,
-                             content_kind, series_tmdb_id, season_number, episode_number)
-                        VALUES (%s, %s, %s, 'registered', 'episode', %s, %s, %s)
+                             content_kind, normalized_name, tmdb_id,
+                             series_tmdb_id, season_number, episode_number)
+                        VALUES (%s, %s, %s, 'registered', 'episode', %s, %s, %s, %s, %s)
                         """,
                         (
                             str(file_path),
                             file_path.name,
                             current_size,
+                            ep_normalized,
+                            series_tmdb_id,
                             series_tmdb_id,
                             ep["season"],
                             ep["episode"],

@@ -131,6 +131,10 @@ func (w *Worker) processItem(ctx context.Context, item IncomingItem) {
 	if item.TMDBID != nil {
 		tmdbID = *item.TMDBID
 	}
+	// For episodes, use series TMDB ID if item-level TMDB ID is empty.
+	if tmdbID == "" && item.SeriesTMDBID != nil {
+		tmdbID = *item.SeriesTMDBID
+	}
 	outputPath := filepath.Join(w.mediaRoot, "temp", jobID)
 
 	msg := model.ConvertMessage{

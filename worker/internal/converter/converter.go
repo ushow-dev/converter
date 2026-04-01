@@ -231,7 +231,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	contentType := msg.ContentType
 	var movie *model.Movie // non-nil for movie content type only
 
-	if contentType == "series" && msg.Payload.SeriesID != nil {
+	if (contentType == "series" || contentType == "episode") && msg.Payload.SeriesID != nil {
 		series, err := w.seriesRepo.GetSeriesByID(jobCtx, *msg.Payload.SeriesID)
 		if err != nil {
 			w.failJob(ctx, msg, "DB_ERROR", "get series: "+err.Error(), false)
