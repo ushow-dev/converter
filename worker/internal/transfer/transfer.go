@@ -97,9 +97,14 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		log.Error("set transfer stage", "error", err)
 	}
 
-	dest := fmt.Sprintf("%s:%s/movies/%s/",
+	contentDir := "movies"
+	if msg.Payload.ContentType == "episode" {
+		contentDir = "series"
+	}
+	dest := fmt.Sprintf("%s:%s/%s/%s/",
 		w.rcloneRemote,
 		filepath.ToSlash(w.remotePath),
+		contentDir,
 		msg.Payload.StorageKey,
 	)
 

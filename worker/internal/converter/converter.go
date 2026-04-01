@@ -427,9 +427,9 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			CreatedAt:     time.Now().UTC(),
 			Payload: model.TransferJob{
 				MovieID:     contentID,
-				StorageKey:  filepath.Base(finalDir),
+				StorageKey:  transferStorageKey(finalDir, w.mediaRoot, contentType),
 				LocalPath:   finalDir,
-				ContentType: msg.ContentType,
+				ContentType: contentType,
 			},
 		}
 		if err := w.q.Push(ctx, queue.TransferQueue, tfMsg); err != nil {
@@ -550,6 +550,19 @@ func parseQuality(filename string) (score int, label string) {
 func (w *Worker) failJob(ctx context.Context, msg model.ConvertMessage, code, message string, retryable bool) {
 	slog.Error("convert failed", "job_id", msg.JobID, "code", code, "error", message)
 	_ = w.jobRepo.SetFailed(ctx, msg.JobID, code, message, retryable)
+}
+
+// transferStorageKey derives the storage key for the transfer message.
+// For movies: just the folder name (e.g. "inception_2010_[16662]").
+// For episodes: relative path from converted/{type}/ (e.g. "devil_may_cry_2025_[235930]/s01/e02").
+func transferStorageKey(finalDir, mediaRoot, contentType string) string {
+	if contentType == "episode" {
+		prefix := filepath.Join(mediaRoot, "converted", "series") + "/"
+		if rel := strings.TrimPrefix(filepath.ToSlash(finalDir), filepath.ToSlash(prefix)); rel != filepath.ToSlash(finalDir) {
+			return rel
+		}
+	}
+	return filepath.Base(finalDir)
 }
 
 // failOrRequeue marks failed or re-enqueues if attempts remain.

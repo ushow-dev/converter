@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"app/worker/internal/model"
@@ -114,7 +115,12 @@ func (w *Worker) processItem(ctx context.Context, item IncomingItem) {
 
 	var seriesID *int64
 	if contentKind == "episode" && item.SeriesTMDBID != nil {
-		series, err := w.seriesRepo.UpsertSeries(ctx, *item.SeriesTMDBID, "", title, nil, nil, "")
+		// Strip episode suffix (_sNNeNN) from normalized name to get series title.
+		seriesTitle := title
+		if idx := strings.LastIndex(seriesTitle, "_s"); idx > 0 {
+			seriesTitle = seriesTitle[:idx]
+		}
+		series, err := w.seriesRepo.UpsertSeries(ctx, *item.SeriesTMDBID, "", seriesTitle, nil, nil, "")
 		if err != nil {
 			log.Error("upsert series for ingest failed", "error", err)
 		} else {
