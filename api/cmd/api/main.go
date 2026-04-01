@@ -63,6 +63,9 @@ func main() {
 	searchRepo := repository.NewSearchRepository(pool)
 	subtitleRepo := repository.NewSubtitleRepository(pool)
 	storageLocRepo := repository.NewStorageLocationRepository(pool)
+	seriesRepo := repository.NewSeriesRepository(pool)
+	audioTrackRepo := repository.NewAudioTrackRepository(pool)
+	epSubtitleRepo := repository.NewEpisodeSubtitleRepository(pool)
 
 	// ── Indexer backend ────────────────────────────────────────────────────────
 	prowlarr := indexer.NewProwlarrClient(cfg.ProwlarrBaseURL, cfg.ProwlarrAPIKey)
@@ -87,6 +90,9 @@ func main() {
 		movieRepo,
 		subtitleRepo,
 		storageLocRepo,
+		seriesRepo,
+		audioTrackRepo,
+		epSubtitleRepo,
 		cfg.MediaBaseURL,
 		cfg.MediaSigningKey,
 		cfg.MediaSigningTTL,
