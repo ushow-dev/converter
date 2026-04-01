@@ -12,6 +12,10 @@
 ## [Unreleased]
 
 ### Added
+- `player/src/app/SeriesPlayer.tsx`: new client component — handles series navigation with season/episode dropdowns, prev/next buttons, and single-episode embed mode; converts episode API data into `MovieResponse` format for `PlayerClient`
+- `player/src/app/page.tsx`: added `type`, `s`, `e`, `nav` search params; routing logic dispatches to `SeriesPlayer` for `type=series` requests (full navigation or single-episode embed) and to `PlayerClient` for movies
+- `player/src/app/globals.css`: added `.series-player-wrapper`, `.series-nav`, `.series-title`, `.series-selectors`, `.series-select`, `.series-ep-nav`, `.ep-nav-btn` styles for series navigation UI
+
 - `player/src/app/PlayerClient.tsx`: added `AudioTrackInfo` interface, `audioTracks`/`selectedAudio` state, `applyAudioTrack` callback, and audio track selector UI in the settings panel — shows "Озвучка" section when HLS stream has more than one audio track
 - `api/internal/model/series.go`: new model structs `Series`, `Season`, `Episode`, `EpisodeAsset`, `EpisodeSubtitle`, `AudioTrack`, and `ContentTypeSeries` constant — domain models for series/episode support
 - `api/internal/model/model.go`: extended `ConvertJob` with `SeriesID`, `SeasonNumber`, `EpisodeNumber` fields; extended `TransferJob` with `ContentType` and `EpisodeID` fields — enables queue payloads to carry series context

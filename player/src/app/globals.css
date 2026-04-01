@@ -90,3 +90,14 @@ html, body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 
   width: 100%; aspect-ratio: 16/9;
   background: #000; color: #888; font-size: 14px;
 }
+
+/* Series navigation */
+.series-player-wrapper { width: 100%; }
+.series-nav { display: flex; align-items: center; gap: 12px; padding: 8px 0; flex-wrap: wrap; }
+.series-title { font-weight: 600; font-size: 14px; color: #fff; }
+.series-selectors { display: flex; gap: 8px; }
+.series-select { background: #1a1a2e; color: #fff; border: 1px solid #333; border-radius: 4px; padding: 4px 8px; font-size: 13px; }
+.series-ep-nav { display: flex; gap: 4px; margin-left: auto; }
+.ep-nav-btn { background: #1a1a2e; color: #ccc; border: 1px solid #333; border-radius: 4px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+.ep-nav-btn:hover { background: #2a2a4e; color: #fff; }
+.ep-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
