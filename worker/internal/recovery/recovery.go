@@ -69,37 +69,17 @@ func Run(ctx context.Context, pool *pgxpool.Pool, q *queue.Client) {
 		lockKey := j.JobID + "_" + stage
 		q.ReleaseLock(ctx, lockKey)
 
-		// Reset job to queued.
-		_, err := pool.Exec(ctx, `
-			UPDATE media_jobs
-			SET status = 'queued', stage = NULL, progress_percent = 0, updated_at = NOW()
-			WHERE job_id = $1 AND status = 'in_progress'`,
-			j.JobID)
-		if err != nil {
-			slog.Error("recovery: reset job", "job_id", j.JobID, "error", err)
-			continue
-		}
-
-		// Re-push to the appropriate queue.
-		var pushErr error
 		switch stage {
-		case "convert":
-			msg := model.ConvertMessage{
-				SchemaVersion: "1",
-				JobID:         j.JobID,
-				JobType:       "convert",
-				ContentType:   j.ContentType,
-				CorrelationID: j.JobID,
-				Attempt:       1,
-				MaxAttempts:   5,
-				CreatedAt:     time.Now(),
-				Payload: model.ConvertJob{
-					InputPath: findInputPath(ctx, pool, j.JobID),
-				},
-			}
-			pushErr = q.Push(ctx, queue.ConvertQueue, msg)
-
 		case "transfer":
+			// Transfer jobs can be re-queued — we can reconstruct the payload from DB.
+			_, err := pool.Exec(ctx, `
+				UPDATE media_jobs
+				SET status = 'queued', stage = NULL, progress_percent = 0, updated_at = NOW()
+				WHERE job_id = $1 AND status = 'in_progress'`, j.JobID)
+			if err != nil {
+				slog.Error("recovery: reset transfer job", "job_id", j.JobID, "error", err)
+				continue
+			}
 			msg := model.TransferMessage{
 				SchemaVersion: "1",
 				JobID:         j.JobID,
@@ -107,35 +87,38 @@ func Run(ctx context.Context, pool *pgxpool.Pool, q *queue.Client) {
 				CreatedAt:     time.Now(),
 				Payload:       rebuildTransferPayload(ctx, pool, j.JobID),
 			}
-			pushErr = q.Push(ctx, queue.TransferQueue, msg)
+			if err := q.Push(ctx, queue.TransferQueue, msg); err != nil {
+				slog.Error("recovery: re-push transfer failed", "job_id", j.JobID, "error", err)
+			} else {
+				slog.Info("recovery: transfer job re-queued", "job_id", j.JobID)
+			}
 
 		case "download":
-			// Download jobs are handled by qBittorrent state — just reset to queued.
-			// The download worker will re-check torrent status on next poll.
-			slog.Info("recovery: download job reset to queued (no re-push needed)", "job_id", j.JobID)
-			continue
+			// Download jobs: just reset to queued — download worker re-checks torrent state.
+			_, _ = pool.Exec(ctx, `
+				UPDATE media_jobs
+				SET status = 'queued', stage = NULL, progress_percent = 0, updated_at = NOW()
+				WHERE job_id = $1 AND status = 'in_progress'`, j.JobID)
+			slog.Info("recovery: download job reset to queued", "job_id", j.JobID)
 
 		default:
-			slog.Warn("recovery: unknown stage, resetting to queued only", "job_id", j.JobID, "stage", stage)
-			continue
-		}
-
-		if pushErr != nil {
-			slog.Error("recovery: re-push failed", "job_id", j.JobID, "queue", stage, "error", pushErr)
-		} else {
-			slog.Info("recovery: job re-queued", "job_id", j.JobID, "stage", stage)
+			// Convert and other stages: we can't reconstruct the full convert message
+			// (input path, output profile, series context, etc.). Mark as failed so
+			// the user can retry via admin UI or the scanner re-ingests automatically.
+			_, _ = pool.Exec(ctx, `
+				UPDATE media_jobs
+				SET status = 'failed',
+				    error_code = 'WORKER_RESTART',
+				    error_message = 'worker restarted during ' || COALESCE($2, 'processing'),
+				    retryable = true,
+				    updated_at = NOW()
+				WHERE job_id = $1 AND status = 'in_progress'`,
+				j.JobID, stage)
+			slog.Info("recovery: job marked failed (retryable)", "job_id", j.JobID, "stage", stage)
 		}
 	}
 
 	slog.Info("recovery: done", "recovered", len(stale))
-}
-
-// findInputPath looks up the convert message input path from the job's download dir or temp dir.
-// Falls back to empty string if not determinable — converter will fail gracefully.
-func findInputPath(ctx context.Context, pool *pgxpool.Pool, jobID string) string {
-	var sourceRef string
-	_ = pool.QueryRow(ctx, "SELECT source_ref FROM media_jobs WHERE job_id = $1", jobID).Scan(&sourceRef)
-	return sourceRef
 }
 
 // rebuildTransferPayload reconstructs a TransferJob from DB state.
