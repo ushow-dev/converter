@@ -12,6 +12,7 @@
 ## [Unreleased]
 
 ### Added
+- `player/src/app/PlayerClient.tsx`: added `AudioTrackInfo` interface, `audioTracks`/`selectedAudio` state, `applyAudioTrack` callback, and audio track selector UI in the settings panel — shows "Озвучка" section when HLS stream has more than one audio track
 - `api/internal/model/series.go`: new model structs `Series`, `Season`, `Episode`, `EpisodeAsset`, `EpisodeSubtitle`, `AudioTrack`, and `ContentTypeSeries` constant — domain models for series/episode support
 - `api/internal/model/model.go`: extended `ConvertJob` with `SeriesID`, `SeasonNumber`, `EpisodeNumber` fields; extended `TransferJob` with `ContentType` and `EpisodeID` fields — enables queue payloads to carry series context
 - `api/internal/db/migrations/014_series_and_audio_tracks.sql`: new tables `series`, `seasons`, `episodes`, `episode_assets`, `episode_subtitles`, `audio_tracks`; extends `media_jobs` with `series_id`, `season_number`, `episode_number` columns — foundation for series/episode support

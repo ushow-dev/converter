@@ -19,6 +19,13 @@ interface QualityLevel {
   index: number
 }
 
+interface AudioTrackInfo {
+  index: number
+  language?: string
+  label?: string
+  is_default: boolean
+}
+
 const SUBTITLE_LABELS: Record<string, string> = {
   ru: 'Русский',
   en: 'English',
@@ -127,6 +134,8 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
   const [qualities, setQualities] = useState<QualityLevel[]>([])
   const [selectedQuality, setSelectedQuality] = useState<string>('auto')
   const [showQualityMenu, setShowQualityMenu] = useState(false)
+  const [audioTracks, setAudioTracks] = useState<AudioTrackInfo[]>([])
+  const [selectedAudio, setSelectedAudio] = useState<number>(0)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const quickbarRef = useRef<HTMLDivElement>(null)
@@ -173,6 +182,16 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
           }),
         )
         setQualities(levels)
+
+        const hlsAudioTracks = (hls.audioTracks || []).map(
+          (track: any, idx: number) => ({
+            index: idx,
+            language: track.lang || undefined,
+            label: track.name || track.lang || `Track ${idx + 1}`,
+            is_default: idx === 0,
+          })
+        )
+        setAudioTracks(hlsAudioTracks)
 
         const q = qualityModeRef.current
         if (q === 'auto') hls.currentLevel = -1
@@ -414,6 +433,13 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
     }
   }, [fluidReady, movieData, mountSettingsInPlayer, onAdStart, onAdEnd, setupHlsJsMode])
 
+  const applyAudioTrack = useCallback((index: number) => {
+    setSelectedAudio(index)
+    if (hlsRef.current) {
+      hlsRef.current.audioTrack = index
+    }
+  }, [])
+
   const applyQuality = useCallback(
     (value: string) => {
       qualityModeRef.current = value
@@ -513,6 +539,21 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
                 {q.label}
               </button>
             ))}
+            {audioTracks.length > 1 && (
+              <>
+                <div className="settings-section-label">Озвучка</div>
+                {audioTracks.map((t) => (
+                  <button
+                    key={t.index}
+                    type="button"
+                    className={`quality-item${selectedAudio === t.index ? ' is-active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); applyAudioTrack(t.index) }}
+                  >
+                    {t.label || SUBTITLE_LABELS[t.language ?? ''] || `Track ${t.index + 1}`}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
       </div>
