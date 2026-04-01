@@ -17,6 +17,9 @@ type IncomingItem struct {
 	ContentKind    string  `json:"content_kind"`
 	NormalizedName *string `json:"normalized_name,omitempty"`
 	TMDBID         *string `json:"tmdb_id,omitempty"`
+	SeriesTMDBID   *string `json:"series_tmdb_id,omitempty"`
+	SeasonNumber   *int    `json:"season_number,omitempty"`
+	EpisodeNumber  *int    `json:"episode_number,omitempty"`
 }
 
 // Client is an HTTP client for the scanner ingest API.

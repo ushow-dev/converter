@@ -19,6 +19,7 @@ type Worker struct {
 	client       *Client
 	puller       *Puller
 	jobRepo      *repository.JobRepository
+	seriesRepo   *repository.SeriesRepository
 	queueClient  *queue.Client
 	mediaRoot    string
 	claimTTLSec  int
@@ -30,6 +31,7 @@ func New(
 	client *Client,
 	puller *Puller,
 	jobRepo *repository.JobRepository,
+	seriesRepo *repository.SeriesRepository,
 	queueClient *queue.Client,
 	mediaRoot string,
 	claimTTLSec int,
@@ -38,6 +40,7 @@ func New(
 		client:       client,
 		puller:       puller,
 		jobRepo:      jobRepo,
+		seriesRepo:   seriesRepo,
 		queueClient:  queueClient,
 		mediaRoot:    mediaRoot,
 		claimTTLSec:  claimTTLSec,
@@ -109,6 +112,16 @@ func (w *Worker) processItem(ctx context.Context, item IncomingItem) {
 		return
 	}
 
+	var seriesID *int64
+	if contentKind == "episode" && item.SeriesTMDBID != nil {
+		series, err := w.seriesRepo.UpsertSeries(ctx, *item.SeriesTMDBID, "", title, nil, nil, "")
+		if err != nil {
+			log.Error("upsert series for ingest failed", "error", err)
+		} else {
+			seriesID = &series.ID
+		}
+	}
+
 	// Build and push convert_queue message.
 	finalDir := fmt.Sprintf("ingest_%d", item.ID)
 	if item.NormalizedName != nil {
@@ -137,6 +150,9 @@ func (w *Worker) processItem(ctx context.Context, item IncomingItem) {
 			TMDBID:        tmdbID,
 			Title:         title,
 			StorageKey:    title, // title == normalized_name for ingest items
+			SeriesID:      seriesID,
+			SeasonNumber:  item.SeasonNumber,
+			EpisodeNumber: item.EpisodeNumber,
 		},
 	}
 
