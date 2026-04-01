@@ -100,6 +100,7 @@ func main() {
 	subtitleH := handler.NewSubtitleHandler(movieRepo, subtitleRepo, osClient, cfg.MediaRoot, cfg.SubtitleLanguages, cfg.StorageRemote, cfg.StorageRemotePath)
 	browseH := handler.NewBrowseHandler()
 	scannerH := handler.NewScannerHandler(cfg.ScannerAPIURL, cfg.IngestServiceToken)
+	seriesH := handler.NewSeriesHandler(seriesRepo)
 
 	// ── HTTP server ────────────────────────────────────────────────────────────
 	h := server.New(server.Dependencies{
@@ -113,6 +114,7 @@ func main() {
 		SubtitleHandler: subtitleH,
 		BrowseHandler:   browseH,
 		ScannerHandler:  scannerH,
+		SeriesHandler:   seriesH,
 	})
 
 	if err := server.Start(ctx, cfg, h); err != nil {

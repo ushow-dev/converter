@@ -27,6 +27,7 @@ type Dependencies struct {
 	SubtitleHandler *handler.SubtitleHandler
 	BrowseHandler   *handler.BrowseHandler
 	ScannerHandler  *handler.ScannerHandler
+	SeriesHandler   *handler.SeriesHandler
 }
 
 // New builds the chi router with all routes and middleware registered.
@@ -71,6 +72,9 @@ func New(deps Dependencies) http.Handler {
 			r.Get("/movies/tmdb/search", deps.MoviesHandler.TMDBSearch)
 			r.Get("/scanner/downloads", deps.ScannerHandler.ListDownloads)
 			r.Post("/scanner/downloads/{downloadID}/retry", deps.ScannerHandler.RetryDownload)
+			r.Get("/series", deps.SeriesHandler.List)
+			r.Get("/series/{seriesId}", deps.SeriesHandler.Get)
+			r.Delete("/series/{seriesId}", deps.SeriesHandler.Delete)
 		})
 
 		// Thumbnail: JWT via header or ?token= query param (for <img src>)
