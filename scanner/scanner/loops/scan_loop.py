@@ -57,6 +57,8 @@ def _walk_video_files(root: Path):
         for fname in filenames:
             if fname.startswith("._"):
                 continue  # macOS resource fork files
+            if fname.startswith("REVIEW_"):
+                continue  # already flagged for manual review
             if Path(fname).suffix.lower() in VIDEO_EXTENSIONS:
                 yield Path(dirpath) / fname
 
