@@ -15,6 +15,8 @@
 - `api/internal/model/series.go`: new model structs `Series`, `Season`, `Episode`, `EpisodeAsset`, `EpisodeSubtitle`, `AudioTrack`, and `ContentTypeSeries` constant — domain models for series/episode support
 - `api/internal/model/model.go`: extended `ConvertJob` with `SeriesID`, `SeasonNumber`, `EpisodeNumber` fields; extended `TransferJob` with `ContentType` and `EpisodeID` fields — enables queue payloads to carry series context
 - `api/internal/db/migrations/014_series_and_audio_tracks.sql`: new tables `series`, `seasons`, `episodes`, `episode_assets`, `episode_subtitles`, `audio_tracks`; extends `media_jobs` with `series_id`, `season_number`, `episode_number` columns — foundation for series/episode support
+- `worker/internal/model/series.go`: new worker-side domain structs `Series`, `Season`, `Episode`, `EpisodeAsset`, `AudioTrack` mirroring API models (no JSON tags on domain structs)
+- `worker/internal/model/model.go`: added `SeriesID`, `SeasonNumber`, `EpisodeNumber` to `ConvertJob`; added `ContentType`, `EpisodeID` to `TransferJob` to route series content through the worker pipeline
 
 ### Fixed
 - `player/src/app/PlayerClient.tsx`: replace `reattachHlsAfterAd` (destroy+recreate hls.js on ad end) with `onAdStart`/`onAdEnd` using `detachMedia`/`attachMedia` — preserves the P2P engine and WebRTC connections across VAST ads

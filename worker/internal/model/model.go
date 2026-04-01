@@ -69,7 +69,10 @@ type ConvertJob struct {
 	Title         string `json:"title"`
 	// StorageKey is the pre-built normalized storage key (slug_year_[tmdb]).
 	// When set, the worker uses it directly and skips re-normalization.
-	StorageKey string `json:"storage_key,omitempty"`
+	StorageKey    string `json:"storage_key,omitempty"`
+	SeriesID      *int64 `json:"series_id,omitempty"`
+	SeasonNumber  *int   `json:"season_number,omitempty"`
+	EpisodeNumber *int   `json:"episode_number,omitempty"`
 }
 
 // ProxyConfig holds optional proxy settings for remote HTTP requests.
@@ -173,7 +176,9 @@ type TransferMessage struct {
 
 // TransferJob is the inner payload for a transfer task.
 type TransferJob struct {
-	MovieID    int64  `json:"movie_id"`
-	StorageKey string `json:"storage_key"`
-	LocalPath  string `json:"local_path"`
+	MovieID     int64  `json:"movie_id"`
+	StorageKey  string `json:"storage_key"`
+	LocalPath   string `json:"local_path"`
+	ContentType string `json:"content_type,omitempty"`
+	EpisodeID   *int64 `json:"episode_id,omitempty"`
 }
