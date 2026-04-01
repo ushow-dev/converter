@@ -16,6 +16,33 @@ function TvIcon() {
   )
 }
 
+function Thumbnail({ series }: { series: Series }) {
+  if (series.poster_url) {
+    return (
+      <div className="relative h-16 w-11 shrink-0 overflow-hidden rounded bg-gray-800">
+        <img
+          src={series.poster_url}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={e => {
+            const el = e.currentTarget
+            el.style.display = 'none'
+            el.nextElementSibling?.classList.remove('hidden')
+          }}
+        />
+        <div className="absolute inset-0 hidden flex items-center justify-center bg-gray-800">
+          <TvIcon />
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex h-16 w-11 shrink-0 items-center justify-center rounded bg-gray-800/60">
+      <TvIcon />
+    </div>
+  )
+}
+
 export default function SeriesPage() {
   const router = useRouter()
   const [items, setItems] = useState<Series[]>([])
@@ -93,6 +120,7 @@ export default function SeriesPage() {
               <table className="w-full">
                 <thead className="bg-gray-900 text-left text-xs uppercase tracking-wider text-gray-500">
                   <tr>
+                    <th className="px-3 py-2 w-14" />
                     <th className="px-3 py-2">Название</th>
                     <th className="hidden sm:table-cell px-3 py-2">Год</th>
                     <th className="hidden sm:table-cell px-3 py-2">TMDB</th>
@@ -103,6 +131,11 @@ export default function SeriesPage() {
                 <tbody>
                   {items.map(series => (
                     <tr key={series.id} className="group border-b border-gray-800 hover:bg-gray-900/60">
+                      {/* Poster */}
+                      <td className="w-14 px-3 py-2">
+                        <Thumbnail series={series} />
+                      </td>
+
                       {/* Title */}
                       <td className="px-3 py-3">
                         <Link
