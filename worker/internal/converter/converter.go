@@ -172,6 +172,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	start := time.Now()
 	result, err := ffmpeg.RunHLS(jobCtx, inputPath, outputDir, 4, w.ffmpegThreads, func(pct int) {
 		_ = w.jobRepo.UpdateProgress(jobCtx, msg.JobID, pct)
+		w.q.ExtendLock(jobCtx, lockKey)
 		log.Info("convert progress", "pct", pct)
 	})
 	if err != nil {

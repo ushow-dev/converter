@@ -17,7 +17,7 @@ const (
 	TransferQueue       = "transfer_queue"
 	CancelQueue         = "cancel_queue"
 
-	lockTTL = time.Hour
+	lockTTL = 4 * time.Hour
 )
 
 // ErrEmpty is returned by Pop when the BLPOP timeout elapses with no message.
@@ -76,6 +76,11 @@ func (c *Client) AcquireLock(ctx context.Context, jobID string) (bool, error) {
 	key := "job_lock:" + jobID
 	ok, err := c.rdb.SetNX(ctx, key, "1", lockTTL).Result()
 	return ok, err
+}
+
+// ExtendLock resets the TTL on an existing lock so long-running jobs don't lose it.
+func (c *Client) ExtendLock(ctx context.Context, jobID string) {
+	c.rdb.Expire(ctx, "job_lock:"+jobID, lockTTL)
 }
 
 // ReleaseLock removes the distributed lock for jobID.
