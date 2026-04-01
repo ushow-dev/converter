@@ -44,6 +44,12 @@
 - `scanner/scanner/loops/scan_loop.py`: `_scan_once()` now iterates top-level subdirectories and calls `_process_series_folder()` before the flat file walk; new `_process_series_folder()` detects episodes via `series_detect`, looks up TMDB TV, and inserts each episode as `status=registered` / `content_kind=episode`
 - `scanner/scanner/api/server.py`: `/claim` response now returns `content_kind`, `series_tmdb_id`, `season_number`, `episode_number` fields from DB — IngestWorker can distinguish movies from episodes
 
+- `frontend/src/types/index.ts`: added `Series`, `SeriesResponse`, `Season`, `Episode`, `SeriesDetailResponse` interfaces; extended `ContentType` to include `'series'`
+- `frontend/src/components/Nav.tsx`: added "Сериалы" navigation link pointing to `/series`
+- `frontend/src/lib/api.ts`: added `seriesUrl`, `getSeries`, `getSeriesDetail`, `deleteSeries` API helpers
+- `frontend/src/app/series/page.tsx`: new series list page with cursor pagination and table view
+- `frontend/src/app/series/[id]/page.tsx`: new series detail page with metadata header, collapsible season sections, and episode tables
+
 ### Changed
 - `worker/internal/ffmpeg/runner.go`: `RunHLS` now maps all audio tracks from the source file into every HLS variant instead of hardcoding `0:a:0`; falls back to probeHasAudio and a single synthetic silence track when ProbeAudioStreams fails; builds `var_stream_map` dynamically so N audio × 3 video variants are correctly muxed; writes language/title metadata tags per audio stream
 

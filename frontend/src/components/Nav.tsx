@@ -6,6 +6,7 @@ import { clearToken } from '@/lib/api'
 
 const links = [
   { href: '/',        label: 'Фильмы'          },
+  { href: '/series',  label: 'Сериалы'         },
   { href: '/upload',  label: 'Добавить фильм'  },
   { href: '/queue',   label: 'В работе'        },
   { href: '/search',  label: 'Поиск'           },

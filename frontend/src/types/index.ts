@@ -1,7 +1,7 @@
 export type JobStatus = 'queued' | 'in_progress' | 'completed' | 'failed'
 export type JobStatusFilter = JobStatus | 'active'
 export type JobStage = 'download' | 'convert' | 'transfer'
-export type ContentType = 'movie'
+export type ContentType = 'movie' | 'series'
 export type SourceType = 'torrent' | 'upload'
 export type Priority = 'low' | 'normal' | 'high'
 
@@ -171,4 +171,48 @@ export interface DownloadItem {
   movieId?: number
   movieTitle?: string
   error?: string
+}
+
+export interface Series {
+  id: number
+  storage_key: string
+  tmdb_id?: string
+  imdb_id?: string
+  title: string
+  year?: number
+  poster_url?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SeriesResponse {
+  items: Series[]
+  next_cursor: string | null
+}
+
+export interface Season {
+  id: number
+  series_id: number
+  season_number: number
+  poster_url?: string
+}
+
+export interface Episode {
+  id: number
+  season_id: number
+  episode_number: number
+  title?: string
+  storage_key: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SeriesDetailResponse {
+  series: Series
+  seasons: Array<{
+    id: number
+    season_number: number
+    poster_url?: string
+    episodes: Episode[]
+  }>
 }

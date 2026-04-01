@@ -12,6 +12,8 @@ import type {
   MoviesResponse,
   SubtitlesResponse,
   PlayerMovieResponse,
+  SeriesResponse,
+  SeriesDetailResponse,
 } from '@/types'
 
 // ── Token storage ────────────────────────────────────────────────────────────
@@ -280,6 +282,34 @@ export async function getPlayerMovie(params: {
   return apiFetch<PlayerMovieResponse>(`/api/player/movie?${p}`, {
     headers: { 'X-Player-Key': playerKey },
   })
+}
+
+// ── Series ────────────────────────────────────────────────────────────────────
+
+export function seriesUrl(limit = 50, cursor?: string): string {
+  const p = new URLSearchParams({ limit: String(limit) })
+  if (cursor) p.set('cursor', cursor)
+  return `/api/admin/series?${p}`
+}
+
+export async function getSeries(limit = 50, cursor?: string): Promise<SeriesResponse> {
+  return apiFetch<SeriesResponse>(seriesUrl(limit, cursor))
+}
+
+export async function getSeriesDetail(id: number): Promise<SeriesDetailResponse> {
+  return apiFetch<SeriesDetailResponse>(`/api/admin/series/${id}`)
+}
+
+export async function deleteSeries(id: number): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`/api/admin/series/${id}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
 }
 
 // ── Formatters ───────────────────────────────────────────────────────────────
