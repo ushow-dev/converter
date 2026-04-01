@@ -8,7 +8,7 @@ from typing import Optional
 
 from scanner import db
 from scanner.config import Config
-from scanner.services import duplicates, metadata, quality, stability
+from scanner.services import duplicates, metadata, quality, series_detect, stability
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,18 @@ def run(cfg: Config) -> None:
 def _scan_once(cfg: Config) -> None:
     _retry_failed_items()
     now = datetime.now(timezone.utc)
-    for file_path in _walk_video_files(Path(cfg.incoming_dir)):
+
+    # Scan top-level subdirectories for series folders before walking individual files
+    incoming_root = Path(cfg.incoming_dir)
+    for entry in sorted(incoming_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        try:
+            _process_series_folder(cfg, entry, now)
+        except Exception:
+            logger.exception("error processing series folder %s", entry)
+
+    for file_path in _walk_video_files(incoming_root):
         try:
             _process_file(cfg, file_path, now)
         except Exception:
@@ -146,6 +157,63 @@ def _handle_stable_file(cfg: Config, file_path: Path, file_size: int) -> None:
             logger.error("rename failed for %s: %s", file_path, e)
             return
         _update_status(str(file_path), action, review_reason=action.removeprefix("review_"))
+
+
+def _process_series_folder(cfg: Config, folder_path: Path, now: datetime) -> None:
+    """Detect series episodes in a folder and register each as a scanner_incoming_items row."""
+    episodes = series_detect.detect_series_folder(folder_path)
+    if not episodes:
+        return
+
+    # Use first episode's title/year for TMDB TV lookup
+    first = episodes[0]
+    tmdb_result = metadata.tmdb_tv_search(first["title"], first.get("year"), cfg.tmdb_api_key)
+    series_tmdb_id = tmdb_result["tmdb_id"] if tmdb_result else None
+
+    for ep in episodes:
+        file_path = ep["file_path"]
+        try:
+            current_size = file_path.stat().st_size
+        except OSError:
+            continue
+        if current_size < MIN_FILE_SIZE_BYTES:
+            continue
+
+        conn = db.get_conn()
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, status FROM scanner_incoming_items WHERE source_path = %s",
+                        (str(file_path),),
+                    )
+                    row = cur.fetchone()
+                    if row is not None:
+                        continue  # already registered, skip
+                    cur.execute(
+                        """
+                        INSERT INTO scanner_incoming_items
+                            (source_path, source_filename, file_size_bytes, status,
+                             content_kind, series_tmdb_id, season_number, episode_number)
+                        VALUES (%s, %s, %s, 'registered', 'episode', %s, %s, %s)
+                        """,
+                        (
+                            str(file_path),
+                            file_path.name,
+                            current_size,
+                            series_tmdb_id,
+                            ep["season"],
+                            ep["episode"],
+                        ),
+                    )
+                    logger.info(
+                        "series episode registered: %s S%02dE%02d (series_tmdb_id=%s)",
+                        file_path.name, ep["season"], ep["episode"], series_tmdb_id,
+                    )
+        except Exception:
+            logger.exception("failed to register episode %s", file_path)
+        finally:
+            db.put_conn(conn)
 
 
 def _get_existing_score(normalized_name: str, tmdb_id: Optional[str]) -> Optional[int]:

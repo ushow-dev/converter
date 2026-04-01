@@ -38,6 +38,11 @@
 - `api/internal/repository/asset.go`: added `GetByMovieID` method to look up the ready asset for a movie by movie ID
 - `api/cmd/api/main.go`: instantiate `seriesRepo`, `audioTrackRepo`, `epSubtitleRepo` and pass to `NewPlayerHandler`
 - `api/internal/server/server.go`: register `GET /api/player/series` and `GET /api/player/episode` routes
+- `scanner/scanner/migrations/005_series_support.sql`: adds `content_kind`, `series_tmdb_id`, `season_number`, `episode_number` columns to `scanner_incoming_items` — enables episode rows alongside movie rows
+- `scanner/scanner/services/series_detect.py`: new service that walks a folder with `guessit` and returns a sorted list of episode dicts `{file_path, title, season, episode, year}` — used by scan_loop to detect TV series folders
+- `scanner/scanner/services/metadata.py`: added `tmdb_tv_search()` for searching TMDB `/search/tv` endpoint — returns `tmdb_id`, `title`, `poster_url` for a series
+- `scanner/scanner/loops/scan_loop.py`: `_scan_once()` now iterates top-level subdirectories and calls `_process_series_folder()` before the flat file walk; new `_process_series_folder()` detects episodes via `series_detect`, looks up TMDB TV, and inserts each episode as `status=registered` / `content_kind=episode`
+- `scanner/scanner/api/server.py`: `/claim` response now returns `content_kind`, `series_tmdb_id`, `season_number`, `episode_number` fields from DB — IngestWorker can distinguish movies from episodes
 
 ### Changed
 - `worker/internal/ffmpeg/runner.go`: `RunHLS` now maps all audio tracks from the source file into every HLS variant instead of hardcoding `0:a:0`; falls back to probeHasAudio and a single synthetic silence track when ProbeAudioStreams fails; builds `var_stream_map` dynamically so N audio × 3 video variants are correctly muxed; writes language/title metadata tags per audio stream

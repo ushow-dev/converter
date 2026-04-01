@@ -85,6 +85,31 @@ def _title_score(query: str, candidate: dict) -> float:
     return 0.0
 
 
+def tmdb_tv_search(title: str, year: Optional[int], api_key: str) -> Optional[dict]:
+    """Search TMDB for TV series."""
+    try:
+        params = {"api_key": api_key, "query": title, "language": "en-US"}
+        if year:
+            params["first_air_date_year"] = year
+        resp = requests.get(f"{_TMDB_BASE}/search/tv", params=params, timeout=10)
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        if not results:
+            return None
+        best = results[0]
+        poster_url = f"{_TMDB_IMAGE_BASE}{best['poster_path']}" if best.get("poster_path") else None
+        return {
+            "tmdb_id": str(best["id"]),
+            "title": best.get("name", title),
+            "poster_url": poster_url,
+        }
+    except requests.RequestException as e:
+        logger.warning("TMDB TV search failed for %r: %s", title, e)
+        return None
+    finally:
+        time.sleep(0.5)
+
+
 def tmdb_search(title: str, year: Optional[int], api_key: str) -> Optional[dict]:
     try:
         params = {"api_key": api_key, "query": title, "language": "en-US"}

@@ -161,7 +161,8 @@ def _claim_items(limit: int, ttl_sec: int) -> list:
                         claim_expires_at = NOW() + (%s * interval '1 second'),
                         updated_at = NOW()
                     WHERE id IN (SELECT id FROM candidates)
-                    RETURNING id, source_path, source_filename, normalized_name, tmdb_id
+                    RETURNING id, source_path, source_filename, normalized_name, tmdb_id,
+                              content_kind, series_tmdb_id, season_number, episode_number
                     """,
                     (limit, ttl_sec),
                 )
@@ -173,7 +174,10 @@ def _claim_items(limit: int, ttl_sec: int) -> list:
                         "source_filename": r[2],
                         "normalized_name": r[3],
                         "tmdb_id": r[4],
-                        "content_kind": "movie",
+                        "content_kind": r[5] if r[5] else "movie",
+                        "series_tmdb_id": r[6],
+                        "season_number": r[7],
+                        "episode_number": r[8],
                     }
                     for r in rows
                 ]

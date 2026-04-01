@@ -50,7 +50,30 @@ X-Service-Token: <SERVICE_TOKEN>
       "source_filename": "Dune.Part.Two.2024.2160p.BluRay.mkv",
       "normalized_name": "dune_part_two_2024_[693134]",
       "tmdb_id": "693134",
-      "content_kind": "movie"
+      "content_kind": "movie",
+      "series_tmdb_id": null,
+      "season_number": null,
+      "episode_number": null
+    }
+  ]
+}
+```
+
+Для эпизодов сериала `content_kind` равен `"episode"` и заполнены `series_tmdb_id`, `season_number`, `episode_number`:
+
+```json
+{
+  "items": [
+    {
+      "id": 55,
+      "source_path": "/mnt/storage/incoming/BreakingBad/S01E01.mkv",
+      "source_filename": "S01E01.mkv",
+      "normalized_name": null,
+      "tmdb_id": null,
+      "content_kind": "episode",
+      "series_tmdb_id": "1396",
+      "season_number": 1,
+      "episode_number": 1
     }
   ]
 }

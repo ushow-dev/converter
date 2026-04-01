@@ -155,15 +155,16 @@ scanner/
     ├── main.py                     # Точка входа, 3 daemon-потока
     ├── config.py                   # frozen dataclass, env vars
     ├── db.py                       # ThreadedConnectionPool, авто-миграции
-    ├── migrations/                 # SQL миграции scanner DB (001–002)
+    ├── migrations/                 # SQL миграции scanner DB (001–005)
     ├── loops/
     │   ├── scan_loop.py            # Сканирует incoming/ каждые SCAN_INTERVAL_SEC
     │   └── move_worker.py          # os.rename → library/movies/, upsert library
     ├── services/
     │   ├── stability.py            # Проверка стабильности файла
-    │   ├── metadata.py             # GuessIt + TMDB lookup + normalized_name
+    │   ├── metadata.py             # GuessIt + TMDB lookup + normalized_name (movie + TV)
     │   ├── quality.py              # ffprobe → quality_score (0..100)
-    │   └── duplicates.py           # register / review_duplicate / review_unknown_quality
+    │   ├── duplicates.py           # register / review_duplicate / review_unknown_quality
+    │   └── series_detect.py        # Определение TV-сериалов в папках (guessit)
     └── api/
         └── server.py               # FastAPI HTTP API (claim/progress/complete/fail)
 ```

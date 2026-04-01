@@ -35,6 +35,10 @@ CREATE TABLE scanner_incoming_items (
     library_relative_path           TEXT,                    -- заполняется после move
     claimed_at                      TIMESTAMPTZ,             -- когда IngestWorker забрал
     claim_expires_at                TIMESTAMPTZ,             -- TTL claim
+    content_kind                    TEXT NOT NULL DEFAULT 'movie', -- 'movie' | 'episode'
+    series_tmdb_id                  TEXT,                    -- TMDB ID сериала (только для episodes)
+    season_number                   INT,                     -- номер сезона (только для episodes)
+    episode_number                  INT,                     -- номер эпизода (только для episodes)
     created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -155,6 +159,8 @@ CREATE TABLE IF NOT EXISTS scanner_downloads (
 | `001_initial.sql` | Создаёт `scanner_incoming_items` и `scanner_library_movies` с базовыми индексами |
 | `002_add_claim_columns.sql` | Добавляет `claimed_at`, `claim_expires_at` и `idx_incoming_claim_expires` |
 | `003_downloads_table.sql` | Создаёт `scanner_downloads` для очереди скачивания файлов в `incoming/` |
+| `004_downloads_proxy.sql` | Добавляет `proxy_url` в `scanner_downloads` |
+| `005_series_support.sql` | Добавляет `content_kind`, `series_tmdb_id`, `season_number`, `episode_number` в `scanner_incoming_items` |
 
 Применяются автоматически при старте через `db.init(database_url)`. Порядок определяется числовым префиксом файла.
 
