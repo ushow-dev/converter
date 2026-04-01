@@ -1,6 +1,7 @@
 # scanner/scanner/loops/move_worker.py
 import logging
 import queue
+import re
 import shutil
 from pathlib import Path
 
@@ -32,10 +33,17 @@ def _handle_move(cfg: Config, task: dict) -> None:
     normalized_name: str = task.get("normalized_name") or source_path.stem
 
     content_kind = task.get("content_kind", "movie")
-    sub_dir = "series" if content_kind == "episode" else "movies"
-    target_dir = Path(cfg.library_dir) / sub_dir / normalized_name
-    target_path = target_dir / source_path.name
-    relative_path = str(Path(sub_dir) / normalized_name / source_path.name)
+
+    if content_kind == "episode":
+        # Build hierarchical path: series/{series_key}/s{NN}/e{NN}/file
+        series_key, season_num, episode_num = _parse_episode_normalized(normalized_name)
+        target_dir = Path(cfg.library_dir) / "series" / series_key / f"s{season_num:02d}" / f"e{episode_num:02d}"
+        target_path = target_dir / source_path.name
+        relative_path = str(Path("series") / series_key / f"s{season_num:02d}" / f"e{episode_num:02d}" / source_path.name)
+    else:
+        target_dir = Path(cfg.library_dir) / "movies" / normalized_name
+        target_path = target_dir / source_path.name
+        relative_path = str(Path("movies") / normalized_name / source_path.name)
 
     item_info = _fetch_item(item_id)
     if item_info is None:
@@ -99,6 +107,16 @@ def _fetch_item(item_id: int) -> dict | None:
             return {"title": row[0], "year": row[1], "tmdb_id": row[2], "quality_score": row[3], "file_size_bytes": row[4]}
     finally:
         db.put_conn(conn)
+
+
+def _parse_episode_normalized(normalized_name: str) -> tuple[str, int, int]:
+    """Parse 'show_name_2025_[123]_s01e02' into ('show_name_2025_[123]', 1, 2)."""
+    m = re.search(r"_s(\d{2})e(\d{2})$", normalized_name)
+    if m:
+        series_key = normalized_name[:m.start()]
+        return series_key, int(m.group(1)), int(m.group(2))
+    # Fallback: can't parse, use full name as series key
+    return normalized_name, 1, 1
 
 
 def _mark_failed(item_id: int, review_reason: str) -> None:
