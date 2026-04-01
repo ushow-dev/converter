@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import guessit
+
 from scanner import db
 from scanner.config import Config
 from scanner.services import duplicates, metadata, quality, series_detect, stability
@@ -115,6 +117,12 @@ def _process_file(cfg: Config, file_path: Path, now: datetime) -> None:
 
 
 def _handle_stable_file(cfg: Config, file_path: Path, file_size: int) -> None:
+    # Check if this is a single episode file (e.g. Show.S02E04.mkv dropped into incoming/).
+    info = guessit.guessit(file_path.name)
+    if info.get("type") == "episode" and info.get("season") is not None and info.get("episode") is not None:
+        _handle_stable_episode(cfg, file_path, file_size, info)
+        return
+
     parsed = metadata.parse_filename(file_path.name)
     title = parsed["title"]
     year = parsed.get("year")
@@ -157,6 +165,40 @@ def _handle_stable_file(cfg: Config, file_path: Path, file_size: int) -> None:
             logger.error("rename failed for %s: %s", file_path, e)
             return
         _update_status(str(file_path), action, review_reason=action.removeprefix("review_"))
+
+
+def _handle_stable_episode(cfg: Config, file_path: Path, file_size: int, info: dict) -> None:
+    """Register a single episode file (e.g. Show.S02E04.mkv) as content_kind='episode'."""
+    title = str(info.get("title", ""))
+    year = info.get("year")
+    season_num = int(info["season"])
+    episode_num = int(info["episode"])
+
+    tmdb_result = metadata.tmdb_tv_search(title, year, cfg.tmdb_api_key)
+    series_tmdb_id = tmdb_result["tmdb_id"] if tmdb_result else None
+    canonical_title = tmdb_result["title"] if tmdb_result else title
+
+    normalized_name = metadata.build_normalized_name(canonical_title, year, series_tmdb_id)
+    ep_normalized = f"{normalized_name}_s{season_num:02d}e{episode_num:02d}"
+
+    conn = db.get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE scanner_incoming_items
+                       SET status='registered', normalized_name=%s, tmdb_id=%s,
+                           content_kind='episode', series_tmdb_id=%s,
+                           season_number=%s, episode_number=%s, updated_at=NOW()
+                       WHERE source_path=%s AND status='new'""",
+                    (ep_normalized, series_tmdb_id, series_tmdb_id,
+                     season_num, episode_num, str(file_path)),
+                )
+    finally:
+        db.put_conn(conn)
+
+    logger.info("single episode registered: %s S%02dE%02d (series_tmdb_id=%s)",
+                canonical_title, season_num, episode_num, series_tmdb_id)
 
 
 def _process_series_folder(cfg: Config, folder_path: Path, now: datetime) -> None:
