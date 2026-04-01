@@ -16,6 +16,7 @@ import (
 	"app/worker/internal/cancelregistry"
 	"app/worker/internal/config"
 	"app/worker/internal/converter"
+	"app/worker/internal/recovery"
 	"app/worker/internal/db"
 	"app/worker/internal/downloader"
 	"app/worker/internal/ffmpeg"
@@ -148,6 +149,10 @@ func main() {
 	} else {
 		slog.Info("transfer worker disabled (RCLONE_REMOTE not set)")
 	}
+
+	// ── Recover stale jobs from previous run ──────────────────────────────────
+	recovery.RecoverStaleLocks(ctx, pool, redisClient)
+	recovery.Run(ctx, pool, redisClient)
 
 	// ── Health server ──────────────────────────────────────────────────────────
 	go health.Start(cfg.HealthPort, redisClient)

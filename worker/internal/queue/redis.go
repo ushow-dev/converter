@@ -83,6 +83,16 @@ func (c *Client) ExtendLock(ctx context.Context, jobID string) {
 	c.rdb.Expire(ctx, "job_lock:"+jobID, lockTTL)
 }
 
+// ScanLocks returns all keys matching the given pattern (e.g. "job_lock:*").
+func (c *Client) ScanLocks(ctx context.Context, pattern string) ([]string, error) {
+	var keys []string
+	iter := c.rdb.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+	return keys, iter.Err()
+}
+
 // ReleaseLock removes the distributed lock for jobID.
 func (c *Client) ReleaseLock(ctx context.Context, jobID string) {
 	c.rdb.Del(ctx, "job_lock:"+jobID)
