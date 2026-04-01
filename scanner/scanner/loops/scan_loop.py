@@ -180,7 +180,7 @@ def _handle_stable_episode(cfg: Config, file_path: Path, file_size: int, info: d
     series_tmdb_id = tmdb_result["tmdb_id"] if tmdb_result else None
     canonical_title = tmdb_result["title"] if tmdb_result else title
 
-    normalized_name = metadata.build_normalized_name(canonical_title, year, series_tmdb_id)
+    normalized_name = metadata.build_series_normalized_name(canonical_title, year, series_tmdb_id)
     ep_normalized = f"{normalized_name}_s{season_num:02d}e{episode_num:02d}"
 
     conn = db.get_conn()
@@ -226,7 +226,7 @@ def _process_series_folder(cfg: Config, folder_path: Path, now: datetime) -> Non
             continue
 
         ep_year = ep.get("year") or first.get("year")
-        ep_normalized = metadata.build_normalized_name(canonical_title, ep_year, series_tmdb_id)
+        ep_normalized = metadata.build_series_normalized_name(canonical_title, ep_year, series_tmdb_id)
         ep_normalized = f"{ep_normalized}_s{ep['season']:02d}e{ep['episode']:02d}"
 
         conn = db.get_conn()

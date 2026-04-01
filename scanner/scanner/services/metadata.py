@@ -39,6 +39,19 @@ def build_normalized_name(title: str, year: Optional[int], tmdb_id: Optional[str
     return name
 
 
+def build_series_normalized_name(title: str, year: Optional[int], tmdb_id: Optional[str]) -> str:
+    """Like build_normalized_name but uses () instead of [] to avoid rclone glob issues."""
+    slug = re.sub(r"[^\w\s]", "", title.lower()).strip()
+    slug = re.sub(r"\s+", "_", slug)
+    parts = [slug]
+    if year:
+        parts.append(str(year))
+    name = "_".join(parts)
+    if tmdb_id:
+        name += f"_({tmdb_id})"
+    return name
+
+
 def quality_label_from_release_type(release_type: Optional[str]) -> Optional[str]:
     if not release_type:
         return None
