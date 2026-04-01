@@ -31,9 +31,11 @@ def _handle_move(cfg: Config, task: dict) -> None:
     source_path = Path(task["source_path"])
     normalized_name: str = task.get("normalized_name") or source_path.stem
 
-    target_dir = Path(cfg.library_dir) / "movies" / normalized_name
+    content_kind = task.get("content_kind", "movie")
+    sub_dir = "series" if content_kind == "episode" else "movies"
+    target_dir = Path(cfg.library_dir) / sub_dir / normalized_name
     target_path = target_dir / source_path.name
-    relative_path = str(Path("movies") / normalized_name / source_path.name)
+    relative_path = str(Path(sub_dir) / normalized_name / source_path.name)
 
     item_info = _fetch_item(item_id)
     if item_info is None:

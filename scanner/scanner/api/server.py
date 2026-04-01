@@ -89,6 +89,7 @@ def create_app(cfg: Config, move_queue: queue.Queue) -> FastAPI:
             "item_id": item_id,
             "source_path": info["source_path"],
             "normalized_name": info["normalized_name"],
+            "content_kind": info.get("content_kind", "movie"),
         })
         job_id = f"ingest-{item_id}"
         return {"id": item_id, "job_id": job_id}
@@ -216,13 +217,13 @@ def _get_item_info(item_id: int) -> dict | None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT source_path, normalized_name FROM scanner_incoming_items WHERE id=%s",
+                "SELECT source_path, normalized_name, content_kind FROM scanner_incoming_items WHERE id=%s",
                 (item_id,),
             )
             row = cur.fetchone()
             if row is None:
                 return None
-            return {"source_path": row[0], "normalized_name": row[1]}
+            return {"source_path": row[0], "normalized_name": row[1], "content_kind": row[2] or "movie"}
     finally:
         db.put_conn(conn)
 
