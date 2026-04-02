@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getToken, fetcher, seriesUrl, formatDate } from '@/lib/api'
+import { getToken, fetcher, seriesUrl, formatDate, deleteSeries } from '@/lib/api'
 import { Nav } from '@/components/Nav'
 import type { Series, SeriesResponse } from '@/types'
 
@@ -50,6 +50,7 @@ export default function SeriesPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [playerUrl, setPlayerUrl] = useState('')
 
   useEffect(() => {
     if (!getToken()) {
@@ -58,6 +59,13 @@ export default function SeriesPage() {
     }
     loadPage(undefined)
   }, [router])
+
+  useEffect(() => {
+    fetch('/api/app-config')
+      .then(r => r.json())
+      .then(cfg => setPlayerUrl(cfg.playerUrl ?? ''))
+      .catch(() => {})
+  }, [])
 
   async function loadPage(cursor: string | undefined) {
     try {
@@ -80,6 +88,16 @@ export default function SeriesPage() {
     if (!nextCursor) return
     setLoadingMore(true)
     loadPage(nextCursor)
+  }
+
+  async function handleDelete(seriesId: number) {
+    if (!window.confirm('Удалить сериал и все связанные данные?')) return
+    try {
+      await deleteSeries(seriesId)
+      setItems(prev => prev.filter(s => s.id !== seriesId))
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Ошибка при удалении')
+    }
   }
 
   return (
@@ -125,6 +143,7 @@ export default function SeriesPage() {
                     <th className="hidden sm:table-cell px-3 py-2">Год</th>
                     <th className="hidden sm:table-cell px-3 py-2">TMDB</th>
                     <th className="hidden sm:table-cell px-3 py-2">Добавлен</th>
+                    <th className="px-3 py-2 w-8" />
                     <th className="px-3 py-2 w-10" />
                   </tr>
                 </thead>
@@ -175,18 +194,62 @@ export default function SeriesPage() {
                         {formatDate(series.created_at)}
                       </td>
 
-                      {/* Detail link */}
+                      {/* Play + TMDB link */}
+                      <td className="px-2 py-3">
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={playerUrl && series.tmdb_id ? `${playerUrl}/?tmdb_id=${series.tmdb_id}&type=series` : '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => { if (!playerUrl || !series.tmdb_id) e.preventDefault() }}
+                            title={!series.tmdb_id ? 'Требуется TMDB ID' : 'Смотреть'}
+                            className={`rounded p-1.5 transition-colors inline-flex ${series.tmdb_id && playerUrl ? 'text-gray-600 hover:bg-green-900/40 hover:text-green-400' : 'text-gray-800 cursor-not-allowed'}`}
+                          >
+                            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          </a>
+                          {series.tmdb_id && (
+                            <a
+                              href={`https://www.themoviedb.org/tv/${series.tmdb_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Посмотреть на TMDB"
+                              className="rounded p-1.5 text-gray-600 hover:bg-blue-900/40 hover:text-blue-400 transition-colors inline-flex"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Delete + detail link */}
                       <td className="px-3 py-3 text-right">
-                        <Link
-                          href={`/series/${series.id}`}
-                          className="rounded p-1.5 text-gray-600 hover:bg-indigo-900/40 hover:text-indigo-400 transition-colors inline-flex"
-                          title="Подробнее"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                              d="M9 5l7 7-7 7" />
-                          </svg>
-                        </Link>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleDelete(series.id)}
+                            className="rounded p-1.5 text-gray-600 hover:bg-red-900/40 hover:text-red-400 transition-colors"
+                            title="Удалить"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                          <Link
+                            href={`/series/${series.id}`}
+                            className="rounded p-1.5 text-gray-600 hover:bg-indigo-900/40 hover:text-indigo-400 transition-colors inline-flex"
+                            title="Подробнее"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}

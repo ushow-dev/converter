@@ -16,7 +16,17 @@ function TvIcon() {
   )
 }
 
-function EpisodeRow({ episode }: { episode: Episode }) {
+function EpisodeRow({
+  episode,
+  seasonNumber,
+  tmdbId,
+  playerUrl,
+}: {
+  episode: Episode
+  seasonNumber: number
+  tmdbId?: string
+  playerUrl: string
+}) {
   return (
     <tr className="border-b border-gray-800/60 hover:bg-gray-900/40">
       <td className="px-4 py-2 text-sm text-gray-400 w-12">
@@ -31,14 +41,33 @@ function EpisodeRow({ episode }: { episode: Episode }) {
       <td className="hidden sm:table-cell px-4 py-2 text-xs text-gray-600 whitespace-nowrap">
         {formatDate(episode.created_at)}
       </td>
+      <td className="px-4 py-2 text-right">
+        {tmdbId && playerUrl && (
+          <a
+            href={`${playerUrl}/?tmdb_id=${tmdbId}&type=series&s=${seasonNumber}&e=${episode.episode_number}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded p-1.5 text-gray-600 hover:bg-green-900/40 hover:text-green-400 transition-colors inline-flex"
+            title="Смотреть"
+          >
+            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </a>
+        )}
+      </td>
     </tr>
   )
 }
 
 function SeasonSection({
   season,
+  tmdbId,
+  playerUrl,
 }: {
   season: SeriesDetailResponse['seasons'][number]
+  tmdbId?: string
+  playerUrl: string
 }) {
   const [open, setOpen] = useState(true)
 
@@ -83,11 +112,18 @@ function SeasonSection({
                   <th className="px-4 py-2">Название</th>
                   <th className="hidden sm:table-cell px-4 py-2">storage_key</th>
                   <th className="hidden sm:table-cell px-4 py-2">Добавлен</th>
+                  <th className="px-4 py-2 w-12" />
                 </tr>
               </thead>
               <tbody>
                 {season.episodes.map(ep => (
-                  <EpisodeRow key={ep.id} episode={ep} />
+                  <EpisodeRow
+                    key={ep.id}
+                    episode={ep}
+                    seasonNumber={season.season_number}
+                    tmdbId={tmdbId}
+                    playerUrl={playerUrl}
+                  />
                 ))}
               </tbody>
             </table>
@@ -114,6 +150,7 @@ export default function SeriesDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [playerUrl, setPlayerUrl] = useState('')
 
   useEffect(() => {
     if (!getToken()) {
@@ -125,6 +162,13 @@ export default function SeriesDetailPage() {
       .catch(err => setError(err instanceof Error ? err.message : 'Ошибка загрузки'))
       .finally(() => setLoading(false))
   }, [id, router])
+
+  useEffect(() => {
+    fetch('/api/app-config')
+      .then(r => r.json())
+      .then(cfg => setPlayerUrl(cfg.playerUrl ?? ''))
+      .catch(() => {})
+  }, [])
 
   async function handleDelete() {
     if (!window.confirm('Удалить сериал и все связанные данные?')) return
@@ -175,10 +219,10 @@ export default function SeriesDetailPage() {
                 <img
                   src={detail.series.poster_url}
                   alt=""
-                  className="h-32 w-22 shrink-0 rounded-md object-cover"
+                  className="h-32 w-[88px] shrink-0 rounded-md object-cover"
                 />
               ) : (
-                <div className="flex h-32 w-22 shrink-0 items-center justify-center rounded-md bg-gray-800">
+                <div className="flex h-32 w-[88px] shrink-0 items-center justify-center rounded-md bg-gray-800">
                   <TvIcon />
                 </div>
               )}
@@ -205,42 +249,48 @@ export default function SeriesDetailPage() {
                   </button>
                 </div>
 
-                <dl className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+                <div className="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-sm">
                   {detail.series.tmdb_id && (
-                    <>
-                      <dt className="text-gray-600">TMDB</dt>
-                      <dd className="col-span-1">
-                        <a
-                          href={`https://www.themoviedb.org/tv/${detail.series.tmdb_id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-gray-400 hover:text-blue-400 transition-colors"
-                        >
-                          {detail.series.tmdb_id}
-                        </a>
-                      </dd>
-                    </>
+                    <div>
+                      <span className="text-gray-600">TMDB </span>
+                      <a
+                        href={`https://www.themoviedb.org/tv/${detail.series.tmdb_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-gray-400 hover:text-blue-400 transition-colors"
+                      >
+                        {detail.series.tmdb_id}
+                      </a>
+                    </div>
                   )}
                   {detail.series.imdb_id && (
-                    <>
-                      <dt className="text-gray-600">IMDb</dt>
-                      <dd className="col-span-1">
-                        <a
-                          href={`https://www.imdb.com/title/${detail.series.imdb_id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-gray-400 hover:text-yellow-400 transition-colors"
-                        >
-                          {detail.series.imdb_id}
-                        </a>
-                      </dd>
-                    </>
+                    <div>
+                      <span className="text-gray-600">IMDb </span>
+                      <a
+                        href={`https://www.imdb.com/title/${detail.series.imdb_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-gray-400 hover:text-yellow-400 transition-colors"
+                      >
+                        {detail.series.imdb_id}
+                      </a>
+                    </div>
                   )}
-                  <dt className="text-gray-600">Добавлен</dt>
-                  <dd className="text-gray-400">{formatDate(detail.series.created_at)}</dd>
-                  <dt className="text-gray-600">Сезонов</dt>
-                  <dd className="text-gray-400">{detail.seasons.length}</dd>
-                </dl>
+                  {detail.series.year && (
+                    <div>
+                      <span className="text-gray-600">Год </span>
+                      <span className="text-gray-400">{detail.series.year}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-600">Сезонов </span>
+                    <span className="text-gray-400">{detail.seasons.length}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Добавлен </span>
+                    <span className="text-gray-400">{formatDate(detail.series.created_at)}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -250,7 +300,12 @@ export default function SeriesDetailPage() {
             ) : (
               <div className="flex flex-col gap-3">
                 {detail.seasons.map(season => (
-                  <SeasonSection key={season.id} season={season} />
+                  <SeasonSection
+                    key={season.id}
+                    season={season}
+                    tmdbId={detail.series.tmdb_id}
+                    playerUrl={playerUrl}
+                  />
                 ))}
               </div>
             )}
