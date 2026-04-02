@@ -3,7 +3,9 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -170,7 +172,15 @@ func (h *SeriesHandler) EpisodeThumbnail(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
-	http.ServeFile(w, r, *asset.ThumbnailPath)
+	// Validate path is under expected directory.
+	clean := filepath.Clean(*asset.ThumbnailPath)
+	if !strings.HasPrefix(clean, "/media/") {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, clean)
 }
 
 // Delete handles DELETE /api/admin/series/{seriesId}.

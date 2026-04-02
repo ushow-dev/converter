@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Security
+- `api/internal/handler/series.go`: validate episode thumbnail path is under `/media/` before serving to prevent path traversal; use `filepath.Clean` and prefix check, return 404 on violation
+
 ### Added
 - `api/internal/handler/series.go`: added `DeleteEpisode` handler (`DELETE /api/admin/episodes/{episodeId}`) and `EpisodeThumbnail` handler (`GET /api/admin/episodes/{episodeId}/thumbnail`); enriched `Get` response to include `has_thumbnail` and `created_at` per episode by querying `GetEpisodeAsset`
 - `api/internal/repository/series.go`: added `DeleteEpisode` method — deletes episode row by primary key
