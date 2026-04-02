@@ -214,10 +214,37 @@ new
 Видеофайлы с расширениями: `.mkv`, `.mp4`, `.avi`, `.mov`, `.ts`, `.m2ts`, `.wmv`
 
 Текущие ограничения:
-- Только `content_kind=movie`; сериалы не поддерживаются
 - TMDB поиск: `sleep(0.5)` между запросами, retry не реализован
 - Нет веб-интерфейса; управление через прямые запросы к DB
 - Нет healthcheck endpoint
+
+---
+
+## Поддержка сериалов
+
+Сканер определяет тип контента по имени файла и структуре папок.
+
+### Определение эпизодов
+
+**Folder-based**: если файл лежит в папке, название которой содержит `S01`, `Season 1` и т.п., он считается эпизодом.
+
+**Single file**: если GuessIt возвращает поля `season` и `episode`, файл классифицируется как `content_kind=episode`.
+
+Примеры имён файлов, которые GuessIt корректно парсит как эпизоды:
+- `Breaking.Bad.S01E03.720p.mkv`
+- `The.Wire.1x04.mkv`
+- `Game.Of.Thrones.Season.2.Episode.5.mkv`
+
+### Метаданные эпизодов
+
+1. `guessit(filename)` → `{title, season, episode, year}`
+2. TMDB TV search по `title` (+`year` если есть) → `{series_tmdb_id, series_title}`
+3. TMDB TV episode lookup → `{episode_title, overview, still_path}`
+4. `build_normalized_name()` строит ключ вида `breaking_bad_[1396]/s01/e03`
+
+### Запись в БД
+
+Эпизоды регистрируются с `content_kind = 'episode'` в `scanner_incoming_items`. IngestWorker при вызове `/claim` получает дополнительные поля `season_number` и `episode_number`, которые передаются в `ConvertPayload` через `convert_queue`.
 
 ---
 

@@ -11,6 +11,7 @@ Worker конвертирует входной видеофайл (любой ф
 
 ## Выходные данные
 
+### Фильм
 ```
 /media/converted/movies/{movieStorageKey}/
 ├── master.m3u8           # Мастер-плейлист (ссылки на все варианты)
@@ -25,6 +26,24 @@ Worker конвертирует входной видеофайл (любой ф
 │   └── seg000.ts, ...
 └── thumbnail.jpg         # JPEG превью (кадр из видео или TMDB backdrop)
 ```
+
+### Эпизод сериала
+```
+/media/converted/series/{seriesKey}/sNN/eNN/
+├── master.m3u8
+├── 360/
+│   ├── index.m3u8
+│   └── seg000.ts, ...
+├── 480/
+│   ├── index.m3u8
+│   └── seg000.ts, ...
+├── 720/
+│   ├── index.m3u8
+│   └── seg000.ts, ...
+└── thumbnail.jpg
+```
+
+Где `sNN` = `s01`, `s02`, ... (номер сезона, ноль-дополненный), `eNN` = `e01`, `e02`, ... (номер эпизода).
 
 ## FFmpeg профиль (hls_720_480_360)
 
@@ -64,6 +83,19 @@ ffmpeg -i {input} \
 ```
 
 > Если у источника нет аудиодорожки, FFmpeg подмешивает беззвучный аудиоисточник (`anullsrc`).
+
+## Мульти-аудио (Multi-audio)
+
+Начиная с поддержки сериалов, FFmpeg маппит **все** аудиодорожки источника — не только первую (`0:a:0`).
+
+Процесс:
+1. `probe.go` вызывает `ffprobe -show_streams` и парсит все дорожки типа `audio`.
+2. Для каждой дорожки извлекаются: `index`, `codec_name`, `tags.language`, `tags.title`.
+3. FFmpeg получает отдельный `-map 0:a:N` для каждой аудиодорожки на каждое видеоразрешение.
+4. `var_stream_map` расширяется: `"v:0,a:0,a:1,name:720 v:1,a:0,a:1,name:480 ..."`.
+5. После конвертации все аудиодорожки записываются в таблицу `audio_tracks` (language, index, label).
+
+Если у источника только одна дорожка — поведение идентично прежнему.
 
 ## Параметры HLS
 
@@ -133,22 +165,45 @@ FFmpeg запускается с `-threads {ffmpegThreads}` чтобы не мо
 
 ## Этапы конвертационного воркера
 
+### Ветка фильма (content_type = "movie")
 ```
 1. Получить ConvertPayload из convert_queue
 2. Установить Redis lock (NX, 1 ч)
 3. UPDATE media_jobs: status=in_progress, stage=convert
 4. UPSERT movies → получить movie.StorageKey
 5. mkdir /media/converted/movies/{storageKey}/360, /480, /720
-6. Probe FPS источника (ffprobe), вычислить GOP
-7. Запустить FFmpeg (один проход, все три варианта)
-8. Сгенерировать master.m3u8
-9. Извлечь thumbnail (FFmpeg кадр)
-10. Загрузить TMDB backdrop (опционально, заменяет thumbnail)
-11. INSERT media_assets (is_ready=true, storage_path=master.m3u8)
-12. Fetch субтитры (OpenSubtitles, опционально)
-13. UPDATE media_jobs: status=completed
-14. Очистить /media/downloads/{jobID}/
-15. RPUSH transfer_queue {TransferMessage} (если RCLONE_REMOTE задан)
+6. Probe FPS и аудиодорожки источника (probe.go → ffprobe)
+7. Вычислить GOP по FPS
+8. Запустить FFmpeg (один проход, все три варианта, все аудиодорожки)
+9. Сгенерировать master.m3u8
+10. Извлечь thumbnail (FFmpeg кадр)
+11. Загрузить TMDB backdrop (опционально, заменяет thumbnail)
+12. INSERT media_assets (is_ready=true, storage_path=master.m3u8)
+13. Fetch субтитры (OpenSubtitles, опционально)
+14. UPDATE media_jobs: status=completed
+15. Очистить /media/downloads/{jobID}/
+16. RPUSH transfer_queue {TransferMessage} (если RCLONE_REMOTE задан)
+```
+
+### Ветка эпизода сериала (content_type = "episode")
+```
+1. Получить ConvertPayload из convert_queue (поля series_id, season_number, episode_number заполнены)
+2. Установить Redis lock (NX, 1 ч)
+3. UPDATE media_jobs: status=in_progress, stage=convert
+4. UPSERT series → seasons → episodes → получить episode.StorageKey
+5. mkdir /media/converted/series/{seriesKey}/sNN/eNN/360, /480, /720
+6. Probe FPS и аудиодорожки источника (probe.go → ffprobe)
+7. Вычислить GOP по FPS
+8. Запустить FFmpeg (один проход, все три варианта, все аудиодорожки)
+9. Сгенерировать master.m3u8
+10. Извлечь thumbnail (FFmpeg кадр)
+11. Загрузить TMDB TV metadata для эпизода (заголовок, описание, still_path)
+12. INSERT episode_assets (is_ready=true, storage_path=master.m3u8)
+13. INSERT audio_tracks (по результатам probe)
+14. Fetch субтитры эпизода (OpenSubtitles, опционально → episode_subtitles)
+15. UPDATE media_jobs: status=completed
+16. Очистить /media/downloads/{jobID}/
+17. RPUSH transfer_queue {TransferMessage} (если RCLONE_REMOTE задан)
 ```
 
 ## Этап переноса (transfer stage)
@@ -173,6 +228,6 @@ convert → [HLS готов в /media/converted/movies/<Title (Year)>/]
 | Переменная | Назначение |
 |---|---|
 | `CONVERT_CONCURRENCY` | Параллельные конвертации (default: 1) |
-| `TMDB_API_KEY` | Для загрузки метаданных и postеров |
-| `OPENSUBTITLES_API_KEY` | Для авто-субтитров |
+| `TMDB_API_KEY` | Для загрузки метаданных, постеров и TV-информации эпизодов |
+| `OPENSUBTITLES_API_KEY` | Для авто-субтитров (фильмы и эпизоды) |
 | `RCLONE_REMOTE` | Имя rclone remote для переноса файлов (например `myserver:`); если не задан — перенос отключён |

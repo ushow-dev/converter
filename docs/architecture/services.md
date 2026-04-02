@@ -44,7 +44,14 @@ GET    /api/admin/movies/tmdb/search
 GET    /api/admin/movies/{movieId}/subtitles
 POST   /api/admin/movies/{movieId}/subtitles
 POST   /api/admin/movies/{movieId}/subtitles/search
+GET    /api/admin/series
+GET    /api/admin/series/{id}
+DELETE /api/admin/series/{id}
+DELETE /api/admin/episodes/{id}
+GET    /api/admin/episodes/{id}/thumbnail
 GET    /api/player/movie
+GET    /api/player/series
+GET    /api/player/episode
 GET    /api/player/assets/{assetID}
 GET    /api/player/jobs/{jobID}/status
 POST   /api/player/p2p-metrics
@@ -73,6 +80,7 @@ GET    /health/ready
 ### Горутины при старте
 ```
 main.go
+  ├── recoveryModule.Run()                                        # однократно при старте: восстановление зависших заданий
   ├── for i in DOWNLOAD_CONCURRENCY:      go downloadWorker()
   ├── for i in CONVERT_CONCURRENCY:       go convertWorker()
   ├── for i in HTTP_DOWNLOAD_CONCURRENCY: go httpDownloadWorker()
@@ -127,12 +135,18 @@ main.go
 | Таблица | Назначение |
 |---|---|
 | `media_jobs` | Задания (статус, stage, прогресс) |
-| `media_assets` | Результаты HLS конвертации |
+| `media_assets` | Результаты HLS конвертации (фильмы) |
 | `movies` | Каталог фильмов (IMDb/TMDB) |
-| `movie_subtitles` | Субтитры на язык |
+| `movie_subtitles` | Субтитры фильмов на язык |
 | `search_results` | Кэш Prowlarr релизов |
 | `job_events` | Аудит-лог (JSONB) |
 | `storage_locations` | Хранилища файлов (local/remote); плеер выбирает base_url по `storage_location_id` |
+| `series` | Каталог сериалов (IMDb/TMDB) |
+| `seasons` | Сезоны сериала (season_number, tmdb_id) |
+| `episodes` | Эпизоды сезона (episode_number, title, duration) |
+| `episode_assets` | HLS-ресурсы эпизода (аналог media_assets для фильмов) |
+| `episode_subtitles` | Субтитры эпизодов на язык |
+| `audio_tracks` | Аудиодорожки эпизода (язык, индекс, label) |
 
 Миграции: `api/internal/db/migrations/` (001–013), применяются автоматически при старте API.
 

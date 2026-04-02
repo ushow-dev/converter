@@ -1,7 +1,7 @@
 # Job Payload Contracts (`download` / `remote_download` / `convert`)
 
 Версия схемы: `v1`
-Назначение: зафиксировать единый payload и правила обработки очередей для `movie` pipeline.
+Назначение: зафиксировать единый payload и правила обработки очередей для `movie` и `series` pipeline.
 
 ## 1) Базовый envelope
 
@@ -26,7 +26,7 @@
 - `schema_version` (string)
 - `job_id` (string)
 - `job_type` (enum: `download` | `remote_download` | `convert`)
-- `content_type` (enum: `movie`; `series` reserved)
+- `content_type` (enum: `movie` | `episode`)
 - `correlation_id` (uuid/string)
 - `attempt` (int >= 1)
 - `max_attempts` (int >= 1)
@@ -96,6 +96,8 @@ HTTP клиент: без таймаута (большие файлы); прог
 
 `job_type = "convert"`
 
+### Пример: фильм
+
 ```json
 {
   "input_path": "/media/downloads/job_01HZYJ9A/source.mkv",
@@ -108,6 +110,23 @@ HTTP клиент: без таймаута (большие файлы); прог
 }
 ```
 
+### Пример: эпизод сериала
+
+```json
+{
+  "input_path": "/media/downloads/job_01HZYJ9B/source.mkv",
+  "output_path": "/media/temp/job_01HZYJ9B/output.mp4",
+  "output_profile": "mp4_h264_aac_1080p",
+  "final_dir": "/media/converted/job_01HZYJ9B",
+  "imdb_id": null,
+  "tmdb_id": "1396",
+  "title": "Breaking Bad",
+  "series_id": "ser_01HZYJ01",
+  "season_number": 1,
+  "episode_number": 3
+}
+```
+
 Поля:
 
 - `input_path` (string, required)
@@ -117,12 +136,51 @@ HTTP клиент: без таймаута (большие файлы); прог
 - `imdb_id` (string, optional)
 - `tmdb_id` (string, optional)
 - `title` (string, optional)
+- `series_id` (string, nullable) — ID записи series в БД; заполняется только для эпизодов
+- `season_number` (int, nullable) — номер сезона; заполняется только для эпизодов
+- `episode_number` (int, nullable) — номер эпизода; заполняется только для эпизодов
+
+Если `series_id` / `season_number` / `episode_number` не заданы (null), worker обрабатывает задание как фильм.
 
 Очередь: `convert_queue`
 Обработчик: `worker/internal/converter`
 `max_attempts`: 5
 
-## 5) State model
+## 5) Transfer payload
+
+После успешной конвертации worker публикует сообщение в `transfer_queue` (если `RCLONE_REMOTE` задан).
+
+```json
+{
+  "content_id": "mov_01HZYJ9A",
+  "content_type": "movie",
+  "storage_key": "inception_2010_[27205]",
+  "local_path": "/media/converted/movies/inception_2010_[27205]"
+}
+```
+
+Для эпизода:
+
+```json
+{
+  "content_id": "ep_01HZYJ9B",
+  "content_type": "episode",
+  "storage_key": "breaking_bad_[1396]/s01/e03",
+  "local_path": "/media/converted/series/breaking_bad_[1396]/s01/e03"
+}
+```
+
+Поля:
+
+- `content_id` (string, required) — ID записи в БД (movie ID или episode ID); ранее называлось `movie_id`, переименовано в `content_id` для поддержки обоих типов
+- `content_type` (enum: `movie` | `episode`, required) — определяет тип записи и целевой путь rclone
+- `storage_key` (string, required) — относительный путь в хранилище
+- `local_path` (string, required) — абсолютный локальный путь к HLS-директории
+
+Очередь: `transfer_queue`
+Обработчик: `worker/internal/transfer`
+
+## 6) State model
 
 Состояния задач:
 
@@ -139,7 +197,7 @@ HTTP клиент: без таймаута (большие файлы); прог
 - `error_code` / `error_message` (для `failed`)
 - `retryable` (bool)
 
-## 6) Retry policy
+## 7) Retry policy
 
 - Стратегия: exponential backoff.
 - Базовая задержка: `5s`.
@@ -160,14 +218,14 @@ Non-retryable:
 - поврежденный payload;
 - ошибка валидации обязательных полей.
 
-## 7) Идемпотентность
+## 8) Идемпотентность
 
 - Для входа в pipeline используется `request_id` (на уровне create-job).
 - Worker обязан проверять, что `job_id` уже не завершен перед повторной обработкой.
 - Publish `convert` job допускается только один раз для пары (`job_id`, `stage=convert`).
 
-## 8) Совместимость и расширение под сериалы
+## 9) Совместимость и расширение под сериалы
 
-- `content_type` обязателен и уже включен в envelope.
-- Добавление сериалов выполняется расширением `payload` и `job_type`-стратегий без изменения существующих обязательных полей.
-- Новые необязательные поля (`season`, `episode`, `batch_mode`) добавляются backward-compatible.
+- `content_type` обязателен и уже включен в envelope; поддерживает значения `movie` и `episode`.
+- Поля `series_id`, `season_number`, `episode_number` в ConvertPayload добавлены как nullable — backward-compatible с существующими movie-заданиями.
+- `TransferPayload` использует `content_id` вместо `movie_id` — при развёртывании необходимо убедиться, что и API, и Worker обновлены одновременно.
