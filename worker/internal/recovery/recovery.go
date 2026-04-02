@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -136,27 +137,44 @@ func rebuildTransferPayload(ctx context.Context, pool *pgxpool.Pool, jobID strin
 		_ = pool.QueryRow(ctx, "SELECT storage_key FROM movies WHERE id = $1", movieID).Scan(&storageKey)
 		tj.ContentID = movieID
 		tj.StorageKey = storageKey
-		tj.LocalPath = storagePath[:len(storagePath)-len("/master.m3u8")] // strip filename
+		tj.LocalPath = stripMasterPlaylist(storagePath)
 		tj.ContentType = "movie"
 		return tj
 	}
 
-	// Try episode asset.
+	// Try episode asset — derive series storage key via JOIN.
 	var episodeID int64
 	err = pool.QueryRow(ctx,
 		"SELECT ea.episode_id, ea.storage_path FROM episode_assets ea WHERE ea.job_id = $1 AND ea.is_ready = true LIMIT 1",
 		jobID).Scan(&episodeID, &storagePath)
 	if err == nil {
+		var seriesStorageKey string
+		var seasonNum, episodeNum int
+		_ = pool.QueryRow(ctx, `
+			SELECT s.storage_key, sn.season_number, e.episode_number
+			FROM episodes e
+			JOIN seasons sn ON sn.id = e.season_id
+			JOIN series s ON s.id = sn.series_id
+			WHERE e.id = $1`, episodeID,
+		).Scan(&seriesStorageKey, &seasonNum, &episodeNum)
+
 		tj.ContentID = episodeID
-		tj.LocalPath = storagePath[:len(storagePath)-len("/master.m3u8")]
+		tj.StorageKey = fmt.Sprintf("%s/s%02d/e%02d", seriesStorageKey, seasonNum, episodeNum)
+		tj.LocalPath = stripMasterPlaylist(storagePath)
 		tj.ContentType = "episode"
-		// Derive storage key from local path.
-		tj.StorageKey = fmt.Sprintf("%d", episodeID)
 		return tj
 	}
 
 	slog.Warn("recovery: could not rebuild transfer payload", "job_id", jobID)
 	return tj
+}
+
+func stripMasterPlaylist(storagePath string) string {
+	const suffix = "/master.m3u8"
+	if strings.HasSuffix(storagePath, suffix) {
+		return storagePath[:len(storagePath)-len(suffix)]
+	}
+	return storagePath
 }
 
 // RecoverStaleLocks cleans up any orphaned job locks that don't correspond
