@@ -5,56 +5,68 @@ import PlayerClient, { type MovieResponse } from './PlayerClient'
 
 // ── API response shapes ──────────────────────────────────────────────────────
 
-export interface EpisodeItem {
-  season: number
-  episode: number
+interface EpisodeAPI {
+  episode_number: number
   title?: string
-  playback: { hls: string }
-  assets?: { poster?: string }
+  playback?: { hls: string }
+  assets?: { thumbnail?: string }
   subtitles?: { language: string; url: string }[]
+  audio_tracks?: { index: number; language?: string; label?: string; is_default: boolean }[]
+}
+
+interface SeasonAPI {
+  season_number: number
+  poster_url?: string
+  episodes: EpisodeAPI[]
 }
 
 /** Full series navigation response — /api/player/series */
 export interface SeriesData {
   data: {
-    series: { tmdb_id: string; title?: string }
-    episodes: EpisodeItem[]
+    series: { id?: number; tmdb_id?: string; title?: string; year?: number; poster_url?: string }
+    seasons: SeasonAPI[]
   }
-  meta: { version: string }
+  meta?: { version: string }
 }
 
 /** Single episode response — /api/player/episode */
 export interface EpisodeData {
   data: {
-    series?: { tmdb_id: string; title?: string }
-    episode: EpisodeItem
+    episode_number: number
+    season_number: number
+    title?: string
+    series?: { tmdb_id?: string; title?: string }
+    playback?: { hls: string }
+    assets?: { thumbnail?: string }
+    subtitles?: { language: string; url: string }[]
+    audio_tracks?: { index: number; language?: string; label?: string; is_default: boolean }[]
   }
-  meta: { version: string }
+  meta?: { version: string }
 }
 
-type AnySeriesData = SeriesData | EpisodeData
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySeriesData = SeriesData | EpisodeData | any
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function isEpisodeData(d: AnySeriesData): d is EpisodeData {
-  return 'episode' in d.data
+  return d?.data && ('episode_number' in d.data || 'episode' in d.data)
 }
 
-function episodeToMovieResponse(ep: EpisodeItem): MovieResponse {
+function isSeriesData(d: AnySeriesData): d is SeriesData {
+  return d?.data && 'seasons' in d.data && Array.isArray(d.data.seasons)
+}
+
+function episodeToMovieResponse(ep: EpisodeAPI, tmdbId?: string): MovieResponse {
   return {
     data: {
-      movie: { id: 0, imdb_id: '', tmdb_id: '' },
-      playback: { hls: ep.playback.hls },
-      assets: { poster: ep.assets?.poster ?? '' },
+      movie: { id: 0, imdb_id: '', tmdb_id: tmdbId ?? '' },
+      playback: { hls: ep.playback?.hls ?? '' },
+      assets: { poster: ep.assets?.thumbnail ?? '' },
       subtitles: ep.subtitles,
     },
-    meta: { version: '1' },
+    meta: { version: 'v1' },
   }
-}
-
-function epLabel(ep: EpisodeItem): string {
-  const base = `S${String(ep.season).padStart(2, '0')}E${String(ep.episode).padStart(2, '0')}`
-  return ep.title ? `${base} — ${ep.title}` : base
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -66,55 +78,84 @@ interface SeriesPlayerProps {
 
 export default function SeriesPlayer({ initialData, hideNavigation = false }: SeriesPlayerProps) {
   // Single-episode embed mode
-  if (hideNavigation || isEpisodeData(initialData)) {
-    const ep = isEpisodeData(initialData) ? initialData.data.episode : null
-    if (ep) {
-      return (
-        <div className="series-player-wrapper">
-          <PlayerClient key={`${ep.season}-${ep.episode}`} initialData={episodeToMovieResponse(ep)} />
-        </div>
-      )
+  if (hideNavigation && isEpisodeData(initialData)) {
+    const ep = initialData.data
+    if (!ep.playback?.hls) return <div className="player-status">Episode not ready</div>
+    const movieResponse: MovieResponse = {
+      data: {
+        movie: { id: 0, imdb_id: '', tmdb_id: ep.series?.tmdb_id ?? '' },
+        playback: { hls: ep.playback.hls },
+        assets: { poster: ep.assets?.thumbnail ?? '' },
+        subtitles: ep.subtitles,
+      },
+      meta: { version: 'v1' },
     }
+    return <PlayerClient initialData={movieResponse} />
   }
 
-  // Full navigation mode requires SeriesData
-  return <SeriesNavigator data={initialData as SeriesData} />
+  if (isSeriesData(initialData)) {
+    return <SeriesNavigator data={initialData} />
+  }
+
+  return <div className="player-status">Invalid series data</div>
+}
+
+// ── Flat episode for navigation ──────────────────────────────────────────────
+
+interface FlatEpisode {
+  seasonNumber: number
+  episodeNumber: number
+  title?: string
+  api: EpisodeAPI
 }
 
 // ── Full navigation sub-component ────────────────────────────────────────────
 
 function SeriesNavigator({ data }: { data: SeriesData }) {
-  const episodes = data.data.episodes ?? []
-  const title = data.data.series?.title ?? ''
+  const seriesTitle = data.data.series?.title ?? ''
+  const tmdbId = data.data.series?.tmdb_id ?? ''
 
-  // Derive unique season numbers
+  // Flatten all episodes with season context
+  const flatEpisodes = useMemo(() => {
+    const result: FlatEpisode[] = []
+    for (const season of data.data.seasons ?? []) {
+      for (const ep of season.episodes ?? []) {
+        result.push({
+          seasonNumber: season.season_number,
+          episodeNumber: ep.episode_number,
+          title: ep.title,
+          api: ep,
+        })
+      }
+    }
+    result.sort((a, b) => a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber)
+    return result
+  }, [data])
+
   const seasons = useMemo(
-    () => [...new Set(episodes.map((ep) => ep.season))].sort((a, b) => a - b),
-    [episodes],
+    () => [...new Set(flatEpisodes.map((e) => e.seasonNumber))].sort((a, b) => a - b),
+    [flatEpisodes],
   )
 
   const [selectedSeason, setSelectedSeason] = useState<number>(seasons[0] ?? 1)
   const [selectedEpIdx, setSelectedEpIdx] = useState<number>(0)
 
-  // Episodes for the current season
   const seasonEpisodes = useMemo(
-    () => episodes.filter((ep) => ep.season === selectedSeason).sort((a, b) => a.episode - b.episode),
-    [episodes, selectedSeason],
+    () => flatEpisodes.filter((e) => e.seasonNumber === selectedSeason),
+    [flatEpisodes, selectedSeason],
   )
 
   const currentEp = seasonEpisodes[selectedEpIdx] ?? null
 
-  // Global index helpers for prev/next across seasons
   const globalIdx = useMemo(
-    () => (currentEp ? episodes.findIndex((ep) => ep.season === currentEp.season && ep.episode === currentEp.episode) : -1),
-    [episodes, currentEp],
+    () => (currentEp ? flatEpisodes.indexOf(currentEp) : -1),
+    [flatEpisodes, currentEp],
   )
 
-  function navigateTo(ep: EpisodeItem) {
-    const newSeason = ep.season
-    const newSeasonEps = episodes.filter((e) => e.season === newSeason).sort((a, b) => a.episode - b.episode)
-    const idx = newSeasonEps.findIndex((e) => e.episode === ep.episode)
-    setSelectedSeason(newSeason)
+  function navigateTo(ep: FlatEpisode) {
+    setSelectedSeason(ep.seasonNumber)
+    const newSeasonEps = flatEpisodes.filter((e) => e.seasonNumber === ep.seasonNumber)
+    const idx = newSeasonEps.indexOf(ep)
     setSelectedEpIdx(idx >= 0 ? idx : 0)
   }
 
@@ -123,78 +164,69 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
     setSelectedEpIdx(0)
   }
 
-  function handleEpisodeChange(idx: number) {
-    setSelectedEpIdx(idx)
-  }
-
   const hasPrev = globalIdx > 0
-  const hasNext = globalIdx >= 0 && globalIdx < episodes.length - 1
+  const hasNext = globalIdx >= 0 && globalIdx < flatEpisodes.length - 1
 
-  const movieData = currentEp ? episodeToMovieResponse(currentEp) : null
+  const movieData = currentEp?.api.playback?.hls ? episodeToMovieResponse(currentEp.api, tmdbId) : null
 
   return (
     <div className="series-player-wrapper">
       <div className="series-nav">
-        {title && <span className="series-title">{title}</span>}
+        {seriesTitle && <span className="series-title">{seriesTitle}</span>}
 
         <div className="series-selectors">
-          {/* Season selector */}
           <select
             className="series-select"
             value={selectedSeason}
             onChange={(e) => handleSeasonChange(Number(e.target.value))}
-            aria-label="Season"
           >
             {seasons.map((s) => (
               <option key={s} value={s}>
-                Season {s}
+                Сезон {s}
               </option>
             ))}
           </select>
 
-          {/* Episode selector */}
           <select
             className="series-select"
             value={selectedEpIdx}
-            onChange={(e) => handleEpisodeChange(Number(e.target.value))}
-            aria-label="Episode"
+            onChange={(e) => setSelectedEpIdx(Number(e.target.value))}
           >
             {seasonEpisodes.map((ep, idx) => (
-              <option key={ep.episode} value={idx}>
-                {epLabel(ep)}
+              <option key={ep.episodeNumber} value={idx}>
+                {ep.episodeNumber}. {ep.title || `Серия ${ep.episodeNumber}`}
               </option>
             ))}
           </select>
         </div>
 
-        {/* Prev / Next buttons */}
         <div className="series-ep-nav">
           <button
             type="button"
             className="ep-nav-btn"
             disabled={!hasPrev}
-            onClick={() => hasPrev && navigateTo(episodes[globalIdx - 1])}
-            aria-label="Previous episode"
+            onClick={() => hasPrev && navigateTo(flatEpisodes[globalIdx - 1])}
           >
-            &#8592; Prev
+            ← Пред.
           </button>
           <button
             type="button"
             className="ep-nav-btn"
             disabled={!hasNext}
-            onClick={() => hasNext && navigateTo(episodes[globalIdx + 1])}
-            aria-label="Next episode"
+            onClick={() => hasNext && navigateTo(flatEpisodes[globalIdx + 1])}
           >
-            Next &#8594;
+            След. →
           </button>
         </div>
       </div>
 
-      {movieData && (
+      {movieData ? (
         <PlayerClient
-          key={`${currentEp!.season}-${currentEp!.episode}`}
+          key={`s${currentEp!.seasonNumber}e${currentEp!.episodeNumber}`}
           initialData={movieData}
         />
+      ) : (
+        <div className="player-status">Эпизод не готов</div>
       )}
     </div>
   )
