@@ -312,6 +312,23 @@ export async function deleteSeries(id: number): Promise<void> {
   }
 }
 
+export async function deleteEpisode(id: number): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`/api/admin/episodes/${id}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok && res.status !== 204) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body?.error?.message ?? `HTTP ${res.status}`)
+  }
+}
+
+export function episodeThumbnailSrc(episodeId: number): string {
+  const token = getToken()
+  return `/api/admin/episodes/${episodeId}/thumbnail${token ? `?token=${encodeURIComponent(token)}` : ''}`
+}
+
 // ── Formatters ───────────────────────────────────────────────────────────────
 
 export function formatBytes(bytes: number): string {

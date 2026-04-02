@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { getToken, getSeriesDetail, deleteSeries, formatDate } from '@/lib/api'
+import {
+  getToken,
+  getSeriesDetail,
+  deleteSeries,
+  deleteEpisode,
+  episodeThumbnailSrc,
+  formatDate,
+} from '@/lib/api'
 import { Nav } from '@/components/Nav'
 import type { SeriesDetailResponse, Episode } from '@/types'
 
@@ -16,19 +23,101 @@ function TvIcon() {
   )
 }
 
+// ── Player modal ───────────────────────────────────────────────────────────────
+
+interface PlayingEpisode {
+  seasonNumber: number
+  episodeNumber: number
+  title?: string
+}
+
+function PlayerModal({
+  episode,
+  tmdbId,
+  playerUrl,
+  onClose,
+}: {
+  episode: PlayingEpisode
+  tmdbId?: string
+  playerUrl: string
+  onClose: () => void
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const src = `${playerUrl}/?tmdb_id=${tmdbId}&type=series&s=${episode.seasonNumber}&e=${episode.episodeNumber}`
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-3xl mx-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute -top-8 right-0 text-gray-400 hover:text-white text-sm"
+        >
+          ✕ закрыть
+        </button>
+        <div className="w-full overflow-hidden rounded-lg bg-black" style={{ aspectRatio: '16/10' }}>
+          <iframe
+            src={src}
+            style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
+            scrolling="no"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+        {episode.title && (
+          <p className="mt-2 text-center text-sm text-gray-400">{episode.title}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Episode row ────────────────────────────────────────────────────────────────
+
 function EpisodeRow({
   episode,
   seasonNumber,
   tmdbId,
   playerUrl,
+  onPlay,
+  onDelete,
 }: {
   episode: Episode
   seasonNumber: number
   tmdbId?: string
   playerUrl: string
+  onPlay: (ep: PlayingEpisode) => void
+  onDelete: (id: number) => void
 }) {
   return (
     <tr className="border-b border-gray-800/60 hover:bg-gray-900/40">
+      {/* Thumbnail */}
+      <td className="w-14 px-4 py-2">
+        {episode.has_thumbnail ? (
+          <div className="relative h-10 w-16 shrink-0 overflow-hidden rounded bg-gray-800">
+            <img
+              src={episodeThumbnailSrc(episode.id)}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={e => { e.currentTarget.style.display = 'none' }}
+            />
+          </div>
+        ) : (
+          <div className="flex h-10 w-16 shrink-0 items-center justify-center rounded bg-gray-800/60">
+            <TvIcon />
+          </div>
+        )}
+      </td>
       <td className="px-4 py-2 text-sm text-gray-400 w-12">
         {episode.episode_number}
       </td>
@@ -42,32 +131,48 @@ function EpisodeRow({
         {formatDate(episode.created_at)}
       </td>
       <td className="px-4 py-2 text-right">
-        {tmdbId && playerUrl && (
-          <a
-            href={`${playerUrl}/?tmdb_id=${tmdbId}&type=series&s=${seasonNumber}&e=${episode.episode_number}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded p-1.5 text-gray-600 hover:bg-green-900/40 hover:text-green-400 transition-colors inline-flex"
-            title="Смотреть"
+        <div className="flex items-center justify-end gap-1">
+          {tmdbId && playerUrl && (
+            <button
+              onClick={() => onPlay({ seasonNumber, episodeNumber: episode.episode_number, title: episode.title })}
+              className="rounded p-1.5 text-gray-600 hover:bg-green-900/40 hover:text-green-400 transition-colors inline-flex"
+              title="Смотреть"
+            >
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={() => onDelete(episode.id)}
+            className="rounded p-1.5 text-gray-600 hover:bg-red-900/40 hover:text-red-400 transition-colors"
+            title="Удалить эпизод"
           >
-            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
-          </a>
-        )}
+          </button>
+        </div>
       </td>
     </tr>
   )
 }
 
+// ── Season section ─────────────────────────────────────────────────────────────
+
 function SeasonSection({
   season,
   tmdbId,
   playerUrl,
+  onPlay,
+  onDelete,
 }: {
   season: SeriesDetailResponse['seasons'][number]
   tmdbId?: string
   playerUrl: string
+  onPlay: (ep: PlayingEpisode) => void
+  onDelete: (id: number) => void
 }) {
   const [open, setOpen] = useState(true)
 
@@ -108,11 +213,12 @@ function SeasonSection({
             <table className="w-full">
               <thead className="text-left text-xs uppercase tracking-wider text-gray-600 bg-gray-900/50">
                 <tr>
+                  <th className="px-4 py-2 w-14" />
                   <th className="px-4 py-2 w-12">#</th>
                   <th className="px-4 py-2">Название</th>
                   <th className="hidden sm:table-cell px-4 py-2">storage_key</th>
                   <th className="hidden sm:table-cell px-4 py-2">Добавлен</th>
-                  <th className="px-4 py-2 w-12" />
+                  <th className="px-4 py-2 w-20" />
                 </tr>
               </thead>
               <tbody>
@@ -123,6 +229,8 @@ function SeasonSection({
                     seasonNumber={season.season_number}
                     tmdbId={tmdbId}
                     playerUrl={playerUrl}
+                    onPlay={onPlay}
+                    onDelete={onDelete}
                   />
                 ))}
               </tbody>
@@ -151,6 +259,7 @@ export default function SeriesDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [playerUrl, setPlayerUrl] = useState('')
+  const [playingEpisode, setPlayingEpisode] = useState<PlayingEpisode | null>(null)
 
   useEffect(() => {
     if (!getToken()) {
@@ -182,8 +291,28 @@ export default function SeriesDetailPage() {
     }
   }
 
+  async function handleDeleteEpisode(episodeId: number) {
+    if (!window.confirm('Удалить эпизод и все связанные файлы?')) return
+    try {
+      await deleteEpisode(episodeId)
+      const data = await getSeriesDetail(id)
+      setDetail(data)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Ошибка при удалении')
+    }
+  }
+
   return (
     <div className="min-h-screen">
+      {playingEpisode && detail?.series.tmdb_id && (
+        <PlayerModal
+          episode={playingEpisode}
+          tmdbId={detail.series.tmdb_id}
+          playerUrl={playerUrl}
+          onClose={() => setPlayingEpisode(null)}
+        />
+      )}
+
       <Nav />
 
       <main className="px-3 py-4 sm:px-6 sm:py-8 max-w-5xl">
@@ -305,6 +434,8 @@ export default function SeriesDetailPage() {
                     season={season}
                     tmdbId={detail.series.tmdb_id}
                     playerUrl={playerUrl}
+                    onPlay={setPlayingEpisode}
+                    onDelete={handleDeleteEpisode}
                   />
                 ))}
               </div>

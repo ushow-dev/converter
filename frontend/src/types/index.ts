@@ -203,6 +203,7 @@ export interface Episode {
   episode_number: number
   title?: string
   storage_key: string
+  has_thumbnail?: boolean
   created_at: string
   updated_at: string
 }

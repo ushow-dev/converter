@@ -11,6 +11,14 @@
 
 ## [Unreleased]
 
+### Added
+- `api/internal/handler/series.go`: added `DeleteEpisode` handler (`DELETE /api/admin/episodes/{episodeId}`) and `EpisodeThumbnail` handler (`GET /api/admin/episodes/{episodeId}/thumbnail`); enriched `Get` response to include `has_thumbnail` and `created_at` per episode by querying `GetEpisodeAsset`
+- `api/internal/repository/series.go`: added `DeleteEpisode` method — deletes episode row by primary key
+- `api/internal/server/server.go`: registered `DELETE /episodes/{episodeId}` in JWT-protected group and `GET /episodes/{episodeId}/thumbnail` in JWT-query-or-header group
+- `frontend/src/lib/api.ts`: added `deleteEpisode` and `episodeThumbnailSrc` API helpers
+- `frontend/src/types/index.ts`: added optional `has_thumbnail` field to `Episode` interface
+- `frontend/src/app/series/[id]/page.tsx`: added `PlayerModal` component for in-page episode playback; added thumbnail column to episode table; added per-episode delete button with confirmation; play button now opens modal instead of external link
+
 ### Fixed
 - `frontend/src/app/series/page.tsx`: added play button (links to player with `type=series`) and delete button per row; fetches `playerUrl` from `/api/app-config`; added TMDB external link icon button matching movies page pattern
 - `frontend/src/app/series/[id]/page.tsx`: replaced broken `<dl>` grid metadata layout with flat flex row of inline label+value pairs; fixed invalid Tailwind class `w-22` → `w-[88px]` for poster placeholder; added play button to each episode row linking to player with season/episode params; fetches `playerUrl` from `/api/app-config`; passes `tmdbId` and `playerUrl` down through `SeasonSection` and `EpisodeRow`
