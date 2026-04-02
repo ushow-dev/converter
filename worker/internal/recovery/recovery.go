@@ -7,12 +7,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"app/worker/internal/model"
+	"app/worker/internal/paths"
 	"app/worker/internal/queue"
 )
 
@@ -137,7 +137,7 @@ func rebuildTransferPayload(ctx context.Context, pool *pgxpool.Pool, jobID strin
 		_ = pool.QueryRow(ctx, "SELECT storage_key FROM movies WHERE id = $1", movieID).Scan(&storageKey)
 		tj.ContentID = movieID
 		tj.StorageKey = storageKey
-		tj.LocalPath = stripMasterPlaylist(storagePath)
+		tj.LocalPath = paths.StripMasterPlaylist(storagePath)
 		tj.ContentType = "movie"
 		return tj
 	}
@@ -160,21 +160,13 @@ func rebuildTransferPayload(ctx context.Context, pool *pgxpool.Pool, jobID strin
 
 		tj.ContentID = episodeID
 		tj.StorageKey = fmt.Sprintf("%s/s%02d/e%02d", seriesStorageKey, seasonNum, episodeNum)
-		tj.LocalPath = stripMasterPlaylist(storagePath)
+		tj.LocalPath = paths.StripMasterPlaylist(storagePath)
 		tj.ContentType = "episode"
 		return tj
 	}
 
 	slog.Warn("recovery: could not rebuild transfer payload", "job_id", jobID)
 	return tj
-}
-
-func stripMasterPlaylist(storagePath string) string {
-	const suffix = "/master.m3u8"
-	if strings.HasSuffix(storagePath, suffix) {
-		return storagePath[:len(storagePath)-len(suffix)]
-	}
-	return storagePath
 }
 
 // RecoverStaleLocks cleans up any orphaned job locks that don't correspond
