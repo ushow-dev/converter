@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Script from 'next/script'
 import { startP2PMetrics, stopP2PMetrics } from './p2pMetrics'
+import { HLS_CONFIG, SUBTITLE_LABELS, normalizeLanguageCode, subtitleLabel } from './constants'
 
 export interface MovieResponse {
   data: {
@@ -42,33 +43,6 @@ interface AudioTrackInfo {
   is_default: boolean
 }
 
-const SUBTITLE_LABELS: Record<string, string> = {
-  ru: 'Русский',
-  en: 'English',
-  uk: 'Українська',
-  es: 'Espanol',
-  fr: 'Francais',
-  de: 'Deutsch',
-  it: 'Italiano',
-  pt: 'Portugues',
-  pl: 'Polski',
-  tr: 'Turkce',
-  ja: 'Japanese',
-  ko: 'Korean',
-  zh: 'Chinese',
-}
-
-function normalizeLanguageCode(lang: string): string {
-  const trimmed = lang.trim().toLowerCase()
-  if (!trimmed) return 'und'
-  return trimmed.split(/[-_]/)[0] || 'und'
-}
-
-function subtitleLabel(lang: string): string {
-  const normalized = normalizeLanguageCode(lang)
-  return SUBTITLE_LABELS[normalized] ?? normalized.toUpperCase()
-}
-
 declare global {
   interface Window {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,23 +52,6 @@ declare global {
 
 const P2P_ENABLED = process.env.NEXT_PUBLIC_P2P_ENABLED === 'true'
 const P2P_TRACKER_URL = process.env.NEXT_PUBLIC_P2P_TRACKER_URL || 'wss://t.pimor.online'
-
-const HLS_CONFIG = {
-  startLevel: 0,
-  capLevelToPlayerSize: true,
-  testBandwidth: true,
-  lowLatencyMode: false,
-  abrEwmaDefaultEstimate: 300000,
-  abrBandWidthFactor: 0.8,
-  abrBandWidthUpFactor: 0.6,
-  abrEwmaFastVoD: 3.0,
-  abrEwmaSlowVoD: 9.0,
-  maxBufferLength: 6,
-  maxMaxBufferLength: 10,
-  maxBufferSize: 12000000,
-  maxBufferHole: 0.5,
-  backBufferLength: 20,
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function createHlsInstance(): Promise<{ Hls: any; isP2P: boolean }> {
