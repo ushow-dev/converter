@@ -12,6 +12,9 @@
 ## [Unreleased]
 
 ### Changed
+- `api/internal/service/job.go`, `api/internal/service/job_create.go`, `api/internal/service/job_remote.go`: split 498-line job.go into three files — `CreateJobRequest`, `CreateJob`, `CreateUploadJobRequest`, `CreateUploadJob` moved to job_create.go; `CreateRemoteDownloadJobRequest`, `CreateRemoteDownloadJob`, `parseTitleYear`, `tmdbSearch` moved to job_remote.go; job.go retains `JobService`, `NewJobService`, shared helpers (`checkDuplicate`, `buildNormalizedName`, `generateJobID`), and read/delete operations only
+
+### Changed
 - `api/internal/handler/browse.go`, `api/internal/handler/browse_parser.go`: split 467-line browse.go into two files — parsing/HTTP helpers (`buildProxyClient`, `fetchURL`, `findDirs`, `scanDir`, `scanFlatDir`, `fileExt`, `extractSize`, `formatRemoteSize`, regex vars, `videoExts`, `dirEntry`) moved to browse_parser.go; browse.go retains `BrowseHandler`, `NewBrowseHandler`, `Browse` endpoint, and shared response types only
 
 ### Changed
