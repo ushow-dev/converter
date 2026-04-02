@@ -1,8 +1,9 @@
 module app/api
 
-go 1.22
+go 1.23
 
 require (
+	app/shared v0.0.0
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/jackc/pgx/v5 v5.7.2
@@ -11,6 +12,8 @@ require (
 	golang.org/x/crypto v0.31.0
 	golang.org/x/net v0.33.0
 )
+
+replace app/shared => ../shared
 
 require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect

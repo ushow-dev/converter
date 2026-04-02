@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	sharedmodel "app/shared/model"
+)
 
 // ─── Job ─────────────────────────────────────────────────────────────────────
 
@@ -123,37 +127,10 @@ type SearchResult struct {
 // ─── Source types ─────────────────────────────────────────────────────────────
 
 const (
-	SourceTypeTorrent = "torrent"
-	SourceTypeUpload  = "upload"
-	SourceTypeHTTP    = "http"
+	SourceTypeTorrent = sharedmodel.SourceTypeTorrent
+	SourceTypeUpload  = sharedmodel.SourceTypeUpload
+	SourceTypeHTTP    = sharedmodel.SourceTypeHTTP
 )
-
-// ─── Queue payloads ──────────────────────────────────────────────────────────
-
-// DownloadPayload is the message envelope pushed to download_queue.
-type DownloadPayload struct {
-	SchemaVersion string      `json:"schema_version"`
-	JobID         string      `json:"job_id"`
-	JobType       string      `json:"job_type"`
-	ContentType   string      `json:"content_type"`
-	CorrelationID string      `json:"correlation_id"`
-	Attempt       int         `json:"attempt"`
-	MaxAttempts   int         `json:"max_attempts"`
-	CreatedAt     time.Time   `json:"created_at"`
-	Payload       DownloadJob `json:"payload"`
-}
-
-// DownloadJob is the inner payload for a download task.
-type DownloadJob struct {
-	SourceType string `json:"source_type"`
-	SourceRef  string `json:"source_ref"`
-	IMDbID     string `json:"imdb_id"`
-	TMDBID     string `json:"tmdb_id"`
-	Title      string `json:"title"`
-	TargetDir  string `json:"target_dir"`
-	Priority   string `json:"priority"`
-	RequestID  string `json:"request_id"`
-}
 
 // ─── Subtitle ─────────────────────────────────────────────────────────────────
 
@@ -169,87 +146,14 @@ type Subtitle struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// ConvertPayload is the message envelope pushed directly to convert_queue
-// by the API for upload jobs (bypassing the download worker).
-// JSON-compatible with worker/internal/model.ConvertMessage.
-type ConvertPayload struct {
-	SchemaVersion string     `json:"schema_version"`
-	JobID         string     `json:"job_id"`
-	JobType       string     `json:"job_type"`
-	ContentType   string     `json:"content_type"`
-	CorrelationID string     `json:"correlation_id"`
-	Attempt       int        `json:"attempt"`
-	MaxAttempts   int        `json:"max_attempts"`
-	CreatedAt     time.Time  `json:"created_at"`
-	Payload       ConvertJob `json:"payload"`
-}
+// ── Queue type aliases (definitions in app/shared/model) ────────────────────
 
-// ConvertJob is the inner payload for a convert task.
-type ConvertJob struct {
-	InputPath     string `json:"input_path"`
-	OutputPath    string `json:"output_path"`
-	OutputProfile string `json:"output_profile"`
-	FinalDir      string `json:"final_dir"`
-	IMDbID        string `json:"imdb_id"`
-	TMDBID        string `json:"tmdb_id"`
-	Title         string `json:"title"`
-	// StorageKey is the pre-built normalized storage key (slug_year_[tmdb]).
-	// When set, the worker uses it directly and skips re-normalization.
-	StorageKey    string `json:"storage_key,omitempty"`
-	SeriesID      *int64 `json:"series_id,omitempty"`
-	SeasonNumber  *int   `json:"season_number,omitempty"`
-	EpisodeNumber *int   `json:"episode_number,omitempty"`
-}
-
-// ProxyConfig holds optional proxy settings for remote HTTP requests.
-type ProxyConfig struct {
-	Enabled  bool   `json:"enabled"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Type     string `json:"type"`     // "SOCKS5" or "HTTP"
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// RemoteDownloadPayload is the message envelope pushed to remote_download_queue.
-// JSON-compatible with worker/internal/model.RemoteDownloadMessage.
-type RemoteDownloadPayload struct {
-	SchemaVersion string            `json:"schema_version"`
-	JobID         string            `json:"job_id"`
-	JobType       string            `json:"job_type"`
-	ContentType   string            `json:"content_type"`
-	CorrelationID string            `json:"correlation_id"`
-	Attempt       int               `json:"attempt"`
-	MaxAttempts   int               `json:"max_attempts"`
-	CreatedAt     time.Time         `json:"created_at"`
-	Payload       RemoteDownloadJob `json:"payload"`
-}
-
-// RemoteDownloadJob is the inner payload for an HTTP download task.
-type RemoteDownloadJob struct {
-	SourceURL   string       `json:"source_url"`             // HTTP(S) URL of the video file
-	Filename    string       `json:"filename"`               // sanitized filename to save as
-	IMDbID      string       `json:"imdb_id"`
-	TMDBID      string       `json:"tmdb_id"`
-	Title       string       `json:"title"`
-	StorageKey  string       `json:"storage_key,omitempty"`  // pre-built normalized key; forwarded to ConvertJob
-	TargetDir   string       `json:"target_dir"`
-	ProxyConfig *ProxyConfig `json:"proxy_config,omitempty"` // optional proxy for the download
-}
-
-// TransferPayload is the message pushed to transfer_queue after HLS conversion.
-type TransferPayload struct {
-	SchemaVersion string      `json:"schema_version"`
-	JobID         string      `json:"job_id"`
-	CorrelationID string      `json:"correlation_id"`
-	CreatedAt     time.Time   `json:"created_at"`
-	Payload       TransferJob `json:"payload"`
-}
-
-// TransferJob holds details for a single rclone transfer operation.
-type TransferJob struct {
-	ContentID   int64  `json:"content_id"`
-	StorageKey  string `json:"storage_key"`  // relative folder name, e.g. "Inception (2010)"
-	LocalPath   string `json:"local_path"`   // absolute local path to the movie folder
-	ContentType string `json:"content_type,omitempty"`
-}
+type DownloadPayload = sharedmodel.DownloadMessage
+type DownloadJob = sharedmodel.DownloadJob
+type ConvertPayload = sharedmodel.ConvertMessage
+type ConvertJob = sharedmodel.ConvertJob
+type RemoteDownloadPayload = sharedmodel.RemoteDownloadMessage
+type RemoteDownloadJob = sharedmodel.RemoteDownloadJob
+type TransferPayload = sharedmodel.TransferMessage
+type TransferJob = sharedmodel.TransferJob
+type ProxyConfig = sharedmodel.ProxyConfig
