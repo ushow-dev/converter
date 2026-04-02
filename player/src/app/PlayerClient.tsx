@@ -126,7 +126,7 @@ function getP2PConfig(streamUrl: string) {
   }
 }
 
-export default function PlayerClient({ initialData }: { initialData: MovieResponse }) {
+export default function PlayerClient({ initialData, onEnded }: { initialData: MovieResponse; onEnded?: () => void }) {
   const movieData = initialData
   const [fluidReady, setFluidReady] = useState(() =>
     typeof window !== 'undefined' && typeof window.fluidPlayer === 'function'
@@ -283,6 +283,18 @@ export default function PlayerClient({ initialData }: { initialData: MovieRespon
       widthQuery.removeListener(apply)
     }
   }, [])
+
+  // Notify parent when video ends (used for series autoplay).
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !onEnded) return
+    const handler = () => {
+      // Only fire for main content, not ads.
+      if (!adActiveRef.current) onEnded()
+    }
+    video.addEventListener('ended', handler)
+    return () => video.removeEventListener('ended', handler)
+  }, [onEnded])
 
   // hls.js init moved into the Fluid Player useEffect below — Fluid Player
   // must initialize first so it doesn't clobber the MSE source.

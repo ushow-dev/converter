@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import PlayerClient, { type MovieResponse } from './PlayerClient'
 
 // ── API response shapes ──────────────────────────────────────────────────────
@@ -155,6 +155,12 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
 
   const movieData = currentEp?.api.playback?.hls ? episodeToMovieResponse(currentEp.api, tmdbId) : null
 
+  const handleEpisodeEnded = useCallback(() => {
+    if (hasNext) {
+      navigateTo(flatEpisodes[globalIdx + 1])
+    }
+  }, [hasNext, flatEpisodes, globalIdx])
+
   return (
     <div className="series-player-wrapper">
       <div className="series-nav">
@@ -210,6 +216,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
         <PlayerClient
           key={`s${currentEp!.seasonNumber}e${currentEp!.episodeNumber}`}
           initialData={movieData}
+          onEnded={handleEpisodeEnded}
         />
       ) : (
         <div className="player-status">Эпизод не готов</div>
