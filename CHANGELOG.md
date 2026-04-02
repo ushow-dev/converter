@@ -12,6 +12,12 @@
 ## [Unreleased]
 
 ### Added
+- `player/src/app/constants.ts`: new module with `HLS_CONFIG`, `SUBTITLE_LABELS`, `normalizeLanguageCode()`, and `subtitleLabel()` extracted from `PlayerClient.tsx` for reuse and clarity
+
+### Changed
+- `player/src/app/PlayerClient.tsx`: removed inline `HLS_CONFIG`, `SUBTITLE_LABELS`, `normalizeLanguageCode`, and `subtitleLabel`; imports them from `./constants` instead
+
+### Added
 - `frontend/src/components/PlayerModal.tsx`: generic player modal component accepting `src`, `title`, and `onClose` props; replaces duplicate inline modals in movies and series pages
 - `frontend/src/components/MovieTable.tsx`: extracted `FilmIcon`, `Thumbnail`, `SubtitleCell`, `EditableID`, and `MovieRow` components from movies page to enable reuse
 
