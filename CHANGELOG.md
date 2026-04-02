@@ -12,6 +12,12 @@
 ## [Unreleased]
 
 ### Changed
+- `api/internal/handler/browse.go`, `api/internal/handler/browse_parser.go`: split 467-line browse.go into two files — parsing/HTTP helpers (`buildProxyClient`, `fetchURL`, `findDirs`, `scanDir`, `scanFlatDir`, `fileExt`, `extractSize`, `formatRemoteSize`, regex vars, `videoExts`, `dirEntry`) moved to browse_parser.go; browse.go retains `BrowseHandler`, `NewBrowseHandler`, `Browse` endpoint, and shared response types only
+
+### Changed
+- `worker/internal/converter/converter.go`, `worker/internal/converter/tmdb.go`, `worker/internal/converter/archive.go`: split 761-line converter.go into three files — TMDB helpers (`tmdbMetadata`, `fetchTMDBMetadata`, `fetchTMDBTVMetadata`, `downloadImage`) moved to tmdb.go; archive helpers (`archiveToScanner`, `parseQuality`) moved to archive.go; converter.go retains Worker struct, lifecycle, and pipeline logic only
+
+### Changed
 - `worker/go.mod`, `worker/internal/model/model.go`: wire `app/shared` module into worker via type aliases — queue payload structs (`DownloadMessage`, `ConvertMessage`, `RemoteDownloadMessage`, `TransferMessage`, `TransferJob`, `ProxyConfig`) and status/stage string constants now delegate to `app/shared/model`; worker-specific domain types (`Asset`, `Movie`, `Subtitle`, `StorageLocation`) remain in the local package
 
 ### Added
