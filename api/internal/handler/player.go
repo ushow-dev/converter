@@ -160,23 +160,12 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build audio track list.
-	audioTracks := []map[string]any{}
+	var audioTracks []map[string]any
 	if asset, err := h.assetRepo.GetByMovieID(r.Context(), movie.id); err == nil {
-		if tracks, err := h.audioTrackRepo.ListByAsset(r.Context(), asset.AssetID, "movie"); err == nil {
-			for _, t := range tracks {
-				track := map[string]any{
-					"index":      t.TrackIndex,
-					"is_default": t.IsDefault,
-				}
-				if t.Language != nil {
-					track["language"] = *t.Language
-				}
-				if t.Label != nil {
-					track["label"] = *t.Label
-				}
-				audioTracks = append(audioTracks, track)
-			}
-		}
+		audioTracks = h.buildAudioTracksPayload(r.Context(), asset.AssetID, "movie")
+	}
+	if audioTracks == nil {
+		audioTracks = []map[string]any{}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
@@ -274,43 +263,50 @@ func (h *PlayerHandler) resolveBaseURL(ctx context.Context, storageLocationID *i
 	return h.mediaBaseURL
 }
 
-func buildMovieMediaURL(baseURL, storageKey, fileName string) string {
-	relative := fmt.Sprintf("/movies/%s/%s", storageKey, fileName)
+// buildMediaURL joins baseURL with a relative path, handling empty base URL.
+func buildMediaURL(baseURL, relativePath string) string {
 	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if trimmed == "" {
-		return relative
+		return "/" + relativePath
 	}
-	return trimmed + relative
+	return trimmed + "/" + relativePath
+}
+
+func buildMovieMediaURL(baseURL, storageKey, fileName string) string {
+	return buildMediaURL(baseURL, fmt.Sprintf("movies/%s/%s", storageKey, fileName))
 }
 
 func buildSeriesMediaURL(baseURL, seriesStorageKey string, seasonNum, episodeNum int, fileName string) string {
-	relative := fmt.Sprintf("/series/%s/s%02d/e%02d/%s", seriesStorageKey, seasonNum, episodeNum, fileName)
-	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if trimmed == "" {
-		return relative
+	return buildMediaURL(baseURL, fmt.Sprintf("series/%s/s%02d/e%02d/%s", seriesStorageKey, seasonNum, episodeNum, fileName))
+}
+
+// buildAudioTracksPayload fetches and formats audio tracks for any asset type.
+func (h *PlayerHandler) buildAudioTracksPayload(ctx context.Context, assetID, assetType string) []map[string]any {
+	tracks, err := h.audioTrackRepo.ListByAsset(ctx, assetID, assetType)
+	if err != nil || len(tracks) == 0 {
+		return nil
 	}
-	return trimmed + relative
+	result := make([]map[string]any, len(tracks))
+	for i, t := range tracks {
+		td := map[string]any{"index": t.TrackIndex, "is_default": t.IsDefault}
+		if t.Language != nil {
+			td["language"] = *t.Language
+		}
+		if t.Label != nil {
+			td["label"] = *t.Label
+		}
+		result[i] = td
+	}
+	return result
 }
 
 // buildEpisodeAudioTracks fetches audio tracks for an episode asset.
 func (h *PlayerHandler) buildEpisodeAudioTracks(ctx context.Context, assetID string) []map[string]any {
-	audioTracks := []map[string]any{}
-	if tracks, err := h.audioTrackRepo.ListByAsset(ctx, assetID, "episode"); err == nil {
-		for _, t := range tracks {
-			track := map[string]any{
-				"index":      t.TrackIndex,
-				"is_default": t.IsDefault,
-			}
-			if t.Language != nil {
-				track["language"] = *t.Language
-			}
-			if t.Label != nil {
-				track["label"] = *t.Label
-			}
-			audioTracks = append(audioTracks, track)
-		}
+	tracks := h.buildAudioTracksPayload(ctx, assetID, "episode")
+	if tracks == nil {
+		return []map[string]any{}
 	}
-	return audioTracks
+	return tracks
 }
 
 // buildEpisodeSubtitles fetches subtitles for an episode.

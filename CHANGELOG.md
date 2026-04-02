@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `api/internal/handler/player.go`: extracted `buildAudioTracksPayload(ctx, assetID, assetType)` as a unified helper for audio track response building, replacing duplicated inline logic in `GetMovie` and `buildEpisodeAudioTracks`; unified `buildMovieMediaURL` and `buildSeriesMediaURL` around a shared `buildMediaURL(baseURL, relativePath)` base function, reducing duplication
+
 ### Added
 - `worker/internal/repository/subtitle.go`: add `UpsertEpisodeSubtitle` method to persist subtitle tracks for series episodes into `episode_subtitles` table
 - `worker/internal/converter/converter.go`: fetch and save subtitles for episodes via `subtitleFetcher.FetchAndSave` after HLS conversion completes, mirroring existing movie subtitle behaviour
