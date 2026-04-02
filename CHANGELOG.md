@@ -12,6 +12,8 @@
 ## [Unreleased]
 
 ### Added
+- `shared/model/queue.go`, `shared/model/proxy.go`: unified queue envelope and job payload structs (`DownloadMessage`, `ConvertMessage`, `RemoteDownloadMessage`, `TransferMessage`, `CancelMessage` and their inner `*Job` types) plus `ProxyConfig` — single source of truth replacing duplicated definitions in `api/internal/model/` and `worker/internal/model/`
+- `shared/errors/errors.go`: shared error types package with sentinel errors (`ErrNotFound`, `ErrConflict`), `ValidationError`, and helper functions `IsNotFound`, `IsConflict`, `Wrap`
 - `shared/go.mod`, `shared/model/status.go`, `shared/model/constants.go`: new shared Go module (`app/shared`) providing canonical `JobStatus`, `JobStage`, `JobPriority` types and `ContentType*` / `SourceType*` string constants to be imported by both `api/` and `worker/` services
 
 ### Changed
