@@ -128,7 +128,9 @@ function getP2PConfig(streamUrl: string) {
 
 export default function PlayerClient({ initialData }: { initialData: MovieResponse }) {
   const movieData = initialData
-  const [fluidReady, setFluidReady] = useState(false)
+  const [fluidReady, setFluidReady] = useState(() =>
+    typeof window !== 'undefined' && typeof window.fluidPlayer === 'function'
+  )
   const [streamMode, setStreamMode] = useState<'pending' | 'hlsjs' | 'native'>('pending')
   const [isMobileRuntime, setIsMobileRuntime] = useState(false)
   const [qualities, setQualities] = useState<QualityLevel[]>([])

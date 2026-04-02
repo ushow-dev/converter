@@ -182,7 +182,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
           >
             {seasons.map((s) => (
               <option key={s} value={s}>
-                Сезон {s}
+                Season {s}
               </option>
             ))}
           </select>
@@ -194,7 +194,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
           >
             {seasonEpisodes.map((ep, idx) => (
               <option key={ep.episodeNumber} value={idx}>
-                {ep.episodeNumber}. {ep.title || `Серия ${ep.episodeNumber}`}
+                Episode {ep.episodeNumber}
               </option>
             ))}
           </select>
