@@ -115,6 +115,8 @@ worker/
     │   └── puller.go               # rclone copy с storage-сервера
     ├── ffmpeg/                     # Обёртка FFmpeg (профили, thumbnail)
     │   └── probe.go                # ffprobe audio track detection
+    ├── paths/                      # Централизованное разрешение путей к медиафайлам
+    ├── recovery/                   # Восстановление зависших заданий при старте воркера
     ├── qbittorrent/                # API-клиент qBittorrent
     ├── subtitles/                  # Авто-получение субтитров
     ├── health/                     # HTTP health server (порт 8001)
@@ -256,13 +258,18 @@ docs/
 media/                              # Bind mount с хоста (MEDIA_PATH в .env)
 ├── downloads/{jobID}/              # Сырые файлы (торрент / HTTP / ingest)
 ├── temp/{jobID}/                   # Временное рабочее пространство FFmpeg
-└── converted/movies/{storageKey}/  # Готовый HLS-контент (storageKey = "Title (Year)")
-    ├── master.m3u8                 # Мастер-плейлист
-    ├── 360/                        # HLS сегменты 360p
-    ├── 480/                        # HLS сегменты 480p
-    ├── 720/                        # HLS сегменты 720p
-    ├── thumbnail.jpg               # Превью
-    └── subtitles/                  # VTT субтитры ({lang}.vtt)
+├── converted/movies/{storageKey}/  # Готовый HLS-контент фильма (storageKey = "Title (Year)")
+│   ├── master.m3u8                 # Мастер-плейлист
+│   ├── 360/                        # HLS сегменты 360p
+│   ├── 480/                        # HLS сегменты 480p
+│   ├── 720/                        # HLS сегменты 720p
+│   ├── thumbnail.jpg               # Превью
+│   └── subtitles/                  # VTT субтитры ({lang}.vtt)
+└── converted/series/{seriesStorageKey}/s{NN}/e{NN}/  # Готовый HLS сериала
+    ├── master.m3u8
+    ├── 360/ 480/ 720/
+    ├── thumbnail.jpg
+    └── subtitles/
 ```
 
 ---

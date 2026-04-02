@@ -43,9 +43,10 @@
 
 | Сервис | Технология | Порт | Назначение |
 |---|---|---|---|
-| **api** | Go 1.23 | 8000 | HTTP API (admin + player) |
-| **worker** | Go 1.23 | 8001 (health) | Загрузка + конвертация |
-| **frontend** | Next.js 14 | 3000 | Admin UI |
+| **api** | Go 1.23 | 8000 | HTTP API (admin + player), включая series CRUD |
+| **worker** | Go 1.23 | 8001 (health) | Загрузка + конвертация (фильмы и сериалы, multi-audio) |
+| **frontend** | Next.js 14 | 3000 | Admin UI (включая каталог сериалов) |
+| **player** | Next.js | 3100 | Player embed (фильмы + series navigation) |
 | **postgres** | PostgreSQL 16 | 5432 | Основная БД |
 | **redis** | Redis 7 | 6379 | Очереди заданий |
 | **qbittorrent** | LinuxServer | 8080 | Торрент-клиент |
@@ -104,6 +105,13 @@ media_jobs          -- задания (статус, прогресс, stage)
   └─► movies        -- каталог фильмов (imdb_id / tmdb_id)
          └─► movie_subtitles  -- субтитры (lang, VTT-файл)
 
+series              -- сериалы (title, year, tmdb_id, storage_key)
+  └─► seasons       -- сезоны (season_number, series_id)
+         └─► episodes        -- эпизоды (episode_number, hls_path)
+                └─► episode_assets     -- HLS assets эпизода
+                └─► episode_subtitles  -- субтитры эпизода (lang, VTT)
+media_audio_tracks  -- аудиодорожки (job_id, lang, index, codec)
+
 search_results      -- кэш поисковых результатов Prowlarr
 job_events          -- аудит-лог событий (JSONB)
 ```
@@ -115,18 +123,27 @@ job_events          -- аудит-лог событий (JSONB)
 ```
 Входной файл (любой формат)
       │
+      ▼ ffprobe (audio track detection)
+  media_audio_tracks записи (lang, index, codec)
+      │
       ▼ FFmpeg
-  ┌───┴──────────────────────────────────────┐
-  │  360p → /media/converted/{id}/360/       │
-  │  480p → /media/converted/{id}/480/       │
-  │  720p → /media/converted/{id}/720/       │
-  │  master.m3u8 (ссылки на все варианты)    │
-  │  thumbnail.jpg (кадр из видео)           │
-  └──────────────────────────────────────────┘
+  ┌───┴──────────────────────────────────────────────────────┐
+  │  Фильм:                                                   │
+  │    360p → /media/converted/movies/{key}/360/              │
+  │    480p → /media/converted/movies/{key}/480/              │
+  │    720p → /media/converted/movies/{key}/720/              │
+  │    master.m3u8 / thumbnail.jpg                            │
+  │                                                           │
+  │  Сериал (series branch):                                  │
+  │    360p → /media/converted/series/{key}/s{NN}/e{NN}/360/  │
+  │    480p → /media/converted/series/{key}/s{NN}/e{NN}/480/  │
+  │    720p → /media/converted/series/{key}/s{NN}/e{NN}/720/  │
+  │    master.m3u8 / thumbnail.jpg                            │
+  └──────────────────────────────────────────────────────────┘
       │
       ▼ Создаются записи в БД
-  media_assets (is_ready=true, storage_path)
-  movies       (title, year, imdb_id, tmdb_id)
+  Фильм:  media_assets + movies (title, year, imdb_id, tmdb_id)
+  Сериал: episode_assets + episodes + seasons + series
       │
       ▼ Опционально
   Субтитры: OpenSubtitles API → .vtt файлы

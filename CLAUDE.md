@@ -55,7 +55,8 @@ The root of this repository is `/converter/`. All code, docs, and config live he
 ### 7. Media storage layout
 - Raw downloads: `/media/downloads/{jobID}/`
 - Temp FFmpeg workspace: `/media/temp/{jobID}/`
-- Converted HLS: `/media/converted/movies/{movieStorageKey}/`
+- Converted HLS (movies): `/media/converted/movies/{movieStorageKey}/`
+- Converted HLS (series): `/media/converted/series/{seriesStorageKey}/s{NN}/e{NN}/`
 - This layout is assumed throughout — do not reorganize without updating all path references
 
 ---
@@ -96,6 +97,13 @@ The root of this repository is `/converter/`. All code, docs, and config live he
 | Docker config | `docker-compose.yml` |
 | Architecture docs | `docs/architecture/` |
 | API contracts | `docs/contracts/` |
+| Series models | `api/internal/model/series.go`, `worker/internal/model/series.go` |
+| Series handlers | `api/internal/handler/series.go` |
+| Series repositories | `api/internal/repository/series.go` |
+| Audio track repos | `api/internal/repository/audio_track.go` |
+| Path resolution | `worker/internal/paths/paths.go` |
+| Startup recovery | `worker/internal/recovery/recovery.go` |
+| Audio probing | `worker/internal/ffmpeg/probe.go` |
 
 ---
 

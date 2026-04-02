@@ -111,6 +111,10 @@
 
 ## Реализовано (зафиксировано в CHANGELOG)
 
+### SERIES-001: Поддержка сериалов
+**Реализовано:** 2026-04-01
+**Что сделано:** полный цикл работы с TV-сериалами — 6 новых таблиц БД (series, seasons, episodes, episode_assets, episode_subtitles, media_audio_tracks), series branch в конвертере (HLS per episode), multi-audio (ffprobe detection + audio_tracks), series CRUD в API, серийная навигация в плеере (SeriesPlayer.tsx), страницы сериалов в admin UI, централизованное разрешение путей (paths/), восстановление зависших заданий (recovery/). See ADR-011.
+
 ### INGEST-BLOCK2: Converter-side ingest API and worker
 **Реализовано:** 2026-03-18
 **Что сделано:** API-driven ingest split — incoming_media_items table, 5 service-token-protected endpoints, IngestService (complete creates media_job + pushes to convert_queue), IngestWorker (rclone claim-copy-complete loop). See ADR-008.
