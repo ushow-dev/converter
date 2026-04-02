@@ -20,6 +20,7 @@
 - `frontend/src/app/series/[id]/page.tsx`: added `PlayerModal` component for in-page episode playback; added thumbnail column to episode table; added per-episode delete button with confirmation; play button now opens modal instead of external link
 
 ### Fixed
+- `worker/internal/converter/converter.go`: prefix episode `storage_key` with `series.StorageKey` to prevent UNIQUE constraint violations when multiple series share the same season/episode number (e.g. `devil_may_cry_2025_[235930]_s01e01`)
 - `frontend/src/app/series/page.tsx`: added play button (links to player with `type=series`) and delete button per row; fetches `playerUrl` from `/api/app-config`; added TMDB external link icon button matching movies page pattern
 - `frontend/src/app/series/[id]/page.tsx`: replaced broken `<dl>` grid metadata layout with flat flex row of inline label+value pairs; fixed invalid Tailwind class `w-22` → `w-[88px]` for poster placeholder; added play button to each episode row linking to player with season/episode params; fetches `playerUrl` from `/api/app-config`; passes `tmdbId` and `playerUrl` down through `SeasonSection` and `EpisodeRow`
 

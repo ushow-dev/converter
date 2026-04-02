@@ -274,7 +274,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			episodeNum = *msg.Payload.EpisodeNumber
 		}
 		epTitle := nullableText(msg.Payload.Title)
-		epStorageKey := fmt.Sprintf("s%02de%02d", seasonNum, episodeNum)
+		epStorageKey := fmt.Sprintf("%s_s%02de%02d", series.StorageKey, seasonNum, episodeNum)
 		episode, err := w.seriesRepo.UpsertEpisode(jobCtx, season.ID, episodeNum, epTitle, epStorageKey)
 		if err != nil {
 			w.failJob(ctx, msg, "DB_ERROR", "upsert episode: "+err.Error(), false)
