@@ -6,17 +6,20 @@ WORKDIR /build
 # Install build tools (git needed for some module fetches)
 RUN apk add --no-cache git
 
-# Copy module definition first to leverage Docker layer cache.
-COPY go.mod ./
+# Copy shared module first (dependency of api).
+COPY shared/ ./shared/
 
-# Copy all source (go mod tidy requires source to resolve indirect deps).
-COPY . .
+# Copy api module definition to leverage Docker layer cache.
+COPY api/go.mod api/go.sum* ./api/
+
+# Copy api source.
+COPY api/ ./api/
 
 # Download and verify dependencies, generate go.sum.
-RUN go mod tidy
+RUN cd api && go mod tidy
 
 # Build a static binary.
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN cd api && CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \
     -o /api \
     ./cmd/api

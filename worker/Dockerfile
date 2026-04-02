@@ -5,11 +5,15 @@ WORKDIR /build
 
 RUN apk add --no-cache git
 
-COPY go.mod ./
-COPY . .
+# Copy shared module first (dependency of worker).
+COPY shared/ ./shared/
 
-RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux go build \
+# Copy worker module.
+COPY worker/go.mod worker/go.sum* ./worker/
+COPY worker/ ./worker/
+
+RUN cd worker && go mod tidy
+RUN cd worker && CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \
     -o /worker \
     ./cmd/worker

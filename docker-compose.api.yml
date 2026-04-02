@@ -61,7 +61,8 @@ services:
   # ── Core API ──────────────────────────────────────────────────
   api:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
     image: ${API_IMAGE:-app/api}:${APP_IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:

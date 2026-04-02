@@ -112,7 +112,8 @@ services:
   # ── Worker ────────────────────────────────────────────────────
   worker:
     build:
-      context: ./worker
+      context: .
+      dockerfile: worker/Dockerfile
     image: ${WORKER_IMAGE:-app/worker}:${APP_IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
