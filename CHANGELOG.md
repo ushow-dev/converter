@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `scanner/scanner/loops/scan_loop.py`: `_process_series_folder` now inserts episodes with `status='new'` instead of `status='registered'`, so the stability check in `_handle_stable_episode` must promote them — prevents partially-copied files from being ingested
+
 ### Security
 - `api/internal/handler/series.go`: validate episode thumbnail path is under `/media/` before serving to prevent path traversal; use `filepath.Clean` and prefix check, return 404 on violation
 

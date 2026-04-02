@@ -246,7 +246,7 @@ def _process_series_folder(cfg: Config, folder_path: Path, now: datetime) -> Non
                             (source_path, source_filename, file_size_bytes, status,
                              content_kind, normalized_name, tmdb_id,
                              series_tmdb_id, season_number, episode_number)
-                        VALUES (%s, %s, %s, 'registered', 'episode', %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, 'new', 'episode', %s, %s, %s, %s, %s)
                         """,
                         (
                             str(file_path),
@@ -260,7 +260,7 @@ def _process_series_folder(cfg: Config, folder_path: Path, now: datetime) -> Non
                         ),
                     )
                     logger.info(
-                        "series episode registered: %s S%02dE%02d (series_tmdb_id=%s)",
+                        "series episode detected (pending stability): %s S%02dE%02d (series_tmdb_id=%s)",
                         file_path.name, ep["season"], ep["episode"], series_tmdb_id,
                     )
         except Exception:
