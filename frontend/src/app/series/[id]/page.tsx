@@ -106,7 +106,7 @@ function EpisodeRow({
         {episode.has_thumbnail ? (
           <div className="relative h-10 w-16 shrink-0 overflow-hidden rounded bg-gray-800">
             <img
-              src={episodeThumbnailSrc(episode.id)}
+              src={episode.thumbnail_url || episodeThumbnailSrc(episode.id)}
               alt=""
               className="h-full w-full object-cover"
               onError={e => { e.currentTarget.style.display = 'none' }}

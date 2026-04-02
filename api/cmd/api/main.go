@@ -100,7 +100,7 @@ func main() {
 	subtitleH := handler.NewSubtitleHandler(movieRepo, subtitleRepo, osClient, cfg.MediaRoot, cfg.SubtitleLanguages, cfg.StorageRemote, cfg.StorageRemotePath)
 	browseH := handler.NewBrowseHandler()
 	scannerH := handler.NewScannerHandler(cfg.ScannerAPIURL, cfg.IngestServiceToken)
-	seriesH := handler.NewSeriesHandler(seriesRepo)
+	seriesH := handler.NewSeriesHandler(seriesRepo, cfg.MediaBaseURL)
 
 	// ── HTTP server ────────────────────────────────────────────────────────────
 	h := server.New(server.Dependencies{

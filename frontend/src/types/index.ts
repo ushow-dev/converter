@@ -204,6 +204,7 @@ export interface Episode {
   title?: string
   storage_key: string
   has_thumbnail?: boolean
+  thumbnail_url?: string
   created_at: string
   updated_at: string
 }

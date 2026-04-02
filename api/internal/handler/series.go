@@ -14,12 +14,13 @@ import (
 
 // SeriesHandler handles /api/admin/series endpoints.
 type SeriesHandler struct {
-	seriesRepo *repository.SeriesRepository
+	seriesRepo   *repository.SeriesRepository
+	mediaBaseURL string
 }
 
 // NewSeriesHandler creates a SeriesHandler.
-func NewSeriesHandler(seriesRepo *repository.SeriesRepository) *SeriesHandler {
-	return &SeriesHandler{seriesRepo: seriesRepo}
+func NewSeriesHandler(seriesRepo *repository.SeriesRepository, mediaBaseURL string) *SeriesHandler {
+	return &SeriesHandler{seriesRepo: seriesRepo, mediaBaseURL: mediaBaseURL}
 }
 
 // List handles GET /api/admin/series.
@@ -85,6 +86,7 @@ func (h *SeriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Title         *string `json:"title,omitempty"`
 		StorageKey    string  `json:"storage_key"`
 		HasThumbnail  bool    `json:"has_thumbnail"`
+		ThumbnailURL  *string `json:"thumbnail_url,omitempty"`
 		CreatedAt     string  `json:"created_at"`
 	}
 
@@ -110,12 +112,18 @@ func (h *SeriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		for _, ep := range episodes {
 			asset, _ := h.seriesRepo.GetEpisodeAsset(r.Context(), ep.ID)
 			hasThumbnail := asset != nil && asset.ThumbnailPath != nil
+			var thumbURL *string
+			if hasThumbnail && h.mediaBaseURL != "" {
+				u := buildSeriesMediaURL(h.mediaBaseURL, series.StorageKey, s.SeasonNumber, ep.EpisodeNumber, "thumbnail.jpg")
+				thumbURL = &u
+			}
 			items = append(items, episodeItem{
 				ID:            ep.ID,
 				EpisodeNumber: ep.EpisodeNumber,
 				Title:         ep.Title,
 				StorageKey:    ep.StorageKey,
 				HasThumbnail:  hasThumbnail,
+				ThumbnailURL:  thumbURL,
 				CreatedAt:     ep.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			})
 		}
