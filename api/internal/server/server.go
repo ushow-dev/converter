@@ -75,6 +75,7 @@ func New(deps Dependencies) http.Handler {
 			r.Get("/series", deps.SeriesHandler.List)
 			r.Get("/series/{seriesId}", deps.SeriesHandler.Get)
 			r.Delete("/series/{seriesId}", deps.SeriesHandler.Delete)
+			r.Delete("/episodes/{episodeId}", deps.SeriesHandler.DeleteEpisode)
 		})
 
 		// Thumbnail: JWT via header or ?token= query param (for <img src>)
@@ -82,6 +83,7 @@ func New(deps Dependencies) http.Handler {
 			r.Use(auth.JWTQueryOrHeaderMiddleware(deps.Cfg.JWTSecret))
 			r.Get("/jobs/{jobID}/thumbnail", deps.JobsHandler.Thumbnail)
 			r.Get("/movies/{movieId}/thumbnail", deps.MoviesHandler.Thumbnail)
+			r.Get("/episodes/{episodeId}/thumbnail", deps.SeriesHandler.EpisodeThumbnail)
 		})
 	})
 

@@ -207,6 +207,15 @@ func (r *SeriesRepository) GetEpisodeAsset(ctx context.Context, episodeID int64)
 	return a, nil
 }
 
+// DeleteEpisode deletes an episode by ID.
+func (r *SeriesRepository) DeleteEpisode(ctx context.Context, id int64) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM episodes WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete episode: %w", err)
+	}
+	return nil
+}
+
 // DeleteSeries deletes a series by ID. Cascades handle related rows.
 func (r *SeriesRepository) DeleteSeries(ctx context.Context, id int64) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM series WHERE id = $1`, id)

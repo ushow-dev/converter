@@ -79,10 +79,19 @@ func (h *SeriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	type episodeItem struct {
+		ID            int64   `json:"id"`
+		EpisodeNumber int     `json:"episode_number"`
+		Title         *string `json:"title,omitempty"`
+		StorageKey    string  `json:"storage_key"`
+		HasThumbnail  bool    `json:"has_thumbnail"`
+		CreatedAt     string  `json:"created_at"`
+	}
+
 	type seasonItem struct {
-		ID           int64            `json:"id"`
-		SeasonNumber int              `json:"season_number"`
-		Episodes     []*model.Episode `json:"episodes"`
+		ID           int64         `json:"id"`
+		SeasonNumber int           `json:"season_number"`
+		Episodes     []episodeItem `json:"episodes"`
 	}
 
 	seasonItems := make([]seasonItem, 0, len(dbSeasons))
@@ -97,10 +106,24 @@ func (h *SeriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 			episodes = []*model.Episode{}
 		}
 
+		items := make([]episodeItem, 0, len(episodes))
+		for _, ep := range episodes {
+			asset, _ := h.seriesRepo.GetEpisodeAsset(r.Context(), ep.ID)
+			hasThumbnail := asset != nil && asset.ThumbnailPath != nil
+			items = append(items, episodeItem{
+				ID:            ep.ID,
+				EpisodeNumber: ep.EpisodeNumber,
+				Title:         ep.Title,
+				StorageKey:    ep.StorageKey,
+				HasThumbnail:  hasThumbnail,
+				CreatedAt:     ep.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			})
+		}
+
 		seasonItems = append(seasonItems, seasonItem{
 			ID:           s.ID,
 			SeasonNumber: s.SeasonNumber,
-			Episodes:     episodes,
+			Episodes:     items,
 		})
 	}
 
@@ -108,6 +131,38 @@ func (h *SeriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"series":  series,
 		"seasons": seasonItems,
 	})
+}
+
+// DeleteEpisode handles DELETE /api/admin/episodes/{episodeId}.
+func (h *SeriesHandler) DeleteEpisode(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+	idStr := chi.URLParam(r, "episodeId")
+	episodeID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid episode id", false, cid)
+		return
+	}
+	if err := h.seriesRepo.DeleteEpisode(r.Context(), episodeID); err != nil {
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete episode", false, cid)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// EpisodeThumbnail handles GET /api/admin/episodes/{episodeId}/thumbnail.
+func (h *SeriesHandler) EpisodeThumbnail(w http.ResponseWriter, r *http.Request) {
+	cid := auth.GetCorrelationID(r.Context())
+	episodeID, err := strconv.ParseInt(chi.URLParam(r, "episodeId"), 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid episode id", false, cid)
+		return
+	}
+	asset, err := h.seriesRepo.GetEpisodeAsset(r.Context(), episodeID)
+	if err != nil || asset.ThumbnailPath == nil {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeFile(w, r, *asset.ThumbnailPath)
 }
 
 // Delete handles DELETE /api/admin/series/{seriesId}.
