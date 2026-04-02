@@ -32,14 +32,8 @@ export interface SeriesData {
 /** Single episode response — /api/player/episode */
 export interface EpisodeData {
   data: {
-    episode_number: number
-    season_number: number
-    title?: string
-    series?: { tmdb_id?: string; title?: string }
-    playback?: { hls: string }
-    assets?: { thumbnail?: string }
-    subtitles?: { language: string; url: string }[]
-    audio_tracks?: { index: number; language?: string; label?: string; is_default: boolean }[]
+    episode: EpisodeAPI
+    series?: { id?: number; tmdb_id?: string; title?: string }
   }
   meta?: { version: string }
 }
@@ -50,7 +44,7 @@ type AnySeriesData = SeriesData | EpisodeData | any
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function isEpisodeData(d: AnySeriesData): d is EpisodeData {
-  return d?.data && ('episode_number' in d.data || 'episode' in d.data)
+  return d?.data && 'episode' in d.data && typeof d.data.episode === 'object'
 }
 
 function isSeriesData(d: AnySeriesData): d is SeriesData {
@@ -78,19 +72,11 @@ interface SeriesPlayerProps {
 
 export default function SeriesPlayer({ initialData, hideNavigation = false }: SeriesPlayerProps) {
   // Single-episode embed mode
-  if (hideNavigation && isEpisodeData(initialData)) {
-    const ep = initialData.data
+  if (isEpisodeData(initialData)) {
+    const ep = initialData.data.episode
     if (!ep.playback?.hls) return <div className="player-status">Episode not ready</div>
-    const movieResponse: MovieResponse = {
-      data: {
-        movie: { id: 0, imdb_id: '', tmdb_id: ep.series?.tmdb_id ?? '' },
-        playback: { hls: ep.playback.hls },
-        assets: { poster: ep.assets?.thumbnail ?? '' },
-        subtitles: ep.subtitles,
-      },
-      meta: { version: 'v1' },
-    }
-    return <PlayerClient initialData={movieResponse} />
+    const tmdbId = initialData.data.series?.tmdb_id ?? ''
+    return <PlayerClient initialData={episodeToMovieResponse(ep, tmdbId)} />
   }
 
   if (isSeriesData(initialData)) {
