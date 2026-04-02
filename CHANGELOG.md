@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Added
+- `worker/internal/paths/paths.go`: new `PathResolver` package providing centralized media path resolution — `MovieFinalDir`, `EpisodeFinalDir`, `MovieTransferKey`, `EpisodeTransferKey`, `TransferDest`, `DownloadsDir`, `TempDir`, and `StripMasterPlaylist` as single source of truth for all path construction in the worker
+
 ### Fixed
 - `worker/internal/model/model.go`, `api/internal/model/model.go`: renamed `TransferJob.MovieID` to `ContentID` (JSON: `content_id`) and removed unused `EpisodeID` field — `ContentID` now correctly holds either a movie ID or an episode ID depending on `ContentType`
 - `worker/internal/transfer/transfer.go`: skip `movieRepo.UpdateStorageLocation` for episodes (content_type=episode) to prevent updating a non-existent movies row; updated log field from `movie_id` to `content_id`
