@@ -1,4 +1,4 @@
-import PlayerClient, { type MovieResponse } from './PlayerClient'
+import PlayerClient, { type MovieResponse, movieResponseToPlayback } from './PlayerClient'
 import SeriesPlayer from './SeriesPlayer'
 
 const API_URL = process.env.API_URL ?? 'http://localhost:8000'
@@ -57,5 +57,5 @@ export default async function Page({ searchParams }: PageProps) {
   const { data, error } = await fetchMovieData(searchParams.imdb_id, searchParams.tmdb_id)
   if (error) return <div className="player-status">{error}</div>
   if (!data) return <div className="player-status">No data</div>
-  return <PlayerClient initialData={data} />
+  return <PlayerClient playback={movieResponseToPlayback(data)} />
 }

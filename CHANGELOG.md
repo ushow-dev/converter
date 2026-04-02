@@ -11,6 +11,11 @@
 
 ## [Unreleased]
 
+### Changed
+- `player/src/app/PlayerClient.tsx`: introduce `PlaybackData` interface and `movieResponseToPlayback()` converter; change `PlayerClient` prop from `initialData: MovieResponse` to `playback: PlaybackData` — removes coupling to API response shape
+- `player/src/app/SeriesPlayer.tsx`: replace `episodeToMovieResponse()` with `episodeToPlayback()` returning `PlaybackData`; update all `<PlayerClient>` usages to pass `playback=` prop
+- `player/src/app/page.tsx`: convert `MovieResponse` to `PlaybackData` via `movieResponseToPlayback()` before passing to `PlayerClient`
+
 ### Added
 - `scanner/scanner/constants.py`: new shared constants module with `VIDEO_EXTENSIONS` and `MIN_FILE_SIZE_BYTES`, deduplicating identical definitions previously scattered across `scan_loop.py`, `metadata.py`, and `series_detect.py`
 

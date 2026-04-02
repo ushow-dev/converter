@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import PlayerClient, { type MovieResponse } from './PlayerClient'
+import PlayerClient, { type PlaybackData } from './PlayerClient'
 
 // ── API response shapes ──────────────────────────────────────────────────────
 
@@ -51,15 +51,12 @@ function isSeriesData(d: AnySeriesData): d is SeriesData {
   return d?.data && 'seasons' in d.data && Array.isArray(d.data.seasons)
 }
 
-function episodeToMovieResponse(ep: EpisodeAPI, tmdbId?: string): MovieResponse {
+function episodeToPlayback(ep: EpisodeAPI, tmdbId?: string): PlaybackData {
   return {
-    data: {
-      movie: { id: 0, imdb_id: '', tmdb_id: tmdbId ?? '' },
-      playback: { hls: ep.playback?.hls ?? '' },
-      assets: { poster: ep.assets?.thumbnail ?? '' },
-      subtitles: ep.subtitles,
-    },
-    meta: { version: 'v1' },
+    hls: ep.playback?.hls ?? '',
+    poster: ep.assets?.thumbnail ?? '',
+    subtitles: ep.subtitles,
+    tmdbId,
   }
 }
 
@@ -76,7 +73,7 @@ export default function SeriesPlayer({ initialData, hideNavigation = false }: Se
     const ep = initialData.data.episode
     if (!ep.playback?.hls) return <div className="player-status">Episode not ready</div>
     const tmdbId = initialData.data.series?.tmdb_id ?? ''
-    return <PlayerClient initialData={episodeToMovieResponse(ep, tmdbId)} />
+    return <PlayerClient playback={episodeToPlayback(ep, tmdbId)} />
   }
 
   if (isSeriesData(initialData)) {
@@ -154,7 +151,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
   const hasPrev = globalIdx > 0
   const hasNext = globalIdx >= 0 && globalIdx < flatEpisodes.length - 1
 
-  const movieData = currentEp?.api.playback?.hls ? episodeToMovieResponse(currentEp.api, tmdbId) : null
+  const playbackData = currentEp?.api.playback?.hls ? episodeToPlayback(currentEp.api, tmdbId) : null
 
   const handleEpisodeEnded = useCallback(() => {
     if (hasNext) {
@@ -214,10 +211,10 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
         </div>
       </div>
 
-      {movieData ? (
+      {playbackData ? (
         <PlayerClient
           key={`s${currentEp!.seasonNumber}e${currentEp!.episodeNumber}`}
-          initialData={movieData}
+          playback={playbackData}
           onEnded={handleEpisodeEnded}
           autoPlay={shouldAutoPlay}
         />

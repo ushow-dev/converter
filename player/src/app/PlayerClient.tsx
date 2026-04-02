@@ -14,6 +14,22 @@ export interface MovieResponse {
   meta: { version: string }
 }
 
+export interface PlaybackData {
+  hls: string
+  poster?: string
+  subtitles?: { language: string; url: string }[]
+  tmdbId?: string
+}
+
+export function movieResponseToPlayback(resp: MovieResponse): PlaybackData {
+  return {
+    hls: resp.data.playback.hls,
+    poster: resp.data.assets.poster,
+    subtitles: resp.data.subtitles,
+    tmdbId: resp.data.movie.tmdb_id,
+  }
+}
+
 interface QualityLevel {
   label: string
   index: number
@@ -126,8 +142,7 @@ function getP2PConfig(streamUrl: string) {
   }
 }
 
-export default function PlayerClient({ initialData, onEnded, autoPlay = false }: { initialData: MovieResponse; onEnded?: () => void; autoPlay?: boolean }) {
-  const movieData = initialData
+export default function PlayerClient({ playback, onEnded, autoPlay = false }: { playback: PlaybackData; onEnded?: () => void; autoPlay?: boolean }) {
   const [fluidReady, setFluidReady] = useState(() =>
     typeof window !== 'undefined' && typeof window.fluidPlayer === 'function'
   )
@@ -150,9 +165,9 @@ export default function PlayerClient({ initialData, onEnded, autoPlay = false }:
   const seekIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seekLoadStoppedRef = useRef(false)
   const seekWasPlayingRef = useRef(false)
-  const streamUrlRef = useRef<string>(movieData.data.playback.hls)
+  const streamUrlRef = useRef<string>(playback.hls)
   const autoPlayRef = useRef(autoPlay)
-  const subtitleTracks = movieData.data.subtitles ?? []
+  const subtitleTracks = playback.subtitles ?? []
 
   const setupHlsJsMode = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -364,7 +379,7 @@ export default function PlayerClient({ initialData, onEnded, autoPlay = false }:
   // video element and set its own source. We then attach hls.js AFTER
   // Fluid Player is ready, so hls.js gets the final word on the source.
   useEffect(() => {
-    if (!fluidReady || !movieData || !videoRef.current) return
+    if (!fluidReady || !playback || !videoRef.current) return
     if (typeof window.fluidPlayer !== 'function') return
     if (fluidInstanceRef.current) return // already initialized
 
@@ -435,7 +450,7 @@ export default function PlayerClient({ initialData, onEnded, autoPlay = false }:
     // Now that Fluid Player is done with its init (and VAST pre-roll
     // attempt), attach hls.js to take over the source via MSE.
     const video = videoRef.current
-    const streamUrl = movieData.data.playback.hls
+    const streamUrl = playback.hls
     setupHlsJsMode(video, streamUrl).then((hls) => {
       hlsRef.current = hls
     })
@@ -451,7 +466,7 @@ export default function PlayerClient({ initialData, onEnded, autoPlay = false }:
         fluidInstanceRef.current = null
       }
     }
-  }, [fluidReady, movieData, mountSettingsInPlayer, onAdStart, onAdEnd, setupHlsJsMode])
+  }, [fluidReady, playback, mountSettingsInPlayer, onAdStart, onAdEnd, setupHlsJsMode])
 
   const applyAudioTrack = useCallback((index: number) => {
     setSelectedAudio(index)
@@ -487,7 +502,7 @@ export default function PlayerClient({ initialData, onEnded, autoPlay = false }:
     return () => document.removeEventListener('click', handleClick)
   }, [])
 
-  const poster = movieData.data.assets.poster
+  const poster = playback.poster ?? ''
 
   return (
     <>
