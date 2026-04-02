@@ -12,6 +12,14 @@
 ## [Unreleased]
 
 ### Added
+- `scanner/scanner/constants.py`: new shared constants module with `VIDEO_EXTENSIONS` and `MIN_FILE_SIZE_BYTES`, deduplicating identical definitions previously scattered across `scan_loop.py`, `metadata.py`, and `series_detect.py`
+
+### Changed
+- `scanner/scanner/loops/scan_loop.py`: replace local `VIDEO_EXTENSIONS` and `MIN_FILE_SIZE_BYTES` definitions with import from `scanner.constants`
+- `scanner/scanner/services/metadata.py`: replace local `VIDEO_EXTENSIONS` definition with import from `scanner.constants`
+- `scanner/scanner/services/series_detect.py`: replace local `VIDEO_EXTENSIONS` definition with import from `scanner.constants`
+
+### Added
 - `api/internal/repository/interfaces.go`: define `MovieReader` and `SeriesReader` interfaces matching existing repository methods to enable future unit testing without a live database
 
 ### Fixed

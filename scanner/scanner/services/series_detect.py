@@ -5,9 +5,9 @@ from typing import Optional
 
 import guessit
 
-logger = logging.getLogger(__name__)
+from scanner.constants import VIDEO_EXTENSIONS
 
-VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv"}
+logger = logging.getLogger(__name__)
 
 
 def detect_series_folder(folder_path: Path) -> Optional[list[dict]]:

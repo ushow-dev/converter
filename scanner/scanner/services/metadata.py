@@ -7,9 +7,9 @@ from typing import Optional
 import guessit
 import requests
 
-logger = logging.getLogger(__name__)
+from scanner.constants import VIDEO_EXTENSIONS
 
-VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv"}
+logger = logging.getLogger(__name__)
 
 _HD_RELEASE_TYPES = {"webrip", "web-dl", "webdl", "web dl", "bluray", "blu-ray", "blu ray", "hdtv", "hdrip", "hd"}
 _SD_RELEASE_TYPES = {"cam", "ts", "tc", "screener", "scr", "dvdscr", "r5"}

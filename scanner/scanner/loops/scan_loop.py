@@ -10,11 +10,10 @@ import guessit
 
 from scanner import db
 from scanner.config import Config
+from scanner.constants import MIN_FILE_SIZE_BYTES, VIDEO_EXTENSIONS
 from scanner.services import duplicates, metadata, quality, series_detect, stability
 
 logger = logging.getLogger(__name__)
-
-VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv"}
 
 
 def run(cfg: Config) -> None:
@@ -47,9 +46,6 @@ def _scan_once(cfg: Config) -> None:
             _process_file(cfg, file_path, now)
         except Exception:
             logger.exception("error processing file %s", file_path)
-
-
-MIN_FILE_SIZE_BYTES = 1024 * 1024  # 1 MB — ignore stubs and resource forks
 
 
 def _walk_video_files(root: Path):
