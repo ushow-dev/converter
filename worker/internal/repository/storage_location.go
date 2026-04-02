@@ -26,3 +26,16 @@ func (r *StorageLocationRepository) GetByID(ctx context.Context, id int64) (*mod
 	}
 	return loc, nil
 }
+
+// GetActiveRemoteID returns the ID of the first active non-local storage location.
+// Returns an error if no such location exists.
+func (r *StorageLocationRepository) GetActiveRemoteID(ctx context.Context) (int64, error) {
+	var id int64
+	err := r.pool.QueryRow(ctx,
+		`SELECT id FROM storage_locations WHERE is_active = true AND type != 'local' ORDER BY id LIMIT 1`,
+	).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("get active remote storage location: %w", err)
+	}
+	return id, nil
+}

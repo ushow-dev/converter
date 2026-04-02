@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- `worker/internal/repository/storage_location.go`: add `GetActiveRemoteID` method that queries the database for the first active non-local storage location instead of relying on a hardcoded ID
+- `worker/cmd/worker/main.go`: replace hardcoded `remoteStorageLocID = int64(2)` constant with a DB lookup via `StorageLocationRepository.GetActiveRemoteID` at startup; transfer worker is gracefully disabled if no active remote storage location is found
+
 ### Changed
 - `api/internal/service/job.go`, `api/internal/service/job_create.go`, `api/internal/service/job_remote.go`: split 498-line job.go into three files — `CreateJobRequest`, `CreateJob`, `CreateUploadJobRequest`, `CreateUploadJob` moved to job_create.go; `CreateRemoteDownloadJobRequest`, `CreateRemoteDownloadJob`, `parseTitleYear`, `tmdbSearch` moved to job_remote.go; job.go retains `JobService`, `NewJobService`, shared helpers (`checkDuplicate`, `buildNormalizedName`, `generateJobID`), and read/delete operations only
 

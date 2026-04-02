@@ -105,6 +105,7 @@ func main() {
 	subtitleRepo := repository.NewSubtitleRepository(pool)
 	seriesRepo := repository.NewSeriesRepository(pool)
 	audioTrackRepo := repository.NewAudioTrackRepository(pool)
+	storageLocRepo := repository.NewStorageLocationRepository(pool)
 
 	// ── Subtitle fetcher (optional) ────────────────────────────────────────────
 	var subtitleFetcher *subtitles.Fetcher
@@ -142,12 +143,16 @@ func main() {
 	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot, registry)
 
 	// Transfer worker (optional: only when RCLONE_REMOTE is set)
-	const remoteStorageLocID = int64(2) // matches id from migration 011
 	var trWorker *transfer.Worker
 	if cfg.RcloneRemote != "" {
-		trWorker = transfer.New(redisClient, movieRepo, jobRepo,
-			cfg.RcloneRemote, cfg.RcloneRemotePath, remoteStorageLocID)
-		slog.Info("transfer worker enabled", "remote", cfg.RcloneRemote)
+		remoteStorageLocID, err := storageLocRepo.GetActiveRemoteID(ctx)
+		if err != nil {
+			slog.Warn("transfer worker disabled: no active remote storage location found", "error", err)
+		} else {
+			trWorker = transfer.New(redisClient, movieRepo, jobRepo,
+				cfg.RcloneRemote, cfg.RcloneRemotePath, remoteStorageLocID)
+			slog.Info("transfer worker enabled", "remote", cfg.RcloneRemote, "storage_location_id", remoteStorageLocID)
+		}
 	} else {
 		slog.Info("transfer worker disabled (RCLONE_REMOTE not set)")
 	}
