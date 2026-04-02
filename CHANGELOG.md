@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Added
+- `shared/go.mod`, `shared/model/status.go`, `shared/model/constants.go`: new shared Go module (`app/shared`) providing canonical `JobStatus`, `JobStage`, `JobPriority` types and `ContentType*` / `SourceType*` string constants to be imported by both `api/` and `worker/` services
+
 ### Changed
 - `api/internal/handler/player.go`: extracted `buildAudioTracksPayload(ctx, assetID, assetType)` as a unified helper for audio track response building, replacing duplicated inline logic in `GetMovie` and `buildEpisodeAudioTracks`; unified `buildMovieMediaURL` and `buildSeriesMediaURL` around a shared `buildMediaURL(baseURL, relativePath)` base function, reducing duplication
 

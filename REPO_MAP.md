@@ -10,6 +10,7 @@
 converter/                      ← корень проекта
 ├── api/                        # Go API-сервис (HTTP, порт 8000)
 ├── worker/                     # Go воркер (фоновая обработка)
+├── shared/                     # Общие Go-константы (статусы, контент-типы) для api/ и worker/
 ├── scanner/                    # Python scanner-сервис (порт 8080)
 ├── frontend/                   # Next.js Admin UI (порт 3000)
 ├── player/                     # Next.js Player UI (порт 3100)
@@ -121,6 +122,19 @@ worker/
     ├── subtitles/                  # Авто-получение субтитров
     ├── health/                     # HTTP health server (порт 8001)
     └── db/                         # Подключение к PostgreSQL
+```
+
+---
+
+## `shared/` — Общие Go-константы
+
+```
+shared/
+├── go.mod                          # module app/shared, go 1.23
+├── errors/                         # (зарезервировано для общих типов ошибок)
+└── model/
+    ├── status.go                   # JobStatus, JobStage, JobPriority
+    └── constants.go                # ContentType*, SourceType* константы
 ```
 
 ---
