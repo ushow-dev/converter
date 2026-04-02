@@ -151,6 +151,7 @@ export default function PlayerClient({ initialData, onEnded, autoPlay = false }:
   const seekLoadStoppedRef = useRef(false)
   const seekWasPlayingRef = useRef(false)
   const streamUrlRef = useRef<string>(movieData.data.playback.hls)
+  const autoPlayRef = useRef(autoPlay)
   const subtitleTracks = movieData.data.subtitles ?? []
 
   const setupHlsJsMode = useCallback(
@@ -200,6 +201,11 @@ export default function PlayerClient({ initialData, onEnded, autoPlay = false }:
         else {
           const idx = parseInt(q, 10)
           if (!isNaN(idx)) hls.currentLevel = idx
+        }
+
+        if (autoPlayRef.current) {
+          const p = video.play()
+          if (p) p.catch(() => { /* autoplay blocked by browser */ })
         }
       })
 
@@ -369,7 +375,7 @@ export default function PlayerClient({ initialData, onEnded, autoPlay = false }:
       layoutControls: {
         fillToContainer: true,
         responsive: true,
-        autoPlay: autoPlay,
+        autoPlay: false,
         subtitlesEnabled: subtitleTracks.length > 0,
         playbackRateControl: false,
         qualityControl: false,
