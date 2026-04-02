@@ -12,6 +12,10 @@
 ## [Unreleased]
 
 ### Fixed
+- `worker/internal/model/model.go`, `api/internal/model/model.go`: renamed `TransferJob.MovieID` to `ContentID` (JSON: `content_id`) and removed unused `EpisodeID` field — `ContentID` now correctly holds either a movie ID or an episode ID depending on `ContentType`
+- `worker/internal/transfer/transfer.go`: skip `movieRepo.UpdateStorageLocation` for episodes (content_type=episode) to prevent updating a non-existent movies row; updated log field from `movie_id` to `content_id`
+- `worker/internal/converter/converter.go`: updated TransferJob construction to use `ContentID` field
+- `worker/internal/recovery/recovery.go`: updated `rebuildTransferPayload` to use `ContentID` for both movie and episode recovery paths
 - `scanner/scanner/loops/scan_loop.py`: `_process_series_folder` now inserts episodes with `status='new'` instead of `status='registered'`, so the stability check in `_handle_stable_episode` must promote them — prevents partially-copied files from being ingested
 
 ### Security

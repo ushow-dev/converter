@@ -248,9 +248,8 @@ type TransferPayload struct {
 
 // TransferJob holds details for a single rclone transfer operation.
 type TransferJob struct {
-	MovieID      int64  `json:"movie_id"`
-	StorageKey   string `json:"storage_key"`   // relative folder name, e.g. "Inception (2010)"
-	LocalPath    string `json:"local_path"`    // absolute local path to the movie folder
-	ContentType  string `json:"content_type,omitempty"`
-	EpisodeID    *int64 `json:"episode_id,omitempty"`
+	ContentID   int64  `json:"content_id"`
+	StorageKey  string `json:"storage_key"`  // relative folder name, e.g. "Inception (2010)"
+	LocalPath   string `json:"local_path"`   // absolute local path to the movie folder
+	ContentType string `json:"content_type,omitempty"`
 }

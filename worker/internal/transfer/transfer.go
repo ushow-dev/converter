@@ -79,7 +79,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 	log := slog.With(
 		"job_id", msg.JobID,
-		"movie_id", msg.Payload.MovieID,
+		"content_id", msg.Payload.ContentID,
 		"storage_key", msg.Payload.StorageKey,
 	)
 
@@ -170,9 +170,11 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		log.Warn("could not remove local dir after transfer", "path", localPath, "error", err)
 	}
 
-	// Update movie storage location in DB.
-	if err := w.movieRepo.UpdateStorageLocation(ctx, msg.Payload.MovieID, w.storageLocID); err != nil {
-		log.Error("update storage_location_id failed", "error", err)
+	// Update movie storage location in DB (skip for episodes — they don't have a movies row).
+	if msg.Payload.ContentType != "episode" {
+		if err := w.movieRepo.UpdateStorageLocation(ctx, msg.Payload.ContentID, w.storageLocID); err != nil {
+			log.Error("update storage_location_id failed", "error", err)
+		}
 	}
 
 	// Mark job completed. Stage stays "transfer" (SetCompleted does not write stage).

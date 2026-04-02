@@ -134,7 +134,7 @@ func rebuildTransferPayload(ctx context.Context, pool *pgxpool.Pool, jobID strin
 	if err == nil {
 		var storageKey string
 		_ = pool.QueryRow(ctx, "SELECT storage_key FROM movies WHERE id = $1", movieID).Scan(&storageKey)
-		tj.MovieID = movieID
+		tj.ContentID = movieID
 		tj.StorageKey = storageKey
 		tj.LocalPath = storagePath[:len(storagePath)-len("/master.m3u8")] // strip filename
 		tj.ContentType = "movie"
@@ -147,7 +147,7 @@ func rebuildTransferPayload(ctx context.Context, pool *pgxpool.Pool, jobID strin
 		"SELECT ea.episode_id, ea.storage_path FROM episode_assets ea WHERE ea.job_id = $1 AND ea.is_ready = true LIMIT 1",
 		jobID).Scan(&episodeID, &storagePath)
 	if err == nil {
-		tj.MovieID = episodeID
+		tj.ContentID = episodeID
 		tj.LocalPath = storagePath[:len(storagePath)-len("/master.m3u8")]
 		tj.ContentType = "episode"
 		// Derive storage key from local path.

@@ -449,7 +449,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			CorrelationID: msg.CorrelationID,
 			CreatedAt:     time.Now().UTC(),
 			Payload: model.TransferJob{
-				MovieID:     contentID,
+				ContentID:   contentID,
 				StorageKey:  transferStorageKey(finalDir, w.mediaRoot, contentType),
 				LocalPath:   finalDir,
 				ContentType: contentType,

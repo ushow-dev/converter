@@ -176,9 +176,8 @@ type TransferMessage struct {
 
 // TransferJob is the inner payload for a transfer task.
 type TransferJob struct {
-	MovieID     int64  `json:"movie_id"`
+	ContentID   int64  `json:"content_id"`
 	StorageKey  string `json:"storage_key"`
 	LocalPath   string `json:"local_path"`
 	ContentType string `json:"content_type,omitempty"`
-	EpisodeID   *int64 `json:"episode_id,omitempty"`
 }
