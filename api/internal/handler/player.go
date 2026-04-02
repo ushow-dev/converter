@@ -173,9 +173,9 @@ func mediaSigningPath(path string) string {
 	parts := strings.Split(strings.TrimPrefix(normalized, "/"), "/")
 	// For HLS requests under /<content_type>/<storage_key>/..., bind token to
 	// the storage key directory so nested playlists/segments share one signature.
-	// Supported content types: movies, serials, tv.
+	// Supported content types: movies, series.
 	if len(parts) >= 2 &&
-		(parts[0] == "movies" || parts[0] == "series" || parts[0] == "serials" || parts[0] == "tv") &&
+		(parts[0] == "movies" || parts[0] == "series") &&
 		parts[1] != "" &&
 		(parts[len(parts)-1] == "master.m3u8" ||
 			strings.HasSuffix(parts[len(parts)-1], ".m3u8") ||
