@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- `frontend/src/app/series/page.tsx`: added play button (links to player with `type=series`) and delete button per row; fetches `playerUrl` from `/api/app-config`; added TMDB external link icon button matching movies page pattern
+- `frontend/src/app/series/[id]/page.tsx`: replaced broken `<dl>` grid metadata layout with flat flex row of inline label+value pairs; fixed invalid Tailwind class `w-22` → `w-[88px]` for poster placeholder; added play button to each episode row linking to player with season/episode params; fetches `playerUrl` from `/api/app-config`; passes `tmdbId` and `playerUrl` down through `SeasonSection` and `EpisodeRow`
+
 ### Added
 - `player/src/app/SeriesPlayer.tsx`: new client component — handles series navigation with season/episode dropdowns, prev/next buttons, and single-episode embed mode; converts episode API data into `MovieResponse` format for `PlayerClient`
 - `player/src/app/page.tsx`: added `type`, `s`, `e`, `nav` search params; routing logic dispatches to `SeriesPlayer` for `type=series` requests (full navigation or single-episode embed) and to `PlayerClient` for movies
