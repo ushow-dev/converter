@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `worker/go.mod`, `worker/internal/model/model.go`: wire `app/shared` module into worker via type aliases — queue payload structs (`DownloadMessage`, `ConvertMessage`, `RemoteDownloadMessage`, `TransferMessage`, `TransferJob`, `ProxyConfig`) and status/stage string constants now delegate to `app/shared/model`; worker-specific domain types (`Asset`, `Movie`, `Subtitle`, `StorageLocation`) remain in the local package
+
 ### Added
 - `shared/model/queue.go`, `shared/model/proxy.go`: unified queue envelope and job payload structs (`DownloadMessage`, `ConvertMessage`, `RemoteDownloadMessage`, `TransferMessage`, `CancelMessage` and their inner `*Job` types) plus `ProxyConfig` — single source of truth replacing duplicated definitions in `api/internal/model/` and `worker/internal/model/`
 - `shared/errors/errors.go`: shared error types package with sentinel errors (`ErrNotFound`, `ErrConflict`), `ValidationError`, and helper functions `IsNotFound`, `IsConflict`, `Wrap`

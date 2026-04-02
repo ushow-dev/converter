@@ -1,12 +1,15 @@
 module app/worker
 
-go 1.22
+go 1.23
 
 require (
+	app/shared v0.0.0
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/redis/go-redis/v9 v9.7.0
 	golang.org/x/net v0.33.0
 )
+
+replace app/shared => ../shared
 
 require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
