@@ -125,6 +125,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
 
   const [selectedSeason, setSelectedSeason] = useState<number>(seasons[0] ?? 1)
   const [selectedEpIdx, setSelectedEpIdx] = useState<number>(0)
+  const [shouldAutoPlay, setShouldAutoPlay] = useState(false)
 
   const seasonEpisodes = useMemo(
     () => flatEpisodes.filter((e) => e.seasonNumber === selectedSeason),
@@ -157,6 +158,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
 
   const handleEpisodeEnded = useCallback(() => {
     if (hasNext) {
+      setShouldAutoPlay(true)
       navigateTo(flatEpisodes[globalIdx + 1])
     }
   }, [hasNext, flatEpisodes, globalIdx])
@@ -217,6 +219,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
           key={`s${currentEp!.seasonNumber}e${currentEp!.episodeNumber}`}
           initialData={movieData}
           onEnded={handleEpisodeEnded}
+          autoPlay={shouldAutoPlay}
         />
       ) : (
         <div className="player-status">Эпизод не готов</div>

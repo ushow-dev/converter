@@ -126,7 +126,7 @@ function getP2PConfig(streamUrl: string) {
   }
 }
 
-export default function PlayerClient({ initialData, onEnded }: { initialData: MovieResponse; onEnded?: () => void }) {
+export default function PlayerClient({ initialData, onEnded, autoPlay = false }: { initialData: MovieResponse; onEnded?: () => void; autoPlay?: boolean }) {
   const movieData = initialData
   const [fluidReady, setFluidReady] = useState(() =>
     typeof window !== 'undefined' && typeof window.fluidPlayer === 'function'
@@ -369,7 +369,7 @@ export default function PlayerClient({ initialData, onEnded }: { initialData: Mo
       layoutControls: {
         fillToContainer: true,
         responsive: true,
-        autoPlay: false,
+        autoPlay: autoPlay,
         subtitlesEnabled: subtitleTracks.length > 0,
         playbackRateControl: false,
         qualityControl: false,
