@@ -23,6 +23,7 @@ import (
 	"app/worker/internal/health"
 	"app/worker/internal/httpdownloader"
 	"app/worker/internal/ingest"
+	"app/worker/internal/paths"
 	"app/worker/internal/qbittorrent"
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
@@ -132,11 +133,12 @@ func main() {
 		slog.Info("archive-to-scanner disabled (INGEST_SERVICE_TOKEN/INGEST_SOURCE_REMOTE not set)")
 	}
 
+	pathResolver := paths.New(cfg.MediaRoot)
 	cvWorker := converter.New(redisClient, jobRepo, assetRepo, movieRepo,
 		subtitleFetcher, subtitleRepo, seriesRepo, audioTrackRepo,
 		cfg.MediaRoot, cfg.TMDBAPIKey, cfg.FFmpegThreads,
 		cfg.RcloneRemote != "", scannerClientForArchive,
-		cfg.IngestSourceRemote, cfg.ArchiveDestPath, registry)
+		cfg.IngestSourceRemote, cfg.ArchiveDestPath, registry, pathResolver)
 	httpDlWorker := httpdownloader.New(redisClient, jobRepo, cfg.MediaRoot, registry)
 
 	// Transfer worker (optional: only when RCLONE_REMOTE is set)

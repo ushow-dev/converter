@@ -20,6 +20,7 @@ import (
 	"app/worker/internal/ffmpeg"
 	"app/worker/internal/ingest"
 	"app/worker/internal/model"
+	"app/worker/internal/paths"
 	"app/worker/internal/queue"
 	"app/worker/internal/repository"
 	"app/worker/internal/subtitles"
@@ -35,6 +36,7 @@ type Worker struct {
 	subtitleRepo    *repository.SubtitleRepository
 	seriesRepo      *repository.SeriesRepository
 	audioTrackRepo  *repository.AudioTrackRepository
+	paths           *paths.Resolver
 	mediaRoot       string
 	tmdbAPIKey      string
 	ffmpegThreads   int  // 0 = auto
@@ -65,12 +67,13 @@ func New(
 	ingestSourceRemote string,
 	archiveDestPath string,
 	registry *cancelregistry.Registry,
+	pathResolver *paths.Resolver,
 ) *Worker {
 	return &Worker{
 		q: q, jobRepo: jobRepo, assetRepo: assetRepo, movieRepo: movieRepo,
 		subtitleFetcher: subtitleFetcher, subtitleRepo: subtitleRepo,
 		seriesRepo: seriesRepo, audioTrackRepo: audioTrackRepo,
-		mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey, ffmpegThreads: ffmpegThreads,
+		paths: pathResolver, mediaRoot: mediaRoot, tmdbAPIKey: tmdbAPIKey, ffmpegThreads: ffmpegThreads,
 		transferEnabled:    transferEnabled,
 		scannerClient:      scannerClient,
 		ingestSourceRemote: ingestSourceRemote,
@@ -234,6 +237,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 
 	var finalDir string
+	var transferKey string
 	var contentID int64
 	contentType := msg.ContentType
 	var movie *model.Movie // non-nil for movie content type only
@@ -280,8 +284,8 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			w.failJob(ctx, msg, "DB_ERROR", "upsert episode: "+err.Error(), false)
 			return
 		}
-		finalDir = filepath.Join(w.mediaRoot, "converted", "series", series.StorageKey,
-			fmt.Sprintf("s%02d", seasonNum), fmt.Sprintf("e%02d", episodeNum))
+		finalDir = w.paths.EpisodeFinalDir(series.StorageKey, seasonNum, episodeNum)
+		transferKey = w.paths.EpisodeTransferKey(series.StorageKey, seasonNum, episodeNum)
 		contentID = episode.ID
 		contentType = "episode"
 	} else {
@@ -292,7 +296,8 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			return
 		}
 		movie = m
-		finalDir = filepath.Join(w.mediaRoot, "converted", "movies", movie.StorageKey)
+		finalDir = w.paths.MovieFinalDir(movie.StorageKey)
+		transferKey = w.paths.MovieTransferKey(movie.StorageKey)
 		contentID = movie.ID
 		contentType = "movie"
 	}
@@ -412,7 +417,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	}
 
 	// Best-effort cleanup of original downloaded torrent data on successful convert.
-	downloadsDir := filepath.Join(w.mediaRoot, "downloads", msg.JobID)
+	downloadsDir := w.paths.DownloadsDir(msg.JobID)
 	if err := os.RemoveAll(downloadsDir); err != nil {
 		log.Error("cleanup downloads dir failed", "path", downloadsDir, "error", err)
 	}
@@ -450,7 +455,7 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 			CreatedAt:     time.Now().UTC(),
 			Payload: model.TransferJob{
 				ContentID:   contentID,
-				StorageKey:  transferStorageKey(finalDir, w.mediaRoot, contentType),
+				StorageKey:  transferKey,
 				LocalPath:   finalDir,
 				ContentType: contentType,
 			},
@@ -573,19 +578,6 @@ func parseQuality(filename string) (score int, label string) {
 func (w *Worker) failJob(ctx context.Context, msg model.ConvertMessage, code, message string, retryable bool) {
 	slog.Error("convert failed", "job_id", msg.JobID, "code", code, "error", message)
 	_ = w.jobRepo.SetFailed(ctx, msg.JobID, code, message, retryable)
-}
-
-// transferStorageKey derives the storage key for the transfer message.
-// For movies: just the folder name (e.g. "inception_2010_[16662]").
-// For episodes: relative path from converted/{type}/ (e.g. "devil_may_cry_2025_[235930]/s01/e02").
-func transferStorageKey(finalDir, mediaRoot, contentType string) string {
-	if contentType == "episode" {
-		prefix := filepath.Join(mediaRoot, "converted", "series") + "/"
-		if rel := strings.TrimPrefix(filepath.ToSlash(finalDir), filepath.ToSlash(prefix)); rel != filepath.ToSlash(finalDir) {
-			return rel
-		}
-	}
-	return filepath.Base(finalDir)
 }
 
 // failOrRequeue marks failed or re-enqueues if attempts remain.
