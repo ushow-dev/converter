@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,9 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
-	"app/api/internal/auth"
 	"app/api/internal/repository"
 	"app/api/internal/service"
 )
@@ -65,45 +61,6 @@ func NewPlayerHandler(
 	}
 }
 
-// GetAsset handles GET /api/player/assets/{assetID}.
-func (h *PlayerHandler) GetAsset(w http.ResponseWriter, r *http.Request) {
-	cid := auth.GetCorrelationID(r.Context())
-	assetID := chi.URLParam(r, "assetID")
-
-	asset, err := h.assetRepo.GetByID(r.Context(), assetID)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "NOT_FOUND",
-				"asset not found", false, cid)
-			return
-		}
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to fetch asset", false, cid)
-		return
-	}
-
-	// Build playback info from actual storage_path to avoid divergence between
-	// physical storage layout and API URL shape.
-	playbackURL := h.maybeSignMediaURL(storagePathToPlaybackURL(asset.StoragePath))
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"asset_id":     asset.AssetID,
-		"job_id":       asset.JobID,
-		"content_type": "movie",
-		"is_ready":     asset.IsReady,
-		"playback": map[string]any{
-			"mode": "url",
-			"url":  playbackURL,
-		},
-		"media_info": map[string]any{
-			"duration_sec": asset.DurationSec,
-			"video_codec":  asset.VideoCodec,
-			"audio_codec":  asset.AudioCodec,
-		},
-		"updated_at": asset.UpdatedAt,
-	})
-}
-
 func storagePathToPlaybackURL(storagePath string) string {
 	p := filepath.ToSlash(filepath.Clean(storagePath))
 	if p == "." || p == "/" {
@@ -113,139 +70,6 @@ func storagePathToPlaybackURL(storagePath string) string {
 		return p
 	}
 	return "/" + p
-}
-
-// GetMovie handles GET /api/player/movie?imdb_id=...|tmdb_id=...
-func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
-	cid := auth.GetCorrelationID(r.Context())
-
-	imdbID := strings.TrimSpace(r.URL.Query().Get("imdb_id"))
-	tmdbID := strings.TrimSpace(r.URL.Query().Get("tmdb_id"))
-	if (imdbID == "" && tmdbID == "") || (imdbID != "" && tmdbID != "") {
-		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
-			"exactly one of imdb_id or tmdb_id must be provided", false, cid)
-		return
-	}
-
-	var (
-		movie *repositoryMovieView
-		err   error
-	)
-	if imdbID != "" {
-		movie, err = h.getMovieByIMDbID(r, imdbID)
-	} else {
-		movie, err = h.getMovieByTMDBID(r, tmdbID)
-	}
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "movie not found", false, cid)
-			return
-		}
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to fetch movie", false, cid)
-		return
-	}
-
-	baseURL := h.resolveBaseURL(r.Context(), movie.storageLocationID)
-
-	// Build subtitle list.
-	subtitleTracks := []map[string]string{}
-	if subs, err := h.subtitleRepo.ListByMovieID(r.Context(), movie.id); err == nil {
-		for _, sub := range subs {
-			subtitleTracks = append(subtitleTracks, map[string]string{
-				"language": sub.Language,
-				"url":      h.maybeSignMediaURL(buildMovieMediaURL(baseURL, movie.storageKey, "subtitles/"+sub.Language+".vtt")),
-			})
-		}
-	}
-
-	// Build audio track list.
-	var audioTracks []map[string]any
-	if asset, err := h.assetRepo.GetByMovieID(r.Context(), movie.id); err == nil {
-		audioTracks = h.buildAudioTracksPayload(r.Context(), asset.AssetID, "movie")
-	}
-	if audioTracks == nil {
-		audioTracks = []map[string]any{}
-	}
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"data": map[string]any{
-			"movie": map[string]any{
-				"id":      movie.id,
-				"imdb_id": movie.imdbID,
-				"tmdb_id": movie.tmdbID,
-			},
-			"playback": map[string]any{
-				"hls": h.maybeSignMediaURL(buildMovieMediaURL(baseURL, movie.storageKey, "master.m3u8")),
-			},
-			"assets": map[string]any{
-				"poster": h.maybeSignMediaURL(buildMovieMediaURL(baseURL, movie.storageKey, "thumbnail.jpg")),
-			},
-			"subtitles":    subtitleTracks,
-			"audio_tracks": audioTracks,
-		},
-		"meta": map[string]any{
-			"version": "v1",
-		},
-	})
-}
-
-// GetCatalog handles GET /api/player/catalog?since=...
-func (h *PlayerHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
-	cid := auth.GetCorrelationID(r.Context())
-
-	var since *time.Time
-	if raw := strings.TrimSpace(r.URL.Query().Get("since")); raw != "" {
-		t, err := time.Parse(time.RFC3339, raw)
-		if err != nil {
-			respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
-				"invalid since parameter: expected RFC 3339 format", false, cid)
-			return
-		}
-		since = &t
-	}
-
-	ids, err := h.movieRepo.ListReadyTMDBIDs(r.Context(), since)
-	if err != nil {
-		slog.Error("catalog query failed", "error", err, "correlation_id", cid)
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to fetch catalog", false, cid)
-		return
-	}
-
-	items := make([]map[string]string, len(ids))
-	for i, id := range ids {
-		items[i] = map[string]string{"tmdb_id": id}
-	}
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"items": items,
-		"count": len(items),
-	})
-}
-
-type repositoryMovieView struct {
-	id                int64
-	storageKey        string
-	imdbID            *string
-	tmdbID            *string
-	storageLocationID *int64
-}
-
-func (h *PlayerHandler) getMovieByIMDbID(r *http.Request, imdbID string) (*repositoryMovieView, error) {
-	m, err := h.movieRepo.GetByIMDbID(r.Context(), imdbID)
-	if err != nil {
-		return nil, err
-	}
-	return &repositoryMovieView{id: m.ID, storageKey: m.StorageKey, imdbID: m.IMDbID, tmdbID: m.TMDBID, storageLocationID: m.StorageLocationID}, nil
-}
-
-func (h *PlayerHandler) getMovieByTMDBID(r *http.Request, tmdbID string) (*repositoryMovieView, error) {
-	m, err := h.movieRepo.GetByTMDBID(r.Context(), tmdbID)
-	if err != nil {
-		return nil, err
-	}
-	return &repositoryMovieView{id: m.ID, storageKey: m.StorageKey, imdbID: m.IMDbID, tmdbID: m.TMDBID, storageLocationID: m.StorageLocationID}, nil
 }
 
 // resolveBaseURL returns the appropriate media base URL for a movie.
@@ -272,14 +96,6 @@ func buildMediaURL(baseURL, relativePath string) string {
 	return trimmed + "/" + relativePath
 }
 
-func buildMovieMediaURL(baseURL, storageKey, fileName string) string {
-	return buildMediaURL(baseURL, fmt.Sprintf("movies/%s/%s", storageKey, fileName))
-}
-
-func buildSeriesMediaURL(baseURL, seriesStorageKey string, seasonNum, episodeNum int, fileName string) string {
-	return buildMediaURL(baseURL, fmt.Sprintf("series/%s/s%02d/e%02d/%s", seriesStorageKey, seasonNum, episodeNum, fileName))
-}
-
 // buildAudioTracksPayload fetches and formats audio tracks for any asset type.
 func (h *PlayerHandler) buildAudioTracksPayload(ctx context.Context, assetID, assetType string) []map[string]any {
 	tracks, err := h.audioTrackRepo.ListByAsset(ctx, assetID, assetType)
@@ -298,221 +114,6 @@ func (h *PlayerHandler) buildAudioTracksPayload(ctx context.Context, assetID, as
 		result[i] = td
 	}
 	return result
-}
-
-// buildEpisodeAudioTracks fetches audio tracks for an episode asset.
-func (h *PlayerHandler) buildEpisodeAudioTracks(ctx context.Context, assetID string) []map[string]any {
-	tracks := h.buildAudioTracksPayload(ctx, assetID, "episode")
-	if tracks == nil {
-		return []map[string]any{}
-	}
-	return tracks
-}
-
-// buildEpisodeSubtitles fetches subtitles for an episode.
-func (h *PlayerHandler) buildEpisodeSubtitles(ctx context.Context, episodeID int64, baseURL, seriesStorageKey string, seasonNum, episodeNum int) []map[string]string {
-	subtitleTracks := []map[string]string{}
-	if subs, err := h.epSubtitleRepo.ListByEpisodeID(ctx, episodeID); err == nil {
-		for _, sub := range subs {
-			subtitleTracks = append(subtitleTracks, map[string]string{
-				"language": sub.Language,
-				"url":      h.maybeSignMediaURL(buildSeriesMediaURL(baseURL, seriesStorageKey, seasonNum, episodeNum, "subtitles/"+sub.Language+".vtt")),
-			})
-		}
-	}
-	return subtitleTracks
-}
-
-// buildEpisodePayload builds the JSON payload for a single episode.
-func (h *PlayerHandler) buildEpisodePayload(ctx context.Context, ep *repositoryEpisodeView, baseURL string) map[string]any {
-	asset, err := h.seriesRepo.GetEpisodeAsset(ctx, ep.episodeID)
-	if err != nil {
-		return map[string]any{
-			"episode_number": ep.episodeNumber,
-			"title":          ep.title,
-			"is_ready":       false,
-		}
-	}
-
-	hlsURL := h.maybeSignMediaURL(buildSeriesMediaURL(baseURL, ep.seriesStorageKey, ep.seasonNumber, ep.episodeNumber, "master.m3u8"))
-	thumbURL := h.maybeSignMediaURL(buildSeriesMediaURL(baseURL, ep.seriesStorageKey, ep.seasonNumber, ep.episodeNumber, "thumbnail.jpg"))
-	audioTracks := h.buildEpisodeAudioTracks(ctx, asset.AssetID)
-	subtitleTracks := h.buildEpisodeSubtitles(ctx, ep.episodeID, baseURL, ep.seriesStorageKey, ep.seasonNumber, ep.episodeNumber)
-
-	payload := map[string]any{
-		"episode_number": ep.episodeNumber,
-		"title":          ep.title,
-		"is_ready":       true,
-		"playback": map[string]any{
-			"hls": hlsURL,
-		},
-		"assets": map[string]any{
-			"thumbnail": thumbURL,
-		},
-		"audio_tracks": audioTracks,
-		"subtitles":    subtitleTracks,
-	}
-	return payload
-}
-
-type repositoryEpisodeView struct {
-	episodeID        int64
-	seasonID         int64
-	seasonNumber     int
-	episodeNumber    int
-	title            *string
-	storageKey       string
-	seriesStorageKey string
-}
-
-// GetSeries handles GET /api/player/series?tmdb_id=...
-func (h *PlayerHandler) GetSeries(w http.ResponseWriter, r *http.Request) {
-	cid := auth.GetCorrelationID(r.Context())
-
-	tmdbID := strings.TrimSpace(r.URL.Query().Get("tmdb_id"))
-	if tmdbID == "" {
-		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
-			"tmdb_id is required", false, cid)
-		return
-	}
-
-	series, err := h.seriesRepo.GetByTMDBID(r.Context(), tmdbID)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "series not found", false, cid)
-			return
-		}
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to fetch series", false, cid)
-		return
-	}
-
-	baseURL := h.mediaBaseURL
-
-	seasons, err := h.seriesRepo.ListSeasons(r.Context(), series.ID)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to fetch seasons", false, cid)
-		return
-	}
-
-	seasonsPayload := []map[string]any{}
-	for _, season := range seasons {
-		episodes, err := h.seriesRepo.ListEpisodes(r.Context(), season.ID)
-		if err != nil {
-			continue
-		}
-
-		episodesPayload := []map[string]any{}
-		for _, ep := range episodes {
-			epView := &repositoryEpisodeView{
-				episodeID:        ep.ID,
-				seasonID:         ep.SeasonID,
-				seasonNumber:     season.SeasonNumber,
-				episodeNumber:    ep.EpisodeNumber,
-				title:            ep.Title,
-				storageKey:       ep.StorageKey,
-				seriesStorageKey: series.StorageKey,
-			}
-			episodesPayload = append(episodesPayload, h.buildEpisodePayload(r.Context(), epView, baseURL))
-		}
-
-		seasonsPayload = append(seasonsPayload, map[string]any{
-			"season_number": season.SeasonNumber,
-			"episodes":      episodesPayload,
-		})
-	}
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"data": map[string]any{
-			"series": map[string]any{
-				"id":      series.ID,
-				"tmdb_id": series.TMDBID,
-				"imdb_id": series.IMDbID,
-				"title":   series.Title,
-				"year":    series.Year,
-			},
-			"seasons": seasonsPayload,
-		},
-		"meta": map[string]any{
-			"version": "v1",
-		},
-	})
-}
-
-// GetEpisode handles GET /api/player/episode?tmdb_id=...&s=1&e=1
-func (h *PlayerHandler) GetEpisode(w http.ResponseWriter, r *http.Request) {
-	cid := auth.GetCorrelationID(r.Context())
-
-	tmdbID := strings.TrimSpace(r.URL.Query().Get("tmdb_id"))
-	sParam := strings.TrimSpace(r.URL.Query().Get("s"))
-	eParam := strings.TrimSpace(r.URL.Query().Get("e"))
-
-	if tmdbID == "" || sParam == "" || eParam == "" {
-		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
-			"tmdb_id, s (season), and e (episode) are required", false, cid)
-		return
-	}
-
-	seasonNum, err := strconv.Atoi(sParam)
-	if err != nil || seasonNum < 1 {
-		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
-			"s must be a positive integer", false, cid)
-		return
-	}
-	episodeNum, err := strconv.Atoi(eParam)
-	if err != nil || episodeNum < 1 {
-		respondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
-			"e must be a positive integer", false, cid)
-		return
-	}
-
-	series, err := h.seriesRepo.GetByTMDBID(r.Context(), tmdbID)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "series not found", false, cid)
-			return
-		}
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to fetch series", false, cid)
-		return
-	}
-
-	ep, err := h.seriesRepo.GetEpisodeBySE(r.Context(), tmdbID, seasonNum, episodeNum)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "NOT_FOUND", "episode not found", false, cid)
-			return
-		}
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to fetch episode", false, cid)
-		return
-	}
-
-	baseURL := h.mediaBaseURL
-	epView := &repositoryEpisodeView{
-		episodeID:        ep.ID,
-		seasonID:         ep.SeasonID,
-		seasonNumber:     seasonNum,
-		episodeNumber:    ep.EpisodeNumber,
-		title:            ep.Title,
-		storageKey:       ep.StorageKey,
-		seriesStorageKey: series.StorageKey,
-	}
-	epPayload := h.buildEpisodePayload(r.Context(), epView, baseURL)
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"data": map[string]any{
-			"series": map[string]any{
-				"id":      series.ID,
-				"tmdb_id": series.TMDBID,
-			},
-			"episode": epPayload,
-		},
-		"meta": map[string]any{
-			"version": "v1",
-		},
-	})
 }
 
 func (h *PlayerHandler) maybeSignMediaURL(rawURL string) string {
@@ -599,22 +200,22 @@ var (
 // P2PMetricsSnapshot returns current P2P counters (for /metrics or monitoring).
 func P2PMetricsSnapshot() map[string]int64 {
 	return map[string]int64{
-		"p2p_http_bytes_total":     p2pHTTPBytes.Load(),
-		"p2p_p2p_bytes_total":      p2pP2PBytes.Load(),
-		"p2p_http_segments_total":  p2pHTTPSegments.Load(),
-		"p2p_p2p_segments_total":   p2pP2PSegments.Load(),
-		"p2p_peers_last_snapshot":  p2pPeersSnapshot.Load(),
+		"p2p_http_bytes_total":    p2pHTTPBytes.Load(),
+		"p2p_p2p_bytes_total":     p2pP2PBytes.Load(),
+		"p2p_http_segments_total": p2pHTTPSegments.Load(),
+		"p2p_p2p_segments_total":  p2pP2PSegments.Load(),
+		"p2p_peers_last_snapshot": p2pPeersSnapshot.Load(),
 	}
 }
 
 type p2pMetricsPayload struct {
-	StreamID    string `json:"stream_id"`
-	HTTPBytes   int64  `json:"http_bytes"`
-	P2PBytes    int64  `json:"p2p_bytes"`
-	HTTPSegments int64 `json:"http_segments"`
-	P2PSegments int64  `json:"p2p_segments"`
-	Peers       int64  `json:"peers"`
-	WindowSec   int    `json:"window_sec"`
+	StreamID     string `json:"stream_id"`
+	HTTPBytes    int64  `json:"http_bytes"`
+	P2PBytes     int64  `json:"p2p_bytes"`
+	HTTPSegments int64  `json:"http_segments"`
+	P2PSegments  int64  `json:"p2p_segments"`
+	Peers        int64  `json:"peers"`
+	WindowSec    int    `json:"window_sec"`
 }
 
 // PostP2PMetrics handles POST /api/player/p2p-metrics.
@@ -639,38 +240,4 @@ func (h *PlayerHandler) PostP2PMetrics(w http.ResponseWriter, r *http.Request) {
 	)
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// GetJobStatus handles GET /api/player/jobs/{jobID}/status.
-func (h *PlayerHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
-	cid := auth.GetCorrelationID(r.Context())
-	jobID := chi.URLParam(r, "jobID")
-
-	job, err := h.jobSvc.GetJob(r.Context(), jobID)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "NOT_FOUND",
-				"job not found", false, cid)
-			return
-		}
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to fetch job", false, cid)
-		return
-	}
-
-	isReady := job.Status == "completed"
-	var assetID *string
-	if isReady {
-		if asset, err := h.assetRepo.GetByJobID(r.Context(), jobID); err == nil {
-			assetID = &asset.AssetID
-		}
-	}
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"job_id":     job.JobID,
-		"status":     string(job.Status),
-		"is_ready":   isReady,
-		"asset_id":   assetID,
-		"updated_at": job.UpdatedAt,
-	})
 }
