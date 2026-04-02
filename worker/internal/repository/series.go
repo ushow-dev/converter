@@ -158,6 +158,17 @@ func (r *SeriesRepository) GetSeriesByID(ctx context.Context, id int64) (*model.
 	return s, nil
 }
 
+// UpdateSeriesMeta updates title, year, and poster_url for a series.
+func (r *SeriesRepository) UpdateSeriesMeta(ctx context.Context, id int64, title string, year *int, posterURL *string) {
+	_, _ = r.pool.Exec(ctx, `
+		UPDATE series
+		SET title      = COALESCE(NULLIF($2, ''), title),
+		    year       = COALESCE($3, year),
+		    poster_url = COALESCE($4, poster_url),
+		    updated_at = NOW()
+		WHERE id = $1`, id, title, year, posterURL)
+}
+
 // buildSeriesStorageKey builds a filesystem-safe folder name for a series.
 // Format matches movie convention: {slug}_{year}_[{tmdb_id}].
 func buildSeriesStorageKey(title string, year *int, tmdbID *string) string {

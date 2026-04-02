@@ -197,7 +197,13 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 	// ── Fetch TMDB metadata (backdrop + year + poster) ───────────────────────
 	var tmdbMeta *tmdbMetadata
 	if w.tmdbAPIKey != "" && msg.Payload.TMDBID != "" {
-		meta, err := fetchTMDBMetadata(jobCtx, w.tmdbAPIKey, msg.Payload.TMDBID)
+		var meta *tmdbMetadata
+		var err error
+		if msg.ContentType == "series" || msg.ContentType == "episode" {
+			meta, err = fetchTMDBTVMetadata(jobCtx, w.tmdbAPIKey, msg.Payload.TMDBID)
+		} else {
+			meta, err = fetchTMDBMetadata(jobCtx, w.tmdbAPIKey, msg.Payload.TMDBID)
+		}
 		if err != nil {
 			log.Warn("TMDB metadata fetch failed", "error", err)
 		} else {
@@ -237,6 +243,22 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		if err != nil {
 			w.failJob(ctx, msg, "DB_ERROR", "get series: "+err.Error(), false)
 			return
+		}
+		// Enrich series with TMDB poster and title if not yet set.
+		if tmdbMeta != nil && (series.PosterURL == nil || series.Title == series.StorageKey) {
+			var posterURL *string
+			if tmdbMeta.PosterPath != "" {
+				p := "https://image.tmdb.org/t/p/w500" + tmdbMeta.PosterPath
+				posterURL = &p
+			}
+			var year *int
+			if tmdbMeta.Year > 0 {
+				year = &tmdbMeta.Year
+			}
+			w.seriesRepo.UpdateSeriesMeta(jobCtx, series.ID, tmdbMeta.Title, year, posterURL)
+			if tmdbMeta.Title != "" {
+				series.Title = tmdbMeta.Title
+			}
 		}
 		seasonNum := 1
 		if msg.Payload.SeasonNumber != nil {
@@ -647,6 +669,48 @@ func fetchTMDBMetadata(ctx context.Context, apiKey, tmdbID string) (*tmdbMetadat
 	}
 	if len(details.ReleaseDate) >= 4 {
 		if y, err := strconv.Atoi(details.ReleaseDate[:4]); err == nil {
+			meta.Year = y
+		}
+	}
+	return meta, nil
+}
+
+// fetchTMDBTVMetadata fetches TV series details from TMDB.
+func fetchTMDBTVMetadata(ctx context.Context, apiKey, tmdbID string) (*tmdbMetadata, error) {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	detailURL := fmt.Sprintf("https://api.themoviedb.org/3/tv/%s?api_key=%s", tmdbID, apiKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, detailURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("TMDB TV details returned HTTP %d", resp.StatusCode)
+	}
+
+	var details struct {
+		Name         string `json:"name"`
+		FirstAirDate string `json:"first_air_date"`
+		BackdropPath string `json:"backdrop_path"`
+		PosterPath   string `json:"poster_path"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
+		return nil, err
+	}
+
+	meta := &tmdbMetadata{
+		Title:        details.Name,
+		BackdropPath: details.BackdropPath,
+		PosterPath:   details.PosterPath,
+	}
+	if len(details.FirstAirDate) >= 4 {
+		if y, err := strconv.Atoi(details.FirstAirDate[:4]); err == nil {
 			meta.Year = y
 		}
 	}
