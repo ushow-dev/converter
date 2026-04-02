@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import PlayerClient, { type PlaybackData } from './PlayerClient'
+import PlayerClient from './PlayerClient'
+import type { PlaybackData } from './types'
 
 // ── API response shapes ──────────────────────────────────────────────────────
 

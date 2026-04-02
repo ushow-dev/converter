@@ -4,32 +4,9 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import Script from 'next/script'
 import { startP2PMetrics, stopP2PMetrics } from './p2pMetrics'
 import { HLS_CONFIG, SUBTITLE_LABELS, normalizeLanguageCode, subtitleLabel } from './constants'
-
-export interface MovieResponse {
-  data: {
-    movie: { id: number; imdb_id: string; tmdb_id: string }
-    playback: { hls: string }
-    assets: { poster: string }
-    subtitles?: { language: string; url: string }[]
-  }
-  meta: { version: string }
-}
-
-export interface PlaybackData {
-  hls: string
-  poster?: string
-  subtitles?: { language: string; url: string }[]
-  tmdbId?: string
-}
-
-export function movieResponseToPlayback(resp: MovieResponse): PlaybackData {
-  return {
-    hls: resp.data.playback.hls,
-    poster: resp.data.assets.poster,
-    subtitles: resp.data.subtitles,
-    tmdbId: resp.data.movie.tmdb_id,
-  }
-}
+export type { PlaybackData, MovieResponse } from './types'
+export { movieResponseToPlayback } from './types'
+import type { PlaybackData } from './types'
 
 interface QualityLevel {
   label: string

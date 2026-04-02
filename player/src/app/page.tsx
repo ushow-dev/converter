@@ -1,4 +1,5 @@
-import PlayerClient, { type MovieResponse, movieResponseToPlayback } from './PlayerClient'
+import PlayerClient from './PlayerClient'
+import { type MovieResponse, movieResponseToPlayback } from './types'
 import SeriesPlayer from './SeriesPlayer'
 
 const API_URL = process.env.API_URL ?? 'http://localhost:8000'
