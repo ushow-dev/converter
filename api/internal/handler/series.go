@@ -64,7 +64,7 @@ func (h *SeriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	series, err := h.seriesRepo.GetByID(r.Context(), seriesID)
+	series, seasons, episodeMap, err := h.seriesRepo.GetSeriesWithEpisodes(r.Context(), seriesID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			respondError(w, http.StatusNotFound, "NOT_FOUND", "series not found", false, cid)
@@ -75,65 +75,31 @@ func (h *SeriesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbSeasons, err := h.seriesRepo.ListSeasons(r.Context(), seriesID)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-			"failed to list seasons", false, cid)
-		return
-	}
-
-	type episodeItem struct {
-		ID            int64   `json:"id"`
-		EpisodeNumber int     `json:"episode_number"`
-		Title         *string `json:"title,omitempty"`
-		StorageKey    string  `json:"storage_key"`
-		HasThumbnail  bool    `json:"has_thumbnail"`
-		ThumbnailURL  *string `json:"thumbnail_url,omitempty"`
-		CreatedAt     string  `json:"created_at"`
-	}
-
-	type seasonItem struct {
-		ID           int64         `json:"id"`
-		SeasonNumber int           `json:"season_number"`
-		Episodes     []episodeItem `json:"episodes"`
-	}
-
-	seasonItems := make([]seasonItem, 0, len(dbSeasons))
-	for _, s := range dbSeasons {
-		episodes, err := h.seriesRepo.ListEpisodes(r.Context(), s.ID)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
-				"failed to list episodes", false, cid)
-			return
-		}
-		if episodes == nil {
-			episodes = []*model.Episode{}
-		}
-
-		items := make([]episodeItem, 0, len(episodes))
-		for _, ep := range episodes {
-			asset, _ := h.seriesRepo.GetEpisodeAsset(r.Context(), ep.ID)
-			hasThumbnail := asset != nil && asset.ThumbnailPath != nil
-			var thumbURL *string
-			if hasThumbnail && h.mediaBaseURL != "" {
-				u := buildSeriesMediaURL(h.mediaBaseURL, series.StorageKey, s.SeasonNumber, ep.EpisodeNumber, "thumbnail.jpg")
-				thumbURL = &u
+	seasonItems := make([]map[string]any, 0, len(seasons))
+	for _, s := range seasons {
+		eps := episodeMap[s.ID]
+		epItems := make([]map[string]any, 0, len(eps))
+		for _, ep := range eps {
+			item := map[string]any{
+				"id":             ep.ID,
+				"episode_number": ep.EpisodeNumber,
+				"title":          ep.Title,
+				"storage_key":    ep.StorageKey,
+				"has_thumbnail":  ep.HasAsset && ep.ThumbnailPath != nil,
+				"created_at":     ep.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			}
-			items = append(items, episodeItem{
-				ID:            ep.ID,
-				EpisodeNumber: ep.EpisodeNumber,
-				Title:         ep.Title,
-				StorageKey:    ep.StorageKey,
-				HasThumbnail:  hasThumbnail,
-				ThumbnailURL:  thumbURL,
-				CreatedAt:     ep.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-			})
+			if ep.HasAsset && ep.ThumbnailPath != nil && h.mediaBaseURL != "" {
+				u := buildSeriesMediaURL(h.mediaBaseURL, series.StorageKey, s.SeasonNumber, ep.EpisodeNumber, "thumbnail.jpg")
+				item["thumbnail_url"] = u
+			}
+			epItems = append(epItems, item)
 		}
 
-		seasonItems = append(seasonItems, seasonItem{
-			ID:           s.ID,
-			SeasonNumber: s.SeasonNumber,
-			Episodes:     items,
+		seasonItems = append(seasonItems, map[string]any{
+			"id":            s.ID,
+			"season_number": s.SeasonNumber,
+			"poster_url":    s.PosterURL,
+			"episodes":      epItems,
 		})
 	}
 

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -223,6 +224,98 @@ func (r *SeriesRepository) DeleteSeries(ctx context.Context, id int64) error {
 		return fmt.Errorf("delete series: %w", err)
 	}
 	return nil
+}
+
+// EpisodeDetail holds episode data with asset info from a JOIN query.
+type EpisodeDetail struct {
+	ID            int64
+	SeasonID      int64
+	EpisodeNumber int
+	Title         *string
+	StorageKey    string
+	HasAsset      bool
+	ThumbnailPath *string
+	AssetID       *string
+	CreatedAt     time.Time
+}
+
+// GetSeriesWithEpisodes fetches a series with all seasons, episodes, and asset readiness in one query.
+func (r *SeriesRepository) GetSeriesWithEpisodes(ctx context.Context, seriesID int64) (
+	*model.Series, []*model.Season, map[int64][]EpisodeDetail, error,
+) {
+	// First get the series itself.
+	series, err := r.GetByID(ctx, seriesID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Single query for all seasons, episodes, and their assets.
+	rows, err := r.pool.Query(ctx, `
+		SELECT sn.id, sn.series_id, sn.season_number, sn.poster_url, sn.created_at, sn.updated_at,
+		       e.id, e.episode_number, e.title, e.storage_key, e.created_at,
+		       ea.asset_id, ea.thumbnail_path, (ea.asset_id IS NOT NULL) AS has_asset
+		FROM seasons sn
+		LEFT JOIN episodes e ON e.season_id = sn.id
+		LEFT JOIN episode_assets ea ON ea.episode_id = e.id AND ea.is_ready = true
+		WHERE sn.series_id = $1
+		ORDER BY sn.season_number, e.episode_number`,
+		seriesID)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("get series episodes: %w", err)
+	}
+	defer rows.Close()
+
+	seasonMap := map[int64]*model.Season{}
+	var seasonOrder []int64
+	episodeMap := map[int64][]EpisodeDetail{}
+
+	for rows.Next() {
+		var sn model.Season
+		var epID *int64
+		var epNum *int
+		var epTitle *string
+		var epKey *string
+		var epCreated *time.Time
+		var assetID *string
+		var thumbPath *string
+		var hasAsset bool
+
+		if err := rows.Scan(
+			&sn.ID, &sn.SeriesID, &sn.SeasonNumber, &sn.PosterURL, &sn.CreatedAt, &sn.UpdatedAt,
+			&epID, &epNum, &epTitle, &epKey, &epCreated,
+			&assetID, &thumbPath, &hasAsset,
+		); err != nil {
+			return nil, nil, nil, fmt.Errorf("scan series detail: %w", err)
+		}
+
+		if _, ok := seasonMap[sn.ID]; !ok {
+			s := sn // copy
+			seasonMap[sn.ID] = &s
+			seasonOrder = append(seasonOrder, sn.ID)
+		}
+
+		if epID != nil {
+			ed := EpisodeDetail{
+				ID:            *epID,
+				SeasonID:      sn.ID,
+				EpisodeNumber: *epNum,
+				Title:         epTitle,
+				StorageKey:    *epKey,
+				HasAsset:      hasAsset,
+				ThumbnailPath: thumbPath,
+				AssetID:       assetID,
+				CreatedAt:     *epCreated,
+			}
+			episodeMap[sn.ID] = append(episodeMap[sn.ID], ed)
+		}
+	}
+
+	seasons := make([]*model.Season, 0, len(seasonOrder))
+	for _, id := range seasonOrder {
+		seasons = append(seasons, seasonMap[id])
+	}
+
+	return series, seasons, episodeMap, rows.Err()
 }
 
 func scanSeriesRows(rows pgx.Rows) ([]*model.Series, error) {

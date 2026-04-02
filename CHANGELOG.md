@@ -16,6 +16,8 @@
 - `worker/internal/converter/converter.go`: fetch and save subtitles for episodes via `subtitleFetcher.FetchAndSave` after HLS conversion completes, mirroring existing movie subtitle behaviour
 
 ### Changed
+- `api/internal/repository/series.go`: add `EpisodeDetail` struct and `GetSeriesWithEpisodes` method that fetches series, seasons, episodes, and asset readiness in a single JOIN query, replacing the previous N+1 pattern
+- `api/internal/handler/series.go`: update `Get` handler to use `GetSeriesWithEpisodes`; removed `episodeItem` and `seasonItem` local struct types; response now built from a single repository call instead of 1+N_seasons+N_episodes queries
 - `worker/internal/converter/converter.go`: replaced inline `filepath.Join` path construction with `PathResolver` calls (`MovieFinalDir`, `EpisodeFinalDir`, `MovieTransferKey`, `EpisodeTransferKey`, `DownloadsDir`); removed `transferStorageKey()` helper function
 - `worker/cmd/worker/main.go`: create `paths.Resolver` and pass it to `converter.New()`
 - `worker/internal/recovery/recovery.go`: replaced local `stripMasterPlaylist` helper with `paths.StripMasterPlaylist` from the centralized paths package; removed duplicate logic
