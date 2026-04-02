@@ -11,6 +11,13 @@
 
 ## [Unreleased]
 
+### Added
+- `api/internal/repository/interfaces.go`: define `MovieReader` and `SeriesReader` interfaces matching existing repository methods to enable future unit testing without a live database
+
+### Fixed
+- `api/internal/handler/player.go`: remove obsolete `"serials"` and `"tv"` content-type aliases from `mediaSigningPath` — only `"movies"` and `"series"` are valid
+- `worker/cmd/worker/main.go`: use `0o755` instead of `0o777` for media directory creation and chmod to avoid world-writable permissions
+
 ### Fixed
 - `worker/internal/repository/storage_location.go`: add `GetActiveRemoteID` method that queries the database for the first active non-local storage location instead of relying on a hardcoded ID
 - `worker/cmd/worker/main.go`: replace hardcoded `remoteStorageLocID = int64(2)` constant with a DB lookup via `StorageLocationRepository.GetActiveRemoteID` at startup; transfer worker is gracefully disabled if no active remote storage location is found

@@ -53,11 +53,11 @@ func main() {
 		cfg.MediaRoot + "/converted",
 		cfg.MediaRoot + "/temp",
 	} {
-		if err := os.MkdirAll(dir, 0o777); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			slog.Warn("could not create media dir", "dir", dir, "error", err)
 			continue
 		}
-		_ = chmodR(dir, 0o777)
+		_ = chmodR(dir, 0o755)
 	}
 	slog.Info("media dirs ready", "root", cfg.MediaRoot)
 
