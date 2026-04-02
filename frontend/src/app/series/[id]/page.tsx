@@ -12,6 +12,7 @@ import {
   formatDate,
 } from '@/lib/api'
 import { Nav } from '@/components/Nav'
+import { PlayerModal } from '@/components/PlayerModal'
 import type { SeriesDetailResponse, Episode } from '@/types'
 
 function TvIcon() {
@@ -23,63 +24,12 @@ function TvIcon() {
   )
 }
 
-// ── Player modal ───────────────────────────────────────────────────────────────
+// ── Playing episode state ─────────────────────────────────────────────────────
 
 interface PlayingEpisode {
   seasonNumber: number
   episodeNumber: number
   title?: string
-}
-
-function PlayerModal({
-  episode,
-  tmdbId,
-  playerUrl,
-  onClose,
-}: {
-  episode: PlayingEpisode
-  tmdbId?: string
-  playerUrl: string
-  onClose: () => void
-}) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  const src = `${playerUrl}/?tmdb_id=${tmdbId}&type=series&s=${episode.seasonNumber}&e=${episode.episodeNumber}`
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-3xl mx-4"
-        onClick={e => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute -top-8 right-0 text-gray-400 hover:text-white text-sm"
-        >
-          ✕ закрыть
-        </button>
-        <div className="w-full overflow-hidden rounded-lg bg-black" style={{ aspectRatio: '16/10' }}>
-          <iframe
-            src={src}
-            style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
-            scrolling="no"
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-        {episode.title && (
-          <p className="mt-2 text-center text-sm text-gray-400">{episode.title}</p>
-        )}
-      </div>
-    </div>
-  )
 }
 
 // ── Episode row ────────────────────────────────────────────────────────────────
@@ -306,9 +256,8 @@ export default function SeriesDetailPage() {
     <div className="min-h-screen">
       {playingEpisode && detail?.series.tmdb_id && (
         <PlayerModal
-          episode={playingEpisode}
-          tmdbId={detail.series.tmdb_id}
-          playerUrl={playerUrl}
+          src={`${playerUrl}/?tmdb_id=${detail.series.tmdb_id}&type=series&s=${playingEpisode.seasonNumber}&e=${playingEpisode.episodeNumber}`}
+          title={playingEpisode.title}
           onClose={() => setPlayingEpisode(null)}
         />
       )}

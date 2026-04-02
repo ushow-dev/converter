@@ -11,6 +11,14 @@
 
 ## [Unreleased]
 
+### Added
+- `frontend/src/components/PlayerModal.tsx`: generic player modal component accepting `src`, `title`, and `onClose` props; replaces duplicate inline modals in movies and series pages
+- `frontend/src/components/MovieTable.tsx`: extracted `FilmIcon`, `Thumbnail`, `SubtitleCell`, `EditableID`, and `MovieRow` components from movies page to enable reuse
+
+### Changed
+- `frontend/src/app/movies/page.tsx`: reduced from 473 to ~160 lines by importing `PlayerModal` and movie table components; page now contains only orchestration logic (state, data fetching, CSV export)
+- `frontend/src/app/series/[id]/page.tsx`: replaced inline `PlayerModal` definition with import from `@/components/PlayerModal`; src URL built at call site
+
 ### Changed
 - `player/src/app/PlayerClient.tsx`: introduce `PlaybackData` interface and `movieResponseToPlayback()` converter; change `PlayerClient` prop from `initialData: MovieResponse` to `playback: PlaybackData` — removes coupling to API response shape
 - `player/src/app/SeriesPlayer.tsx`: replace `episodeToMovieResponse()` with `episodeToPlayback()` returning `PlaybackData`; update all `<PlayerClient>` usages to pass `playback=` prop
