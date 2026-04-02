@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Added
+- `worker/internal/repository/subtitle.go`: add `UpsertEpisodeSubtitle` method to persist subtitle tracks for series episodes into `episode_subtitles` table
+- `worker/internal/converter/converter.go`: fetch and save subtitles for episodes via `subtitleFetcher.FetchAndSave` after HLS conversion completes, mirroring existing movie subtitle behaviour
+
 ### Changed
 - `worker/internal/converter/converter.go`: replaced inline `filepath.Join` path construction with `PathResolver` calls (`MovieFinalDir`, `EpisodeFinalDir`, `MovieTransferKey`, `EpisodeTransferKey`, `DownloadsDir`); removed `transferStorageKey()` helper function
 - `worker/cmd/worker/main.go`: create `paths.Resolver` and pass it to `converter.New()`

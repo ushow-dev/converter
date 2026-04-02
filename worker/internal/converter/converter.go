@@ -441,6 +441,21 @@ func (w *Worker) process(ctx context.Context, raw []byte) {
 		log.Info("subtitles fetched", "count", len(results))
 	}
 
+	// ── Subtitle fetch for episodes (best-effort, non-fatal) ─────────────────
+	if contentType == "episode" && w.subtitleFetcher != nil && msg.Payload.TMDBID != "" {
+		results := w.subtitleFetcher.FetchAndSave(jobCtx, msg.Payload.TMDBID, finalDir)
+		for _, sub := range results {
+			extID := &sub.ExternalID
+			if sub.ExternalID == "" {
+				extID = nil
+			}
+			if err := w.subtitleRepo.UpsertEpisodeSubtitle(jobCtx, contentID, sub.Language, "opensubtitles", sub.FilePath, extID); err != nil {
+				log.Warn("episode subtitle upsert failed", "lang", sub.Language, "error", err)
+			}
+		}
+		log.Info("episode subtitles fetched", "count", len(results))
+	}
+
 	// ── Mark job completed or hand off to transfer ────────────────────────────
 	if w.transferEnabled {
 		// Keep job in_progress; transfer worker will mark it completed.
