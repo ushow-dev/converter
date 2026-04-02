@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Changed
+- `worker/internal/converter/converter.go`: replaced inline `filepath.Join` path construction with `PathResolver` calls (`MovieFinalDir`, `EpisodeFinalDir`, `MovieTransferKey`, `EpisodeTransferKey`, `DownloadsDir`); removed `transferStorageKey()` helper function
+- `worker/cmd/worker/main.go`: create `paths.Resolver` and pass it to `converter.New()`
+
 ### Added
 - `worker/internal/paths/paths.go`: new `PathResolver` package providing centralized media path resolution — `MovieFinalDir`, `EpisodeFinalDir`, `MovieTransferKey`, `EpisodeTransferKey`, `TransferDest`, `DownloadsDir`, `TempDir`, and `StripMasterPlaylist` as single source of truth for all path construction in the worker
 
