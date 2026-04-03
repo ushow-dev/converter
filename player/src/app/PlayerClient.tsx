@@ -136,12 +136,17 @@ export default function PlayerClient({ playback, onEnded, autoPlay = false }: { 
         setQualities(levels)
 
         const hlsAudioTracks = (hls.audioTracks || []).map(
-          (track: any, idx: number) => ({
-            index: idx,
-            language: track.lang || undefined,
-            label: track.name || track.lang || `Track ${idx + 1}`,
-            is_default: idx === 0,
-          })
+          (track: any, idx: number) => {
+            const lang = track.lang || undefined
+            const name = track.name || ''
+            // FFmpeg uses folder name as NAME (audio_0, audio_1) — not human-readable.
+            // Prefer language label; fall back to name only if it's meaningful.
+            const isGenericName = !name || name.startsWith('audio_')
+            const label = isGenericName
+              ? (lang ? (SUBTITLE_LABELS[lang] ?? lang.toUpperCase()) : `Track ${idx + 1}`)
+              : name
+            return { index: idx, language: lang, label, is_default: idx === 0 }
+          }
         )
         setAudioTracks(hlsAudioTracks)
 

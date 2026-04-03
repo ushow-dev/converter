@@ -181,11 +181,9 @@ func RunHLS(
 		if lang == "" || lang == "und" {
 			lang = "und"
 		}
-		aName := lang
-		if aName == "und" {
-			aName = "General"
-		}
-		entry := fmt.Sprintf("a:%d,agroup:audio,name:%s,language:%s", ai, aName, lang)
+		// name: must be unique per stream — FFmpeg uses it as the %v folder name.
+		folderName := fmt.Sprintf("audio_%d", ai)
+		entry := fmt.Sprintf("a:%d,agroup:audio,name:%s,language:%s", ai, folderName, lang)
 		if ai == 0 {
 			entry += ",default:yes"
 		}
