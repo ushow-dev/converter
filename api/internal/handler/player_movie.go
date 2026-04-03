@@ -129,6 +129,7 @@ func (h *PlayerHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetCatalog handles GET /api/player/catalog?since=...
+// Returns both movies (type: "movie") and series (type: "tv").
 func (h *PlayerHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
 	cid := auth.GetCorrelationID(r.Context())
 
@@ -143,17 +144,30 @@ func (h *PlayerHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
 		since = &t
 	}
 
-	ids, err := h.movieRepo.ListReadyTMDBIDs(r.Context(), since)
+	// Fetch movies.
+	movieIDs, err := h.movieRepo.ListReadyTMDBIDs(r.Context(), since)
 	if err != nil {
-		slog.Error("catalog query failed", "error", err, "correlation_id", cid)
+		slog.Error("catalog movie query failed", "error", err, "correlation_id", cid)
 		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
 			"failed to fetch catalog", false, cid)
 		return
 	}
 
-	items := make([]map[string]string, len(ids))
-	for i, id := range ids {
-		items[i] = map[string]string{"tmdb_id": id}
+	// Fetch series.
+	seriesIDs, err := h.seriesRepo.ListReadyTMDBIDs(r.Context(), since)
+	if err != nil {
+		slog.Error("catalog series query failed", "error", err, "correlation_id", cid)
+		respondError(w, http.StatusInternalServerError, "INTERNAL_ERROR",
+			"failed to fetch catalog", false, cid)
+		return
+	}
+
+	items := make([]map[string]string, 0, len(movieIDs)+len(seriesIDs))
+	for _, id := range movieIDs {
+		items = append(items, map[string]string{"tmdb_id": id, "type": "movie"})
+	}
+	for _, id := range seriesIDs {
+		items = append(items, map[string]string{"tmdb_id": id, "type": "tv"})
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

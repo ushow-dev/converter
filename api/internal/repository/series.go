@@ -217,6 +217,45 @@ func (r *SeriesRepository) DeleteEpisode(ctx context.Context, id int64) error {
 	return nil
 }
 
+// ListReadyTMDBIDs returns tmdb_id values for series that have at least one
+// episode with a ready asset. When since is non-nil only series updated after
+// that timestamp are returned.
+func (r *SeriesRepository) ListReadyTMDBIDs(ctx context.Context, since *time.Time) ([]string, error) {
+	const base = `
+		SELECT DISTINCT s.tmdb_id, s.updated_at
+		FROM series s
+		JOIN seasons sn ON sn.series_id = s.id
+		JOIN episodes e ON e.season_id = sn.id
+		JOIN episode_assets ea ON ea.episode_id = e.id
+		WHERE ea.is_ready = true
+		  AND s.tmdb_id IS NOT NULL`
+
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if since != nil {
+		rows, err = r.pool.Query(ctx, base+` AND s.updated_at > $1 ORDER BY s.updated_at ASC`, *since)
+	} else {
+		rows, err = r.pool.Query(ctx, base+` ORDER BY s.updated_at ASC`)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list ready series tmdb ids: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		var updatedAt time.Time
+		if err := rows.Scan(&id, &updatedAt); err != nil {
+			return nil, fmt.Errorf("scan series tmdb id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // DeleteSeries deletes a series by ID. Cascades handle related rows.
 func (r *SeriesRepository) DeleteSeries(ctx context.Context, id int64) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM series WHERE id = $1`, id)
