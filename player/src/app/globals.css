@@ -98,7 +98,9 @@ html, body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 
   display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-wrap: wrap;
   background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
   pointer-events: none;
+  opacity: 1; transition: opacity 0.3s ease;
 }
+.series-nav-hidden { opacity: 0; }
 .series-nav > * { pointer-events: auto; }
 .series-selectors { display: flex; gap: 6px; }
 .series-select { background: rgba(26,26,46,0.85); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 4px 8px; font-size: 12px; backdrop-filter: blur(4px); }

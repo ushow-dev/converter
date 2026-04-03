@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import PlayerClient from './PlayerClient'
 import type { PlaybackData } from './types'
 import { SUBTITLE_LABELS } from './constants'
@@ -170,6 +170,22 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
 
   const playbackData = currentEp?.api.playback?.hls ? episodeToPlayback(currentEp.api, tmdbId) : null
 
+  // Show/hide nav with mouse activity (matches Fluid Player control behavior).
+  const [navVisible, setNavVisible] = useState(true)
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showNav = useCallback(() => {
+    setNavVisible(true)
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    hideTimerRef.current = setTimeout(() => setNavVisible(false), 3000)
+  }, [])
+
+  useEffect(() => {
+    // Initial hide after 3 seconds.
+    hideTimerRef.current = setTimeout(() => setNavVisible(false), 3000)
+    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current) }
+  }, [])
+
   const handleEpisodeEnded = useCallback(() => {
     if (hasNext) {
       setShouldAutoPlay(true)
@@ -178,8 +194,8 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
   }, [hasNext, flatEpisodes, globalIdx])
 
   return (
-    <div className="series-player-wrapper">
-      <div className="series-nav">
+    <div className="series-player-wrapper" onMouseMove={showNav} onTouchStart={showNav}>
+      <div className={`series-nav${navVisible ? '' : ' series-nav-hidden'}`}>
         <div className="series-selectors">
           <select
             className="series-select"
