@@ -168,23 +168,36 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
   const hasPrev = globalIdx > 0
   const hasNext = globalIdx >= 0 && globalIdx < flatEpisodes.length - 1
 
-  const playbackData = currentEp?.api.playback?.hls ? episodeToPlayback(currentEp.api, tmdbId) : null
+  const playbackData = useMemo(
+    () => currentEp?.api.playback?.hls ? episodeToPlayback(currentEp.api, tmdbId) : null,
+    [currentEp, tmdbId],
+  )
 
   // Show/hide nav with mouse activity (matches Fluid Player control behavior).
   const [navVisible, setNavVisible] = useState(true)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navVisibleRef = useRef(true)
+
+  const resetHideTimer = useCallback(() => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    hideTimerRef.current = setTimeout(() => {
+      navVisibleRef.current = false
+      setNavVisible(false)
+    }, 3000)
+  }, [])
 
   const showNav = useCallback(() => {
-    setNavVisible(true)
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
-    hideTimerRef.current = setTimeout(() => setNavVisible(false), 3000)
-  }, [])
+    if (!navVisibleRef.current) {
+      navVisibleRef.current = true
+      setNavVisible(true)
+    }
+    resetHideTimer()
+  }, [resetHideTimer])
 
   useEffect(() => {
-    // Initial hide after 3 seconds.
-    hideTimerRef.current = setTimeout(() => setNavVisible(false), 3000)
+    resetHideTimer()
     return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current) }
-  }, [])
+  }, [resetHideTimer])
 
   const handleEpisodeEnded = useCallback(() => {
     if (hasNext) {
