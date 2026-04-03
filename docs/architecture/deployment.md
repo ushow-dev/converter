@@ -6,8 +6,10 @@
 |---|---|---|---|
 | **API** | `178.104.100.36` | Go API + Admin UI + PostgreSQL + Redis | `ssh -i ~/.ssh/id_rsa_personal root@178.104.100.36` |
 | **Converter** | `178.104.53.215` | Go Worker + qBittorrent + Prowlarr + Flaresolverr | `ssh -i ~/.ssh/id_ed25519 root@178.104.53.215` |
-| **Storage** | `45.134.174.84` | HLS origin (nginx), Player UI | `ssh -i ~/.ssh/id_rsa_personal root@45.134.174.84` |
+| **Storage** | `45.134.174.84` | HLS origin (nginx), Player UI. Мигрируется на MinIO. | `ssh -i ~/.ssh/id_rsa_personal root@45.134.174.84` |
 | **Scanner** | `213.111.156.183` | Python scanner (incoming files), HTTP API :8080 | `ssh -i ~/.ssh/id_rsa_personal root@213.111.156.183` |
+| **MinIO** | `178.63.205.179` | Object storage для сконвертированных фильмов/сериалов. Заменит Storage. | |
+| **Edge/Proxy** | `67.159.52.120` | CDN edge proxy (Сингапур) для MinIO + сайт ultrashow.fun + админка фильмов | |
 
 ---
 
