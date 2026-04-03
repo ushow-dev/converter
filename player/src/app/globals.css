@@ -91,13 +91,18 @@ html, body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 
   background: #000; color: #888; font-size: 14px;
 }
 
-/* Series navigation */
-.series-player-wrapper { width: 100%; }
-.series-nav { display: flex; align-items: center; gap: 12px; padding: 8px 0; flex-wrap: wrap; }
-.series-title { font-weight: 600; font-size: 14px; color: #fff; }
-.series-selectors { display: flex; gap: 8px; }
-.series-select { background: #1a1a2e; color: #fff; border: 1px solid #333; border-radius: 4px; padding: 4px 8px; font-size: 13px; }
+/* Series navigation — overlaid on top of player */
+.series-player-wrapper { width: 100%; position: relative; }
+.series-nav {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-wrap: wrap;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+  pointer-events: none;
+}
+.series-nav > * { pointer-events: auto; }
+.series-selectors { display: flex; gap: 6px; }
+.series-select { background: rgba(26,26,46,0.85); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 4px 8px; font-size: 12px; backdrop-filter: blur(4px); }
 .series-ep-nav { display: flex; gap: 4px; margin-left: auto; }
-.ep-nav-btn { background: #1a1a2e; color: #ccc; border: 1px solid #333; border-radius: 4px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
-.ep-nav-btn:hover { background: #2a2a4e; color: #fff; }
-.ep-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ep-nav-btn { background: rgba(26,26,46,0.85); color: #ccc; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 4px 10px; font-size: 11px; cursor: pointer; backdrop-filter: blur(4px); }
+.ep-nav-btn:hover { background: rgba(42,42,78,0.9); color: #fff; }
+.ep-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }

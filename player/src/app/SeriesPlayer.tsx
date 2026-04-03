@@ -180,8 +180,6 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
   return (
     <div className="series-player-wrapper">
       <div className="series-nav">
-        {seriesTitle && <span className="series-title">{seriesTitle}</span>}
-
         <div className="series-selectors">
           <select
             className="series-select"
@@ -229,7 +227,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
             disabled={!hasPrev}
             onClick={() => hasPrev && navigateTo(flatEpisodes[globalIdx - 1])}
           >
-            ← Пред.
+            ← Prev
           </button>
           <button
             type="button"
@@ -237,7 +235,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
             disabled={!hasNext}
             onClick={() => hasNext && navigateTo(flatEpisodes[globalIdx + 1])}
           >
-            След. →
+            Next →
           </button>
         </div>
       </div>
