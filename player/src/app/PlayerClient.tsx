@@ -125,6 +125,23 @@ export default function PlayerClient({ playback, onEnded, autoPlay = false }: { 
         startP2PMetrics(hls.p2pEngine, streamUrl)
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parseAudioTracks = (hlsInstance: any) => {
+        const tracks = (hlsInstance.audioTracks || []).map(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (track: any, idx: number) => {
+            const lang = track.lang || undefined
+            const name = track.name || ''
+            const isGenericName = !name || name.startsWith('audio_')
+            const label = isGenericName
+              ? (lang ? (SUBTITLE_LABELS[lang] ?? lang.toUpperCase()) : `Track ${idx + 1}`)
+              : name
+            return { index: idx, language: lang, label, is_default: idx === 0 }
+          }
+        )
+        if (tracks.length > 0) setAudioTracks(tracks)
+      }
+
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         const levels: QualityLevel[] = (hls.levels || []).map(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,21 +151,7 @@ export default function PlayerClient({ playback, onEnded, autoPlay = false }: { 
           }),
         )
         setQualities(levels)
-
-        const hlsAudioTracks = (hls.audioTracks || []).map(
-          (track: any, idx: number) => {
-            const lang = track.lang || undefined
-            const name = track.name || ''
-            // FFmpeg uses folder name as NAME (audio_0, audio_1) — not human-readable.
-            // Prefer language label; fall back to name only if it's meaningful.
-            const isGenericName = !name || name.startsWith('audio_')
-            const label = isGenericName
-              ? (lang ? (SUBTITLE_LABELS[lang] ?? lang.toUpperCase()) : `Track ${idx + 1}`)
-              : name
-            return { index: idx, language: lang, label, is_default: idx === 0 }
-          }
-        )
-        setAudioTracks(hlsAudioTracks)
+        parseAudioTracks(hls)
 
         const q = qualityModeRef.current
         if (q === 'auto') hls.currentLevel = -1
@@ -161,6 +164,11 @@ export default function PlayerClient({ playback, onEnded, autoPlay = false }: { 
           const p = video.play()
           if (p) p.catch(() => { /* autoplay blocked by browser */ })
         }
+      })
+
+      // Audio tracks may not be available at MANIFEST_PARSED — listen for updates.
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+        parseAudioTracks(hls)
       })
 
       hls.attachMedia(video)
