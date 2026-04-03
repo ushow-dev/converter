@@ -44,10 +44,10 @@ func RunHLS(
 	// Create variant subdirs — ffmpeg requires them to exist.
 	for _, sub := range []string{"720", "480", "360"} {
 		dir := filepath.Join(outputDir, sub)
-		if err := os.MkdirAll(dir, 0o777); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("create HLS subdir %s: %w", sub, err)
 		}
-		_ = os.Chmod(dir, 0o777)
+		_ = os.Chmod(dir, 0o755)
 	}
 
 	// Detect source properties.
@@ -106,6 +106,14 @@ func RunHLS(
 
 	numAudio := len(audioStreams)
 
+	// Create audio subdirs for separate audio renditions.
+	for ai := 0; ai < numAudio; ai++ {
+		dir := filepath.Join(outputDir, fmt.Sprintf("audio_%d", ai))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("create audio subdir %d: %w", ai, err)
+		}
+	}
+
 	type variantSpec struct {
 		videoMap string
 		videoIdx string
@@ -119,11 +127,9 @@ func RunHLS(
 		{"[v360o]", "2", "320k", "352k", "700k"},
 	}
 
+	// Map video streams (video only, no audio muxed in).
 	for _, v := range variants {
 		args = append(args, "-map", v.videoMap)
-		for ai := 0; ai < numAudio; ai++ {
-			args = append(args, "-map", fmt.Sprintf("%s:a:%d", aSrc, ai))
-		}
 		args = append(args,
 			"-c:v:"+v.videoIdx, "libx264", "-preset", "fast",
 			"-profile:v:"+v.videoIdx, "high", "-level:v:"+v.videoIdx, "4.0",
@@ -132,33 +138,29 @@ func RunHLS(
 			"-b:v:"+v.videoIdx, v.bitrate, "-maxrate:v:"+v.videoIdx, v.maxrate, "-bufsize:v:"+v.videoIdx, v.bufsize,
 			"-g:v:"+v.videoIdx, gopS, "-keyint_min:v:"+v.videoIdx, gopS,
 		)
-		vi, _ := strconv.Atoi(v.videoIdx)
-		for ai := 0; ai < numAudio; ai++ {
-			aIdx := strconv.Itoa(vi*numAudio + ai)
-			args = append(args,
-				"-c:a:"+aIdx, "aac", "-b:a:"+aIdx, "80k",
-				"-ar:a:"+aIdx, "48000", "-ac:a:"+aIdx, "2",
-			)
-		}
 	}
 
-	// Set audio stream metadata (language tags).
-	globalAudioIdx := 0
-	for vi := 0; vi < 3; vi++ {
-		for ai := 0; ai < numAudio; ai++ {
-			if audioStreams[ai].Language != "" {
-				args = append(args,
-					fmt.Sprintf("-metadata:s:a:%d", globalAudioIdx),
-					"language="+audioStreams[ai].Language,
-				)
-			}
-			if audioStreams[ai].Title != "" {
-				args = append(args,
-					fmt.Sprintf("-metadata:s:a:%d", globalAudioIdx),
-					"title="+audioStreams[ai].Title,
-				)
-			}
-			globalAudioIdx++
+	// Map audio streams as separate renditions (each encoded once).
+	for ai := 0; ai < numAudio; ai++ {
+		args = append(args, "-map", fmt.Sprintf("%s:a:%d", aSrc, ai))
+		aIdx := strconv.Itoa(3 + ai) // audio stream indices start after 3 video streams
+		_ = aIdx                      // stream index is implicit from -map order
+	}
+	// Encode all audio streams as AAC.
+	for ai := 0; ai < numAudio; ai++ {
+		aIdx := strconv.Itoa(ai)
+		args = append(args,
+			"-c:a:"+aIdx, "aac", "-b:a:"+aIdx, "80k",
+			"-ar:a:"+aIdx, "48000", "-ac:a:"+aIdx, "2",
+		)
+		// Set language and title metadata.
+		lang := audioStreams[ai].Language
+		if lang != "" {
+			args = append(args, fmt.Sprintf("-metadata:s:a:%d", ai), "language="+lang)
+		}
+		title := audioStreams[ai].Title
+		if title != "" {
+			args = append(args, fmt.Sprintf("-metadata:s:a:%d", ai), "title="+title)
 		}
 	}
 
@@ -166,16 +168,28 @@ func RunHLS(
 		args = append(args, "-shortest")
 	}
 
-	// Build -var_stream_map: "v:0,a:0,a:1,name:720 v:1,a:2,a:3,name:480 ..."
+	// Build -var_stream_map with separate audio renditions.
+	// Video variants reference agroup:audio; audio streams are separate entries.
 	var varStreamParts []string
 	names := []string{"720", "480", "360"}
 	for vi := 0; vi < 3; vi++ {
-		part := fmt.Sprintf("v:%d", vi)
-		for ai := 0; ai < numAudio; ai++ {
-			part += fmt.Sprintf(",a:%d", vi*numAudio+ai)
+		varStreamParts = append(varStreamParts,
+			fmt.Sprintf("v:%d,agroup:audio,name:%s", vi, names[vi]))
+	}
+	for ai := 0; ai < numAudio; ai++ {
+		lang := audioStreams[ai].Language
+		if lang == "" || lang == "und" {
+			lang = "und"
 		}
-		part += ",name:" + names[vi]
-		varStreamParts = append(varStreamParts, part)
+		aName := lang
+		if aName == "und" {
+			aName = "General"
+		}
+		entry := fmt.Sprintf("a:%d,agroup:audio,name:%s,language:%s", ai, aName, lang)
+		if ai == 0 {
+			entry += ",default:yes"
+		}
+		varStreamParts = append(varStreamParts, entry)
 	}
 
 	args = append(args,
