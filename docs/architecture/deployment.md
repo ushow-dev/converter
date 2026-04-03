@@ -13,15 +13,75 @@
 
 ---
 
-## Домены и маршрутизация
+## Сетевая архитектура: внутренний + внешний слой
 
-| Домен | Сервер | Назначение |
-|---|---|---|
-| `admin.pimor.online` | API (178.104.100.36) | Admin UI (Next.js frontend) |
-| `api.pimor.online` | API (178.104.100.36) | Go API (admin + player endpoints) |
-| `pimor.online` | API (178.104.100.36) | Заглушка (404) |
-| `media.pimor.online` | Storage (45.134.174.84) | HLS файлы (nginx static) |
-| `player.pimor.online` | Storage (45.134.174.84) | Player UI (Next.js) |
+Принцип: внутренние серверы (API, Worker, Scanner, MinIO, Storage) **никогда не доступны пользователю напрямую**. Все публичные запросы идут через заменяемые Edge proxy серверы. Если Edge заблокируют — поднимается новый VPS, меняется DNS. Внутренняя инфра не трогается.
+
+### Внутренний слой (закрыт фаерволом, доступ только от Edge proxy)
+
+| Сервер | IP | Открытые порты | Доступ |
+|---|---|---|---|
+| API | 178.104.100.36 | 8000 (API), 3000 (Frontend) | Только от Edge proxy IP |
+| Worker | 178.104.53.215 | — | Закрыт (подключается к API PostgreSQL/Redis) |
+| Scanner | 213.111.156.183 | 8080 | Только от Worker IP |
+| MinIO | 178.63.205.179 | 9000 | Только от Edge proxy IP |
+| Storage (legacy) | 45.134.174.84 | 3100 (Player), 80 (nginx) | Только от Edge proxy IP. Мигрируется на MinIO. |
+
+### Внешний слой (заменяемый, смотрит наружу)
+
+| Edge сервер | IP | Что проксирует | Стоимость |
+|---|---|---|---|
+| **Edge Singapore** | 67.159.52.120 | ultrashow.fun + Media CDN для Азии | Уже есть |
+| **Edge Europe** (нужен) | TBD | API proxy + Player proxy + Media CDN для Европы | ~$5/мес VPS |
+| **Edge резерв** (опционально) | TBD | Резервный при блокировке основного | ~$5/мес VPS |
+
+### Что нужно закупить
+
+| # | Действие | Стоимость | Приоритет |
+|---|---|---|---|
+| 1 | VPS Europe (API + Player + Media proxy) | ~$5/мес | Высокий |
+| 2 | Домен для API (напр. `newapi.xyz`) | ~$3/год | Высокий |
+| 3 | Домен для Media CDN (напр. `cdn-stream.site`) | ~$3/год | Высокий |
+| 4 | Закрыть фаерволом API и MinIO — только от Edge IP | Бесплатно | Высокий |
+| 5 | VPS Asia (второй Media CDN edge) | ~$5/мес | Средний |
+| 6 | Резервный домен | ~$3/год | Низкий |
+
+### Схема маршрутизации (целевая)
+
+```
+ultrashow.fun (Edge Singapore 67.159.52.120)
+    ├── /api/*     → Edge Europe → API (178.104.100.36:8000)
+    ├── /player/*  → Edge Europe → Player UI (Storage/MinIO)
+    └── /stream/*  → MinIO (178.63.205.179:9000)
+
+{api-домен} (Edge Europe)
+    └── → API (178.104.100.36:8000)
+
+{media-домен} (Edge Europe / Edge Singapore)
+    └── → MinIO (178.63.205.179:9000)
+
+Пользователь знает: ultrashow.fun, {api-домен}, {media-домен}
+Пользователь НЕ знает: 178.104.100.36, 178.63.205.179, 45.134.174.84
+```
+
+При блокировке `{api-домен}`:
+1. Купить новый домен
+2. Направить DNS на тот же Edge или новый VPS
+3. Обновить конфиг плеера (MEDIA_BASE_URL, API_URL)
+4. Внутренняя инфра без изменений
+
+---
+
+## Домены и маршрутизация (текущее состояние)
+
+| Домен | Сервер | Назначение | Статус |
+|---|---|---|---|
+| `admin.pimor.online` | API (178.104.100.36) | Admin UI (Next.js frontend) | Напрямую — **перенести за proxy** |
+| `api.pimor.online` | API (178.104.100.36) | Go API (admin + player endpoints) | Напрямую — **перенести за proxy** |
+| `pimor.online` | API (178.104.100.36) | Заглушка (404) | Напрямую |
+| `media.pimor.online` | Storage (45.134.174.84) | HLS файлы (nginx static) | Напрямую — **перенести за proxy** |
+| `player.pimor.online` | Storage (45.134.174.84) | Player UI (Next.js) | Напрямую — **перенести за proxy** |
+| `ultrashow.fun` | Edge Singapore (67.159.52.120) | Сайт + админка фильмов | Через proxy ✓ |
 
 Cloudflare: **Full (strict)** SSL. Let's Encrypt сертификаты на каждом сервере.
 
