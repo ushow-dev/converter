@@ -35,7 +35,7 @@ def build_normalized_name(title: str, year: Optional[int], tmdb_id: Optional[str
         parts.append(str(year))
     name = "_".join(parts)
     if tmdb_id:
-        name += f"_[{tmdb_id}]"
+        name += f"_({tmdb_id})"
     return name
 
 

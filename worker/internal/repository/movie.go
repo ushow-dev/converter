@@ -172,7 +172,7 @@ func buildStorageKey(title string, year *int, tmdbID *string) string {
 	}
 	key := strings.Join(parts, "_")
 	if tmdbID != nil && *tmdbID != "" {
-		key += fmt.Sprintf("_[%s]", *tmdbID)
+		key += fmt.Sprintf("_(%s)", *tmdbID)
 	}
 	return key
 }
