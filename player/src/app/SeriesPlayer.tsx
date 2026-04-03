@@ -133,9 +133,10 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
     const tracks = ep?.api.audio_tracks ?? []
     return tracks.map((t, idx) => {
       const lang = t.language ?? ''
-      const label = t.label && !t.label.startsWith('audio_')
-        ? t.label
-        : (lang ? (SUBTITLE_LABELS[lang] ?? lang.toUpperCase()) : `Track ${idx + 1}`)
+      // Always prefer human-readable language name over raw label from source file.
+      const label = lang
+        ? (SUBTITLE_LABELS[lang] ?? lang.toUpperCase())
+        : (t.label || `Track ${idx + 1}`)
       return { index: idx, label, language: lang }
     })
   }, [flatEpisodes, selectedSeason])
