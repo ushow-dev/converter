@@ -76,7 +76,7 @@ function getP2PConfig(streamUrl: string) {
   }
 }
 
-export default function PlayerClient({ playback, onEnded, autoPlay = false }: { playback: PlaybackData; onEnded?: () => void; autoPlay?: boolean }) {
+export default function PlayerClient({ playback, onEnded, autoPlay = false, initialAudioTrack }: { playback: PlaybackData; onEnded?: () => void; autoPlay?: boolean; initialAudioTrack?: number }) {
   const [fluidReady, setFluidReady] = useState(() =>
     typeof window !== 'undefined' && typeof window.fluidPlayer === 'function'
   )
@@ -86,7 +86,8 @@ export default function PlayerClient({ playback, onEnded, autoPlay = false }: { 
   const [selectedQuality, setSelectedQuality] = useState<string>('auto')
   const [showQualityMenu, setShowQualityMenu] = useState(false)
   const [audioTracks, setAudioTracks] = useState<AudioTrackInfo[]>([])
-  const [selectedAudio, setSelectedAudio] = useState<number>(0)
+  const [selectedAudio, setSelectedAudio] = useState<number>(initialAudioTrack ?? 0)
+  const initialAudioTrackRef = useRef(initialAudioTrack ?? 0)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const quickbarRef = useRef<HTMLDivElement>(null)
@@ -139,7 +140,15 @@ export default function PlayerClient({ playback, onEnded, autoPlay = false }: { 
             return { index: idx, language: lang, label, is_default: idx === 0 }
           }
         )
-        if (tracks.length > 0) setAudioTracks(tracks)
+        if (tracks.length > 0) {
+          setAudioTracks(tracks)
+          // Apply initial audio track selection from parent.
+          const desired = initialAudioTrackRef.current
+          if (desired > 0 && desired < tracks.length && hlsInstance.audioTrack !== desired) {
+            hlsInstance.audioTrack = desired
+            setSelectedAudio(desired)
+          }
+        }
       }
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {

@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import PlayerClient from './PlayerClient'
 import type { PlaybackData } from './types'
+import { SUBTITLE_LABELS } from './constants'
 
 // ── API response shapes ──────────────────────────────────────────────────────
 
@@ -124,6 +125,20 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
   const [selectedSeason, setSelectedSeason] = useState<number>(seasons[0] ?? 1)
   const [selectedEpIdx, setSelectedEpIdx] = useState<number>(0)
   const [shouldAutoPlay, setShouldAutoPlay] = useState(false)
+  const [selectedAudioTrack, setSelectedAudioTrack] = useState<number>(0)
+
+  // Collect unique audio tracks from current episode (for dropdown).
+  const currentAudioTracks = useMemo(() => {
+    const ep = flatEpisodes.find((e) => e.seasonNumber === selectedSeason)
+    const tracks = ep?.api.audio_tracks ?? []
+    return tracks.map((t, idx) => {
+      const lang = t.language ?? ''
+      const label = t.label && !t.label.startsWith('audio_')
+        ? t.label
+        : (lang ? (SUBTITLE_LABELS[lang] ?? lang.toUpperCase()) : `Track ${idx + 1}`)
+      return { index: idx, label, language: lang }
+    })
+  }, [flatEpisodes, selectedSeason])
 
   const seasonEpisodes = useMemo(
     () => flatEpisodes.filter((e) => e.seasonNumber === selectedSeason),
@@ -190,6 +205,20 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
               </option>
             ))}
           </select>
+
+          {currentAudioTracks.length > 1 && (
+            <select
+              className="series-select"
+              value={selectedAudioTrack}
+              onChange={(e) => setSelectedAudioTrack(Number(e.target.value))}
+            >
+              {currentAudioTracks.map((t) => (
+                <option key={t.index} value={t.index}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="series-ep-nav">
@@ -214,10 +243,11 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
 
       {playbackData ? (
         <PlayerClient
-          key={`s${currentEp!.seasonNumber}e${currentEp!.episodeNumber}`}
+          key={`s${currentEp!.seasonNumber}e${currentEp!.episodeNumber}a${selectedAudioTrack}`}
           playback={playbackData}
           onEnded={handleEpisodeEnded}
           autoPlay={shouldAutoPlay}
+          initialAudioTrack={selectedAudioTrack}
         />
       ) : (
         <div className="player-status">Эпизод не готов</div>
