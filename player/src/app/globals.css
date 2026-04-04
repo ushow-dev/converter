@@ -105,24 +105,24 @@ html, body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 
 .series-selectors { display: flex; gap: 6px; }
 .series-select { background: rgba(26,26,46,0.85); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 4px 8px; font-size: 12px; backdrop-filter: blur(4px); }
 
-/* Prev / Next buttons — centered over video */
-.series-center-nav {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  z-index: 19; display: flex; align-items: center; gap: 120px;
-  pointer-events: none;
-  opacity: 1; transition: opacity 0.3s ease;
-}
-.series-center-nav.series-nav-hidden { opacity: 0; pointer-events: none; }
-.series-center-btn {
-  pointer-events: auto;
-  width: 48px; height: 48px; border-radius: 50%;
+/* Prev / Next buttons — left and right edges of video */
+.series-btn-prev, .series-btn-next {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  z-index: 19; pointer-events: auto;
+  width: 44px; height: 44px; border-radius: 50%;
   background: rgba(0,0,0,0.5); color: rgba(255,255,255,0.85);
   border: none; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: background 0.2s, color 0.2s, transform 0.2s;
+  transition: background 0.2s, color 0.2s, transform 0.2s, opacity 0.3s;
   backdrop-filter: blur(4px);
+  opacity: 1;
 }
-.series-center-btn:hover {
-  background: rgba(0,0,0,0.75); color: #fff; transform: scale(1.1);
+.series-btn-prev { left: 16px; }
+.series-btn-next { right: 16px; }
+.series-btn-prev:hover, .series-btn-next:hover {
+  background: rgba(0,0,0,0.75); color: #fff; transform: translateY(-50%) scale(1.1);
 }
-.series-center-btn svg { width: 28px; height: 28px; }
+.series-btn-prev.series-nav-hidden, .series-btn-next.series-nav-hidden {
+  opacity: 0; pointer-events: none !important;
+}
+.series-btn-prev svg, .series-btn-next svg { width: 24px; height: 24px; }

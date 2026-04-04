@@ -256,33 +256,31 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
         </div>
       </div>
 
-      {/* Prev / Next buttons — centered over video, next to play button */}
-      <div className={`series-center-nav${navVisible ? '' : ' series-nav-hidden'}`}>
-        {hasPrev && (
-          <button
-            type="button"
-            className="series-center-btn"
-            onClick={() => navigateTo(flatEpisodes[globalIdx - 1])}
-            title="Previous episode"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-              <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
-            </svg>
-          </button>
-        )}
-        {hasNext && (
-          <button
-            type="button"
-            className="series-center-btn"
-            onClick={() => navigateTo(flatEpisodes[globalIdx + 1])}
-            title="Next episode"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-              <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-            </svg>
-          </button>
-        )}
-      </div>
+      {/* Prev / Next buttons — left and right edges of video */}
+      {hasPrev && (
+        <button
+          type="button"
+          className={`series-btn-prev${navVisible ? '' : ' series-nav-hidden'}`}
+          onClick={() => navigateTo(flatEpisodes[globalIdx - 1])}
+          title="Previous episode"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
+          </svg>
+        </button>
+      )}
+      {hasNext && (
+        <button
+          type="button"
+          className={`series-btn-next${navVisible ? '' : ' series-nav-hidden'}`}
+          onClick={() => navigateTo(flatEpisodes[globalIdx + 1])}
+          title="Next episode"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+          </svg>
+        </button>
+      )}
 
       {playbackData ? (
         <PlayerClient
