@@ -117,8 +117,8 @@ html, body { margin: 0; padding: 0; background: #000; color: #fff; font-family: 
   backdrop-filter: blur(4px);
   opacity: 1;
 }
-.series-btn-prev { left: 16px; }
-.series-btn-next { right: 16px; }
+.series-btn-prev { left: calc(50% - 90px); }
+.series-btn-next { left: calc(50% + 46px); }
 .series-btn-prev:hover, .series-btn-next:hover {
   background: rgba(0,0,0,0.75); color: #fff; transform: translateY(-50%) scale(1.1);
 }
