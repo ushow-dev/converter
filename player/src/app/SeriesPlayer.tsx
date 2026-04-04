@@ -174,16 +174,22 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
   )
 
   // Show/hide nav with mouse activity (matches Fluid Player control behavior).
-  const [navVisible, setNavVisible] = useState(true)
+  const [navVisible, setNavVisible] = useState(false)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const navVisibleRef = useRef(true)
+  const navVisibleRef = useRef(false)
 
   const resetHideTimer = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
     hideTimerRef.current = setTimeout(() => {
       navVisibleRef.current = false
       setNavVisible(false)
-    }, 3000)
+    }, 1500)
+  }, [])
+
+  const hideNav = useCallback(() => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    navVisibleRef.current = false
+    setNavVisible(false)
   }, [])
 
   const showNav = useCallback(() => {
@@ -207,7 +213,7 @@ function SeriesNavigator({ data }: { data: SeriesData }) {
   }, [hasNext, flatEpisodes, globalIdx])
 
   return (
-    <div className="series-player-wrapper" onMouseMove={showNav} onTouchStart={showNav}>
+    <div className="series-player-wrapper" onMouseMove={showNav} onMouseLeave={hideNav} onTouchStart={showNav}>
       <div className={`series-nav${navVisible ? '' : ' series-nav-hidden'}`}>
         <div className="series-selectors">
           <select
